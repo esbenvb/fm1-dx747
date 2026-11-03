@@ -5,3 +5,4 @@
 */test_backlight
 *.dSYM/
 */build/
+*/test_scene
