@@ -20,12 +20,25 @@
 #include "dx747/boot.inc"
 #include "dx747/scene_port.inc"
 
-/* The sealed engine keeps these alive only when the app references them (the
- * build checks for them), although DX747 never calls them. */
+/* The build fails when these functions are missing from the image, and the
+ * linker keeps them only while the app references them, but DX747 has no
+ * screen that calls them (no tuning, no Bluetooth scan or connect page). The
+ * link uses --gc-sections, which drops a data array nothing points at even when
+ * it is marked used, so the references sit in code the poll can reach. The
+ * trigger is volatile and never set; it only stops the compiler proving that. */
 extern int groove_project_apply_edit(const struct groove_project *, unsigned) __attribute__((weak));
-static const void *const keep_references[] __attribute__((used)) = {
-    (const void *)groove_tuning_capture, (const void *)groove_tuning_apply, (const void *)groove_project_apply_edit
-};
+static volatile unsigned keep_trigger;
+static const void *volatile keep_sink;
+static void keep_references(void)
+{
+    static const void *const refs[] = {
+        (const void *)groove_tuning_capture, (const void *)groove_tuning_apply, (const void *)groove_project_apply_edit,
+        (const void *)fm1_ble_scan, (const void *)fm1_ble_connect, (const void *)fm1_ble_disconnect,
+        (const void *)fm1_ble_get_status, (const void *)fm1_ble_get_device, (const void *)fm1_bluetooth_get_status
+    };
+    if (!keep_trigger) return;
+    for (unsigned i = 0; i < sizeof refs / sizeof refs[0]; ++i) keep_sink = refs[i];
+}
 
 /* The engine captures and applies projects through this buffer. */
 static struct groove_project scratch;
@@ -137,6 +150,7 @@ void groove_project_init(void)
 
 void groove_project_poll(void)
 {
+    keep_references();
     if (stage == 0) {
         dx_boot_engines(&booted);
         struct dx_cfg c = *dx_route_cfg();
@@ -150,6 +164,7 @@ void groove_project_poll(void)
         int r = dx_settings_read(&stored);
         if (r == FM1_FLASH_BUSY) return;
         if (!r) settings = stored;
+        settings.role = FM1_BLE_PERIPHERAL; /* Central needs a scan page, which DX747 does not have yet */
         fm1_led_idle_level(settings.backlight);
         struct dx_cfg c = *dx_route_cfg();
         c.kbd_ch = settings.kbd_ch;

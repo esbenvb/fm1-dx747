@@ -290,7 +290,6 @@ static void on_encoders(void)
         struct dx_settings s;
         dx_settings_get(&s);
         switch (ui.sys_row) {
-        case 0: s.role = (uint8_t)!s.role; break;
         case 1: s.radio_off ^= GROOVE_RADIO_AUDIO; break;
         case 3: s.backlight = (uint8_t)clampi(s.backlight + d, 0, 8); break;
         case 4: s.kbd_ch = (uint8_t)wrap((int)s.kbd_ch + d, 16); break;

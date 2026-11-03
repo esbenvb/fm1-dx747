@@ -21,6 +21,14 @@
  *   expect_px X Y HEX   fail unless the RGB565 pixel at X,Y (0..239) equals HEX
  *   expect_leds PATTERN fail unless the 41 LED states match PATTERN (# on, . off, ? ignore)
  *   expect_voices N     fail unless the router holds N engine-voices (one per engine a held key reaches)
+ *   bank_copy SRC DST   DX7 ROM import as the workbench does it: wrap library group SRC (0..3) as a standard
+ *                       4104-byte 32-voice .syx, check it like the workbench, upload it into group DST with
+ *                       transfer commands 3/4/5/6, then fail unless the library and the engine's programs follow
+ *   bank_badcrc SRC DST the same upload with a wrong CRC: fail unless the device refuses and DST is unchanged
+ *   bank_load GROUP FILE  import a real 4104-byte DX7 bank file (for trying your own ROMs in the simulator);
+ *                       fails unless the library read-back equals the file and all 32 program names match
+ *   expect_peak MS MIN  render MS milliseconds and fail unless the output reaches at least MIN (0..1 full scale);
+ *                       prints the peak it measured
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +45,11 @@ extern uint8_t *sim_file(void);
 extern uint8_t *sim_flash(void);
 extern const uint8_t *sim_state(void);
 extern int sim_midi_from(unsigned, unsigned);
+extern void sim_midi_capture(unsigned);
+extern unsigned sim_midi_output(void);
+extern int groove_fm_library_read(unsigned bank, uint8_t vmem[4096]);
+extern void groove_fm_program(uint8_t patch[156], unsigned program);
+extern uint32_t groove_crc32(uint32_t crc, const void *data, unsigned bytes);
 
 static const char *outdir = ".";
 static unsigned long long sim_ms_total;
@@ -47,6 +60,19 @@ static void run_ms(unsigned ms)
     unsigned blocks = (unsigned)((ms * 44100ULL + 127999ULL) / 128000ULL);
     for (unsigned i = 0; i < blocks; ++i) (void)sim_render();
     sim_ms_total += ms;
+}
+
+/* Renders MS milliseconds and returns the largest output sample (one block is 128 stereo frames). */
+static float peak_ms(unsigned ms)
+{
+    unsigned blocks = (unsigned)((ms * 44100ULL + 127999ULL) / 128000ULL);
+    float peak = 0.0f;
+    for (unsigned i = 0; i < blocks; ++i) {
+        const float *o = sim_render();
+        for (unsigned j = 0; j < 256; ++j) { float v = o[j] < 0 ? -o[j] : o[j]; if (v > peak) peak = v; }
+    }
+    sim_ms_total += ms;
+    return peak;
 }
 
 static int write_png(const char *path, const uint16_t *px, unsigned w, unsigned h, unsigned scale)
@@ -91,6 +117,114 @@ static int write_png(const char *path, const uint16_t *px, unsigned w, unsigned 
 
 static void press(unsigned kind, unsigned index, int on) { sim_control(kind, index, on); }
 static void tap(unsigned kind, unsigned index) { press(kind, index, 1); run_ms(60); press(kind, index, 0); run_ms(60); }
+
+/* ---- DX7 ROM import, the way the workbench does it (sdk/WebUpdate.js) ---------- */
+
+static unsigned wb_token;
+
+/* One file-protocol request: F0 7D 'F' 'M' 02 cmd token(14 bit) pack7(payload) checksum F7.
+ * Returns the device's status byte (0 = ok), -1 for no reply, -2 if the frame was refused outright. */
+static int wb_query(unsigned cmd, const uint8_t *payload, unsigned n)
+{
+    uint8_t f[160];
+    unsigned at = 0, value = 0, bits = 0, sum = 0;
+    wb_token = (wb_token + 1U) & 16383U;
+    f[at++] = 0xf0; f[at++] = 0x7d; f[at++] = 'F'; f[at++] = 'M'; f[at++] = 2;
+    f[at++] = (uint8_t)cmd; f[at++] = (uint8_t)(wb_token & 127U); f[at++] = (uint8_t)(wb_token >> 7);
+    for (unsigned i = 0; i < n; ++i) {
+        value |= (unsigned)payload[i] << bits; bits += 8;
+        while (bits >= 7) { f[at++] = (uint8_t)(value & 127U); value >>= 7; bits -= 7; }
+    }
+    if (bits) f[at++] = (uint8_t)(value & 127U);
+    for (unsigned i = 1; i < at; ++i) sum += f[i];
+    f[at++] = (uint8_t)((0U - sum) & 127U); f[at++] = 0xf7;
+    sim_midi_capture(1);
+    memcpy(sim_file(), f, at);
+    if (sim_midi_from(1, at)) return -2;
+    for (int tries = 0; tries < 50; ++tries) {
+        run_ms(20);
+        unsigned out = sim_midi_output();
+        if (!out) continue;
+        const uint8_t *r = sim_file();
+        if ((out & 255U) >= 11 && r[5] == (cmd | 64U) && r[6] == f[6] && r[7] == f[7])
+            return (int)((r[8] | (unsigned)(r[9] & 1U) << 7) & 255U); /* first decoded payload byte */
+    }
+    return -1;
+}
+
+/* begin write (kind 4 = library group), 64-byte chunks, CRC, and the close the workbench always sends. */
+static int wb_upload_bank(unsigned group, const uint8_t *raw, int corrupt_crc)
+{
+    uint8_t chunk[66], begin[4] = {4, (uint8_t)group, 0x00, 0x10}; /* size 4096, little endian */
+    int r = wb_query(3, begin, 4);
+    for (unsigned at = 0; !r && at < 4096; at += 64) {
+        chunk[0] = (uint8_t)at; chunk[1] = (uint8_t)(at >> 8); memcpy(chunk + 2, raw + at, 64);
+        r = wb_query(4, chunk, 66);
+    }
+    if (!r) {
+        uint32_t c = ~groove_crc32(~0U, raw, 4096);
+        if (corrupt_crc) c ^= 1U;
+        uint8_t q[4] = {(uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16), (uint8_t)(c >> 24)};
+        r = wb_query(5, q, 4);
+    }
+    (void)wb_query(6, NULL, 0);
+    return r;
+}
+
+static void dx7_bank_file(uint8_t file[4104], const uint8_t raw[4096])
+{
+    unsigned sum = 0;
+    static const uint8_t head[6] = {0xf0, 0x43, 0x00, 0x09, 0x20, 0x00};
+    memcpy(file, head, 6); memcpy(file + 6, raw, 4096);
+    for (unsigned i = 0; i < 4096; ++i) sum += raw[i];
+    file[4102] = (uint8_t)((0U - sum) & 127U); file[4103] = 0xf7;
+}
+
+/* readVoices() of the workbench: the standard 32-voice VMEM dump, then the kind 4 upload. */
+static int wb_import_syx(const uint8_t *file, unsigned n, unsigned group, int corrupt_crc)
+{
+    unsigned sum = 0;
+    if (n != 4104 || file[0] != 0xf0 || file[1] != 0x43 || file[2] >= 16 || file[3] != 9 || file[4] != 0x20 || file[5] != 0 || file[n - 1] != 0xf7) return -3;
+    for (unsigned i = 1; i + 1 < n; ++i) if (file[i] > 127) return -3;
+    for (unsigned i = 6; i + 1 < n; ++i) sum += file[i];
+    if (sum & 127U) return -3;
+    return wb_upload_bank(group, file + 6, corrupt_crc);
+}
+
+/* What the workbench's read-back check proves, plus: the engine's programs now play the imported voices. */
+static int bank_verify(unsigned group, const uint8_t *raw)
+{
+    static uint8_t got[4096];
+    if (group > 3 || groove_fm_library_read(group, got) || memcmp(got, raw, sizeof got)) { fprintf(stderr, "bank_load: library read-back differs\n"); return 1; }
+    for (unsigned k = 0; k < 32; ++k) {
+        uint8_t patch[156];
+        groove_fm_program(patch, group * 32U + k);
+        if (memcmp(patch + 145, raw + k * 128U + 118U, 10)) { fprintf(stderr, "bank_load: program %u has the wrong name\n", group * 32U + k + 1U); return 1; }
+    }
+    return 0;
+}
+
+static int bank_copy(unsigned src, unsigned dst, int corrupt_crc)
+{
+    static uint8_t a[4096], before[4096], after[4096], file[4104];
+    if (src > 3 || dst > 3 || groove_fm_library_read(src, a) || groove_fm_library_read(dst, before)) { fprintf(stderr, "bank: cannot read library group %u or %u\n", src, dst); return 1; }
+    if (!corrupt_crc && !memcmp(a, before, sizeof a)) { fprintf(stderr, "bank_copy: groups %u and %u already match, nothing to prove\n", src, dst); return 1; }
+    dx7_bank_file(file, a);
+    int r = wb_import_syx(file, sizeof file, dst, corrupt_crc);
+    if (corrupt_crc) {
+        if (!r) { fprintf(stderr, "bank_badcrc: the device accepted a wrong CRC\n"); return 1; }
+        if (groove_fm_library_read(dst, after) || memcmp(after, before, sizeof after)) { fprintf(stderr, "bank_badcrc: group %u changed anyway\n", dst); return 1; }
+        return 0;
+    }
+    if (r) { fprintf(stderr, "bank_copy %u %u: device status %d\n", src, dst, r); return 1; }
+    if (groove_fm_library_read(dst, after) || memcmp(after, a, sizeof after)) { fprintf(stderr, "bank_copy: library read-back differs\n"); return 1; }
+    for (unsigned k = 0; k < 32; ++k) {
+        uint8_t pa[156], pb[156];
+        groove_fm_program(pa, src * 32U + k); groove_fm_program(pb, dst * 32U + k);
+        if (memcmp(pa, pb, sizeof pa)) { fprintf(stderr, "bank_copy: program %u does not play voice %u of group %u\n", dst * 32U + k, k, src); return 1; }
+    }
+    return 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -144,6 +278,22 @@ int main(int argc, char **argv)
         else if (!strcmp(p, "expect_voices") && a) {
             unsigned want = (unsigned)atoi(a), got = dx_route_voices();
             if (want != got) { fprintf(stderr, "expect_voices: wanted %u, got %u\n", want, got); ++errors; }
+        }
+        else if (!strcmp(p, "bank_copy") && a && b) errors += bank_copy((unsigned)atoi(a), (unsigned)atoi(b), 0);
+        else if (!strcmp(p, "bank_badcrc") && a && b) errors += bank_copy((unsigned)atoi(a), (unsigned)atoi(b), 1);
+        else if (!strcmp(p, "bank_load") && a && b) {
+            static uint8_t file[8192];
+            FILE *bf = fopen(b, "rb");
+            size_t got = bf ? fread(file, 1, sizeof file, bf) : 0;
+            if (bf) fclose(bf);
+            int r = wb_import_syx(file, (unsigned)got, (unsigned)atoi(a), 0);
+            if (r) { fprintf(stderr, "bank_load: %s: status %d\n", b, r); ++errors; }
+            else errors += bank_verify((unsigned)atoi(a), file + 6);
+        }
+        else if (!strcmp(p, "expect_peak") && a && b) {
+            float got = peak_ms((unsigned)atoi(a)), want = (float)atof(b);
+            printf("peak %.4f\n", (double)got);
+            if (got < want) { fprintf(stderr, "expect_peak: wanted at least %g, got %g\n", (double)want, (double)got); ++errors; }
         }
         else if (!strcmp(p, "echo")) { printf("%s%s%s\n", a ? a : "", b ? " " : "", b ? b : ""); }
         else { fprintf(stderr, "unknown or incomplete command: %s\n", p); ++errors; }

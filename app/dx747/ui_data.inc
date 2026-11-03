@@ -28,12 +28,13 @@ static char *put_u(char *o, unsigned v)
 }
 static char *put_i(char *o, int v) { if (v < 0) { *o++ = '-'; v = -v; } return put_u(o, (unsigned)v); }
 static char *put_2(char *o, unsigned v) { *o++ = (char)('0' + (v / 10U) % 10U); *o++ = (char)('0' + v % 10U); *o = 0; return o; }
-/* C3 is note 60, as on a DX7. */
+/* Standard naming: note 60 is C4, as on the keys' own labels and in most DAWs
+ * (not the Yamaha DX7 convention, where 60 is C3). */
 static char *put_note(char *o, unsigned n)
 {
     static const char *const names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     o = put_s(o, names[n % 12U]);
-    return put_i(o, (int)(n / 12U) - 2);
+    return put_i(o, (int)(n / 12U) - 1);
 }
 static char *put_range(char *o, unsigned lo, unsigned hi)
 {

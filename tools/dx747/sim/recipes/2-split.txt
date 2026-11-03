@@ -1,5 +1,5 @@
 # Recipe 2: layer two engines, then split them with LEARN and an octave shift.
-# (midi bytes are hex: 3c = middle C, 53 = B4 in the DX7 naming the screen uses)
+# (midi bytes are hex: 3c = middle C4, 53 = B5; the screen uses standard naming, C4 = 60)
 boot
 wipe
 run 400
@@ -25,7 +25,7 @@ shot 2c-range-learned
 # K4 shifts the lane up two octaves
 enc 5 2
 shot 2d-shifted-two-octaves
-# select the first lane (K1) and give it the lower half only: high = B2 (59)
+# select the first lane (K1) and give it the lower half only: high = B3 (59)
 enc 2 -1
 enc 4 -68
 shot 2e-first-lane-below

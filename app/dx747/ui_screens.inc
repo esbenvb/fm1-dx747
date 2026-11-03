@@ -598,7 +598,12 @@ static void draw_sys(void)
     for (unsigned b = 0; b < 8; ++b) px_rect(150 + (int)b * 10, 47 + 26 * 3 + 9, 8, 12, b < fr.settings.backlight ? C_AM : RGB(0x3C, 0x3C, 0x3C));
     px_frame(150, 47 + 26 * 5 + 9, 80, 12, C_LN);
     px_rect(151, 47 + 26 * 5 + 10, (int)(fr.cpu * 78U / 100U), 10, fr.cpu >= 85 ? C_AM : C_GR);
-    draw_hint("SELECT = ROW  K1 = CHANGE");
+    switch (ui.sys_row) {
+    case 0: draw_hint("PHONE OR COMPUTER CONNECTS TO THIS UNIT"); break;
+    case 2: draw_hint("NOT AFFECTED BY THE MASTER KNOB"); break;
+    case 1: case 3: case 4: draw_hint("SELECT = ROW  K1 = CHANGE"); break;
+    default: draw_hint("SELECT = ROW"); break;
+    }
 }
 
 static void draw_screen(void)

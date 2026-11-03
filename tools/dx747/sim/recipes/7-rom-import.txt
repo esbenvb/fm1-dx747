@@ -1,0 +1,36 @@
+# Recipe 7: import a standard 32-voice DX7 ROM exactly as the workbench does (transfer commands 3/4/5/6),
+# next to a saved scene that shares the staging sector. Bank D takes the voices of bank A.
+boot
+wipe
+run 400
+# a scene first, so the scene store has used the shared staging sector
+tap btn 11
+white 2
+tap btn 9
+tap btn 9
+run 200
+# engine 1, Sound page, patch 97 = voice 1 of bank D as shipped
+tap btn 8
+tap btn 8
+expect_screen 2
+white 1
+expect_screen 4
+enc 2 96
+run 100
+shot 7a-bank-d-as-shipped
+# a corrupted upload is refused and leaves bank D alone
+bank_badcrc 0 3
+# the real import
+bank_copy 0 3
+run 200
+# select the patch again so the engine loads it from the new bank
+enc 2 1
+enc 2 -1
+run 100
+shot 7b-bank-d-after-import
+# the scene saved before the import still recalls
+tap btn 12
+expect_screen 11
+white 1
+run 200
+shot 7c-scene-recalled-after-import
