@@ -21,6 +21,7 @@ static unsigned cfg_flip;
 static DX_A(uint32_t) panic_epoch;
 static struct dx_router ext;  /* producer: MIDI routing task, consumer: control loop */
 static struct dx_router loc;  /* built-in keys: control task is both */
+static struct dx_ctl_mail mailbox; /* CC74/71/10/11 and program changes for the control task */
 static struct groove_midi_config stand_in; /* stock MIDI-out/Thru settings, stored but unused */
 
 static int post(const uint8_t *message, unsigned bytes) { return fm1_midi_post(message, bytes); }
@@ -32,7 +33,10 @@ void dx_route_init(void)
     dx_router_init(&ext, &cfg_active, &panic_epoch, post);
     dx_router_init(&loc, &cfg_active, &panic_epoch, post);
     ext.peer = &loc; loc.peer = &ext;
+    memset(&mailbox, 0, sizeof mailbox);
+    ext.mail = &mailbox;
 }
+struct dx_ctl_mail *dx_route_mailbox(void) { return &mailbox; }
 const struct dx_cfg *dx_route_cfg(void) { return cfg_active; }
 void dx_route_publish(const struct dx_cfg *c)
 {

@@ -31,6 +31,11 @@
 #define DX_BARRIER() __asm__ volatile("csync" ::: "memory")
 #endif
 #define DX_FN static __attribute__((unused))
+/* Host tests put code here to run the consumer in the window between a producer
+ * finding a queued entry and rewriting it. Empty on the device. */
+#ifndef DX_RACE_POINT
+#define DX_RACE_POINT(p) ((void)0)
+#endif
 
 /* The pending ring holds DX_PEND_MAX messages. Past DX_PEND_SOFT only releases
  * are accepted (note off, sustain up, all notes off): a note on that cannot be
@@ -60,6 +65,7 @@ struct dx_cfg {
     uint8_t priv[DX_ENGINES]; /* the engine's own input channel 0..15 */
     uint8_t up;               /* bit e: engine e exists (memory permitting) */
     uint8_t kbd_ch;           /* channel the built-in keys play on, 0..15 */
+    uint8_t master_ch;        /* master control channel 1..16 (CC74 cutoff, CC71 resonance, CC70 type), 0 = none */
     uint8_t pool;             /* voices in use across all engines before stealing */
 };
 #ifdef FM1_HOST_TEST
@@ -69,6 +75,33 @@ typedef const struct dx_cfg *volatile dx_cfgp; /* the pointer is volatile, not t
 #endif
 
 typedef int (*dx_post_fn)(const uint8_t *message, unsigned bytes);
+
+/* Controller values the app turns into engine or master edits. The routing
+ * task may not edit the engine, so it leaves the latest value of each kind here
+ * and the control task takes it: one writer, one reader, latest value wins.
+ * Per engine: BRIGHT (CC74/CC71), pan and expression (CC10/CC11, mirrored for
+ * the screens and scenes) and "program changed". Master: cutoff, resonance, type. */
+enum { DX_MAIL_BRIGHT = 0, DX_MAIL_PAN = 8, DX_MAIL_EXPR = 16, DX_MAIL_PC = 24,
+       DX_MAIL_CUTOFF = 32, DX_MAIL_RES = 33, DX_MAIL_TYPE = 34, DX_MAIL_SLOTS = 35 };
+struct dx_ctl_mail {
+    DX_A(uint8_t) dirty[DX_MAIL_SLOTS];
+    DX_A(uint8_t) value[DX_MAIL_SLOTS];
+};
+DX_FN void dx_mail_put(struct dx_ctl_mail *m, unsigned slot, unsigned v)
+{
+    m->value[slot] = (uint8_t)v;
+    DX_BARRIER();
+    m->dirty[slot] = 1;
+}
+/* Clear first, then read: a value written in between is seen at the next take. */
+DX_FN int dx_mail_take(struct dx_ctl_mail *m, unsigned slot, unsigned *v)
+{
+    if (!m->dirty[slot]) return 0;
+    m->dirty[slot] = 0;
+    DX_BARRIER();
+    *v = m->value[slot];
+    return 1;
+}
 
 struct dx_note {
     uint8_t key;    /* source << 4 | channel */
@@ -86,6 +119,7 @@ struct dx_router {
     const dx_cfgp *cfg;
     const DX_A(uint32_t) *panic_epoch;   /* bumped to cut everything (any task) */
     dx_post_fn post;
+    struct dx_ctl_mail *mail;            /* controller mailbox, NULL for the keys router */
     const struct dx_router *peer;        /* other router, read for the voice budget only */
 
     /* producer side */
@@ -127,5 +161,6 @@ unsigned dx_route_source(unsigned channel);        /* DX_SRC_* that last used it
 unsigned dx_route_log(struct dx_log *out, unsigned max); /* newest first, both routers merged */
 unsigned dx_route_voices(void);                    /* notes the routers believe are sounding */
 uint32_t dx_route_dropped(void);                   /* refused or lost messages, both routers */
+struct dx_ctl_mail *dx_route_mailbox(void);         /* controller values for the control task to take */
 
 #endif

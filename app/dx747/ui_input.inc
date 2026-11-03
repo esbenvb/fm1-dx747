@@ -242,10 +242,10 @@ static void on_encoders(void)
     }
     case S_ESOUND:
         if (e[0]) ui.engine = (uint8_t)wrap((int)ui.engine + e[0], 8);
-        if (e[2] || e[6]) groove_control_edit(eng, e[2] + e[6], 0, 0);
+        if (e[2] || e[6]) { groove_control_edit(eng, e[2] + e[6], 0, 0); dx_bright_force_voice(eng); } /* a new voice: BRIGHT starts from it */
         if (e[3]) groove_control_edit(eng, 0, e[3], 0);
         if (e[4]) { live->pan[eng] = (int8_t)clampi(live->pan[eng] + e[4] * 2, -50, 50); send_pan(eng); }
-        if (e[5]) live->bright[eng] = (int8_t)clampi(live->bright[eng] + e[5], -50, 50);
+        if (e[5]) { live->bright[eng] = (int8_t)clampi(live->bright[eng] + e[5], -50, 50); dx_bright_changed(eng); }
         break;
     case S_EPLAYS:
         if (e[0]) ui.engine = (uint8_t)wrap((int)ui.engine + e[0], 8);
@@ -291,8 +291,9 @@ static void on_encoders(void)
         dx_settings_get(&s);
         switch (ui.sys_row) {
         case 1: s.radio_off ^= GROOVE_RADIO_AUDIO; break;
-        case 3: s.backlight = (uint8_t)clampi(s.backlight + d, 0, 8); break;
-        case 4: s.kbd_ch = (uint8_t)wrap((int)s.kbd_ch + d, 16); break;
+        case 2: s.backlight = (uint8_t)clampi(s.backlight + d, 0, 8); break;
+        case 3: s.kbd_ch = (uint8_t)wrap((int)s.kbd_ch + d, 16); break;
+        case 4: s.master_ch = (uint8_t)wrap((int)s.master_ch + d, 17); break; /* 0 = off, 1..16 */
         default: break;
         }
         dx_settings_update(&s);

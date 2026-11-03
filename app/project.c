@@ -18,6 +18,16 @@
 #include "dx747/dx747.h"
 #include "dx747/scene.inc"
 #include "dx747/boot.inc"
+#include "dx747/ctl.inc"
+
+/* The engine as the control logic edits it. */
+static int ep_copy(unsigned e, uint8_t v[156]) { return groove_fm_copy(e, v, NULL); }
+static void ep_edit(unsigned e, unsigned parameter, int delta) { groove_fm_edit(e, parameter, delta); }
+static void ep_name(unsigned e, unsigned index, char c) { groove_fm_name_edit(e, index, c); }
+static void ep_toggle(unsigned e, unsigned op) { groove_operator_toggle(e, op); }
+static int ep_import(unsigned e, const uint8_t v[156]) { return groove_fm_import(e, v); }
+static const struct dx_edit_port edit_port = {ep_copy, ep_edit, ep_name, ep_toggle, ep_import};
+static struct dx_ctl ctl;
 #include "dx747/scene_port.inc"
 
 /* The build fails when these functions are missing from the image, and the
@@ -46,7 +56,7 @@ struct groove_project *groove_project_scratch(void) { return &scratch; }
 
 uint32_t groove_crc32(uint32_t crc, const void *data, unsigned bytes) { return dx_crc32(crc, data, bytes); }
 
-static struct dx_settings settings = {0, 0, 3, 0, 0, 0};
+static struct dx_settings settings = {0, 0, 3, 0, 0, 0, 0};
 static struct dx_live live;
 static struct dx_boot booted;
 static unsigned stage, radio_pending, settings_dirty, current_scene = DX_NO_SCENE;
@@ -79,13 +89,14 @@ void dx_settings_update(const struct dx_settings *s)
 {
     if (!dx_settings_valid(s) || !memcmp(s, &settings, sizeof settings)) return;
     unsigned radio = s->radio_off != settings.radio_off || s->role != settings.role;
-    unsigned light = s->backlight != settings.backlight, kbd = s->kbd_ch != settings.kbd_ch;
+    unsigned light = s->backlight != settings.backlight, kbd = s->kbd_ch != settings.kbd_ch, master = s->master_ch != settings.master_ch;
     settings = *s;
     if (radio) radio_pending = 2;
     if (light) fm1_led_idle_level(settings.backlight);
-    if (kbd) {
+    if (kbd || master) { /* only the field that changed: a recalled scene may have set the other one */
         struct dx_cfg c = *dx_route_cfg();
-        c.kbd_ch = settings.kbd_ch;
+        if (kbd) c.kbd_ch = settings.kbd_ch;
+        if (master) c.master_ch = settings.master_ch;
         dx_route_publish(&c);
     }
     settings_mark();
@@ -93,6 +104,11 @@ void dx_settings_update(const struct dx_settings *s)
 int dx_storage_state(void) { return storage_state = dx_scene_store_state(); }
 int dx_storage_state_cached(void) { return storage_state; }
 void dx_apply_filter(void) { port_filter(live.filter_type, live.filter_hz, live.filter_res); }
+void dx_bright_changed(unsigned engine) { dx_bright_changed_ctl(&ctl, engine); }
+void dx_bright_force_voice(unsigned engine) { dx_bright_force(&ctl, engine); }
+int dx_sysex_in(const uint8_t *message, size_t bytes) { return dx_ctl_sysex_in(&ctl, message, bytes); }
+unsigned dx_sysex_dropped(void) { return ctl.sx_dropped; }
+void dx_bright_unbias(unsigned engine, uint8_t voice[156]) { dx_bright_export_fix(&ctl, engine, voice); }
 int dx_storage_claim(void)
 {
     int r = dx_scene_claim();
@@ -140,10 +156,12 @@ uint32_t groove_project_revision(void) { return project_revision; }
 void groove_project_init(void)
 {
     memset(&live, 0, sizeof live);
+    memset(&ctl, 0, sizeof ctl);
+    ctl.port = &edit_port;
     for (unsigned e = 0; e < DX_ENGINES; ++e) live.expr[e] = 127;
     live.filter_hz = 1000;
     memset(&booted, 0, sizeof booted);
-    settings = (struct dx_settings){0, 0, 3, 0, 0, 0};
+    settings = (struct dx_settings){0, 0, 3, 0, 0, 0, 0};
     stage = 0; radio_pending = 0; settings_dirty = 0; settings_result = 0; storage_state = 0;
     current_scene = DX_NO_SCENE; project_revision = 0;
 }
@@ -151,6 +169,7 @@ void groove_project_init(void)
 void groove_project_poll(void)
 {
     keep_references();
+    if (stage >= 3 && (dx_ctl_poll(&ctl, dx_route_mailbox(), dx_route_cfg(), &live, fm1_millis()) & DX_CTL_FILTER)) dx_apply_filter();
     if (stage == 0) {
         dx_boot_engines(&booted);
         struct dx_cfg c = *dx_route_cfg();
@@ -167,7 +186,7 @@ void groove_project_poll(void)
         settings.role = FM1_BLE_PERIPHERAL; /* Central needs a scan page, which DX747 does not have yet */
         fm1_led_idle_level(settings.backlight);
         struct dx_cfg c = *dx_route_cfg();
-        c.kbd_ch = settings.kbd_ch;
+        c.kbd_ch = settings.kbd_ch; c.master_ch = settings.master_ch;
         dx_route_publish(&c);
         radio_pending = 2;
         stage = 2;

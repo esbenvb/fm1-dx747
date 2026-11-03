@@ -17,6 +17,10 @@ int groove_track_role_set(unsigned t, unsigned role)
 int groove_source_set(unsigned t, unsigned type)
 { mock_calls[mock_ncalls++] = (int)(t * 10 + 2); return type == GROOVE_DX7 ? mock_src_fail[t] : -1; }
 
+/* Lets a test run the consumer in the window between a producer finding a queued entry and rewriting it. */
+static void (*race_hook)(void *);
+#define DX_RACE_POINT(p) do { if (race_hook) race_hook((void *)(p)); } while (0)
+
 #include "../../../../app/dx747/route.inc"
 #include "../../../../app/dx747/boot.inc"
 
@@ -484,9 +488,99 @@ static void test_fuzz_no_stuck_notes(void)
     }
 }
 
+/* A queued controller is replaced by a newer value while the control task is delivering it:
+ * the newer value must still arrive, behind the old one. */
+static void race_poll(void *p) { race_hook = NULL; dx_router_poll((struct dx_router *)p, 7000); }
+static void test_coalesce_race(void)
+{
+    reset();
+    cfg.e[0].rx = 1U << 0;
+    ext.started = 1; ext.last_ms = 1000; ext.tokens = 0;           /* nothing goes out directly: everything queues */
+    ev3(&ext, DX_SRC_USB, 0xb0, 1, 10, 1000);
+    ev3(&ext, DX_SRC_USB, 0xb0, 7, 20, 1000);
+    CHECK(nposted == 0 && ext.pw - ext.pr == 2);
+    race_hook = race_poll;
+    ev3(&ext, DX_SRC_USB, 0xb0, 7, 99, 1000);                      /* finds CC7 = 20 queued; the consumer delivers it first */
+    CHECK(race_hook == NULL);                                       /* the window was really exercised */
+    dx_router_poll(&ext, 7100);
+    unsigned cc7 = 0, last = 0;
+    for (unsigned i = 0; i < nposted; ++i) if (posted[i].m[1] == 7) { ++cc7; last = posted[i].m[2]; }
+    CHECK(cc7 == 2 && last == 99);                                  /* 20 then 99, in order */
+    /* when the entry has not been reached, the new value replaces the old one in place */
+    reset();
+    ext.started = 1; ext.last_ms = 1000; ext.tokens = 0;
+    cfg.e[0].rx = 1U << 0;
+    ev3(&ext, DX_SRC_USB, 0xb0, 1, 10, 1000);
+    ev3(&ext, DX_SRC_USB, 0xb0, 7, 20, 1000);
+    ev3(&ext, DX_SRC_USB, 0xb0, 7, 99, 1000);
+    CHECK(ext.pw - ext.pr == 2);
+    dx_router_poll(&ext, 7000);
+    cc7 = 0; last = 0;
+    for (unsigned i = 0; i < nposted; ++i) if (posted[i].m[1] == 7) { ++cc7; last = posted[i].m[2]; }
+    CHECK(cc7 == 1 && last == 99);
+}
+
+/* Controller mailbox: CC74/71 (BRIGHT), CC10/11 (mirrored), program changes and the master channel. */
+static void test_controller_mail(void)
+{
+    static struct dx_ctl_mail mail;
+    unsigned v;
+    reset();
+    memset(&mail, 0, sizeof mail);
+    ext.mail = &mail;
+    cfg.e[0].rx = 1U << 0;     /* engine 1 plays channel 1 */
+    cfg.e[1].ctl = 3;          /* engine 2 is controlled on channel 3 */
+    cfg.master_ch = 10;
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xb0, 74, 90, 1000);
+    CHECK(dx_mail_take(&mail, DX_MAIL_BRIGHT + 0, &v) && v == 90);
+    CHECK(!dx_mail_take(&mail, DX_MAIL_BRIGHT + 0, &v));          /* taken once */
+    CHECK(!dx_mail_take(&mail, DX_MAIL_BRIGHT + 1, &v));          /* engine 2 is not on channel 1 */
+    ev3(&ext, DX_SRC_USB, 0xb2, 71, 30, 1001);                    /* CC71 on a control channel */
+    CHECK(dx_mail_take(&mail, DX_MAIL_BRIGHT + 1, &v) && v == 30);
+    ev3(&ext, DX_SRC_USB, 0xb0, 74, 10, 1002);
+    ev3(&ext, DX_SRC_USB, 0xb0, 74, 20, 1003);
+    CHECK(dx_mail_take(&mail, DX_MAIL_BRIGHT + 0, &v) && v == 20); /* the latest value wins */
+    ev3(&ext, DX_SRC_USB, 0xb0, 10, 127, 1004);
+    ev3(&ext, DX_SRC_USB, 0xb0, 11, 55, 1005);
+    CHECK(dx_mail_take(&mail, DX_MAIL_PAN + 0, &v) && v == 127);
+    CHECK(dx_mail_take(&mail, DX_MAIL_EXPR + 0, &v) && v == 55);
+    ev3(&ext, DX_SRC_USB, 0xc0, 5, 0, 1006);                      /* program change */
+    CHECK(dx_mail_take(&mail, DX_MAIL_PC + 0, &v));
+    CHECK(!dx_mail_take(&mail, DX_MAIL_PC + 1, &v));
+    /* mirrored controllers are still delivered to the engine */
+    unsigned before = nposted;
+    ev3(&ext, DX_SRC_USB, 0xb0, 10, 64, 1007);
+    CHECK(nposted == before + 1 && (posted[nposted - 1].m[0] & 0xf0) == 0xb0 && posted[nposted - 1].m[1] == 10);
+    /* master channel: consumed, never forwarded, and an engine listening there is not brightened */
+    cfg.e[2].rx = 1U << 9;
+    before = nposted;
+    ev3(&ext, DX_SRC_USB, 0xb9, 74, 100, 1008);
+    ev3(&ext, DX_SRC_USB, 0xb9, 71, 101, 1009);
+    ev3(&ext, DX_SRC_USB, 0xb9, 70, 102, 1010);
+    CHECK(nposted == before);
+    CHECK(dx_mail_take(&mail, DX_MAIL_CUTOFF, &v) && v == 100);
+    CHECK(dx_mail_take(&mail, DX_MAIL_RES, &v) && v == 101);
+    CHECK(dx_mail_take(&mail, DX_MAIL_TYPE, &v) && v == 102);
+    CHECK(!dx_mail_take(&mail, DX_MAIL_BRIGHT + 2, &v));
+    ev3(&ext, DX_SRC_USB, 0xb9, 7, 90, 1011);                     /* other controllers on that channel still reach the engine */
+    CHECK(nposted == before + 1);
+    /* no master channel: CC74 on channel 10 is an ordinary controller for the engine listening there */
+    cfg.master_ch = 0;
+    ev3(&ext, DX_SRC_USB, 0xb9, 74, 33, 1012);
+    CHECK(!dx_mail_take(&mail, DX_MAIL_CUTOFF, &v));
+    CHECK(dx_mail_take(&mail, DX_MAIL_BRIGHT + 2, &v) && v == 33);
+    /* the keys router has no mailbox and the external router works without one */
+    CHECK(loc.mail == NULL);
+    ext.mail = NULL;
+    ev3(&ext, DX_SRC_USB, 0xb0, 74, 1, 1013);
+}
+
 int main(void)
 {
     test_basic_and_mask();
+    test_controller_mail();
+    test_coalesce_race();
     test_layering_and_split();
     test_note_off_survives_config_change();
     test_fold();

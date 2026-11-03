@@ -317,12 +317,12 @@ enum { ST_BYTES = 10 };
 int dx_settings_valid(const struct dx_settings *s)
 {
     return s && s->radio_off <= 7 && s->role <= 1 && s->backlight <= 8 && s->last_scene < DX_SCENES &&
-           s->kbd_ch <= 15 && !(s->flags & ~1U);
+           s->kbd_ch <= 15 && !(s->flags & ~1U) && s->master_ch <= 16;
 }
 int dx_settings_write(const struct dx_settings *s)
 {
     if (!dx_settings_valid(s)) return DX_SCENE_INVALID;
-    const uint8_t image[ST_BYTES] = {'D', 'S', 1, s->radio_off, s->role, s->backlight, s->last_scene, s->kbd_ch, s->flags, 0};
+    const uint8_t image[ST_BYTES] = {'D', 'S', 1, s->radio_off, s->role, s->backlight, s->last_scene, s->kbd_ch, s->flags, s->master_ch};
     return dx_slot_put(DX_SETTINGS_SECTOR, 0, image, sizeof image);
 }
 int dx_settings_read(struct dx_settings *out)
@@ -337,7 +337,7 @@ int dx_settings_read(struct dx_settings *out)
     if (image[0] == 0xff && image[1] == 0xff) return DX_SCENE_EMPTY;
     if (image[0] != 'D' || image[1] != 'S' || image[2] != 1) return DX_SCENE_INVALID;
     out->radio_off = image[3]; out->role = image[4]; out->backlight = image[5];
-    out->last_scene = image[6]; out->kbd_ch = image[7]; out->flags = image[8];
+    out->last_scene = image[6]; out->kbd_ch = image[7]; out->flags = image[8]; out->master_ch = image[9];
     return dx_settings_valid(out) ? 0 : DX_SCENE_INVALID;
 }
 

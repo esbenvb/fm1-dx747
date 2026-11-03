@@ -144,7 +144,7 @@ static void draw_setup(void)
     uint8_t tmp[DX_ENGINES];
     for (unsigned k = 0; k < 16; ++k) {
         if (engines_on(k, tmp)) routed_ch[nr++] = (uint8_t)k;
-        else if (k == ui.channel || ((fr.active >> k) & 1U)) loose_ch[nu++] = (uint8_t)k;
+        else if (k == ui.channel || (((fr.active >> k) & 1U) && !is_control_ch(k))) loose_ch[nu++] = (uint8_t)k;  /* a control channel is not a keyboard to route */
     }
     uint8_t shown_loose[2];
     for (unsigned i = 0; i < nu && nvl < 2; ++i) if (loose_ch[i] == ui.channel) shown_loose[nvl++] = loose_ch[i];
@@ -168,8 +168,10 @@ static void draw_setup(void)
         px_rect(34, y, 192, 18, RGB(0x10, 0x10, 0x10));
         for (int n = 24; n <= 120; n += 12) px_rect(lane_x((unsigned)n), y, 1, 18, RGB(0x26, 0x26, 0x26));
         if (!routed) {
-            px_dotted(34, y, 192, 18, act ? C_AM : C_LN);
-            if (act) px_text_c(130, y + 5, "ACTIVE, NOT ROUTED YET", 1, C_AM);
+            unsigned control = is_control_ch(k);
+            px_dotted(34, y, 192, 18, act && !control ? C_AM : C_LN);
+            if (control) px_text_c(130, y + 5, "CONTROL CHANNEL", 1, act ? C_TX : C_DIM);
+            else if (act) px_text_c(130, y + 5, "ACTIVE, NOT ROUTED YET", 1, C_AM);
             else px_text_c(130, y + 5, "NO ENGINE ON THIS CHANNEL", 1, C_DIM);
         }
         else draw_lanes(k, y, 18);
@@ -389,8 +391,8 @@ static void draw_esends(void)
     for (unsigned v = 0; v < 8; ++v) { /* one square per voice this engine may use */
         if (v < c->poly) px_rect(100 + 17 * (int)v, 138, 15, 12, engine_color(e)); else px_frame(100 + 17 * (int)v, 138, 15, 12, C_LN);
     }
-    px_text(100, 164, c->ctl ? "DX7 EDITS ARRIVE" : "OFF = CC ONLY FROM", 1, C_DIM);
-    px_text(100, 174, c->ctl ? "ON THIS CHANNEL" : "THE PLAY CHANNELS", 1, C_DIM);
+    px_text(100, 164, c->ctl ? "CC, PC AND DX7 SYSEX" : "OFF: SYSEX GOES TO THE", 1, C_DIM);
+    px_text(100, 174, c->ctl ? "ARRIVE ON THIS CHANNEL" : "ONLY ENGINE ON ITS CH", 1, C_DIM);
     tile_u(0, "REV", fr.e[e].rev, C_TX); tile_u(1, "DLY", fr.e[e].dly, C_TX); tile_u(2, "POLY", c->poly, C_TX);
     if (c->ctl) put_u(tb, c->ctl); else put_s(tb, "OFF");
     tile(3, "CTRL CH", tb, C_AC);
@@ -573,7 +575,7 @@ static void draw_scenes(void)
 
 static void draw_sys(void)
 {
-    static const char *const labels[7] = {"BLUETOOTH MIDI", "BLUETOOTH AUDIO IN", "USB AUDIO OUT", "BUTTON LIGHT", "KEYBOARD CHANNEL", "CPU", "SCENE FLASH"};
+    static const char *const labels[7] = {"BLUETOOTH MIDI", "BLUETOOTH AUDIO IN", "BUTTON LIGHT", "KEYBOARD CHANNEL", "MASTER CONTROL CHANNEL", "CPU", "SCENE FLASH"};
     const struct dx_settings *s = &fr.settings;
     draw_head();
     draw_title("SYSTEM", "GLO");
@@ -585,9 +587,9 @@ static void draw_sys(void)
         switch (i) {
         case 0: o = put_s(tb, s->role ? "CENTRAL" : "PERIPHERAL"); col = C_GR; break;
         case 1: val = (s->radio_off & GROOVE_RADIO_AUDIO) ? "OFF" : "ON"; col = (s->radio_off & GROOVE_RADIO_AUDIO) ? C_DIM : C_GR; break;
-        case 2: val = "PRE-VOLUME"; col = C_GR; break;
-        case 3: o = put_u(tb, s->backlight); put_s(o, " / 8"); col = C_AM; break;
-        case 4: o = put_s(tb, "CH "); put_u(o, s->kbd_ch + 1U); break;
+        case 2: o = put_u(tb, s->backlight); put_s(o, " / 8"); col = C_AM; break;
+        case 3: o = put_s(tb, "CH "); put_u(o, s->kbd_ch + 1U); break;
+        case 4: if (s->master_ch) { o = put_s(tb, "CH "); put_u(o, s->master_ch); col = C_AC; } else { val = "OFF"; col = C_DIM; } break;
         case 5: o = put_u(tb, fr.cpu); put_s(o, "%"); break;
         default: val = fr.storage ? (fr.storage > 0 ? "NEEDS SETUP" : "ERROR") : "READY"; col = fr.storage ? C_AM : C_GR; break;
         }
@@ -595,13 +597,13 @@ static void draw_sys(void)
         px_text(4, y, labels[i], 1, ui.sys_row == i ? C_AC : C_DIM);
         px_text(4, y + 9, val, 2, col);
     }
-    for (unsigned b = 0; b < 8; ++b) px_rect(150 + (int)b * 10, 47 + 26 * 3 + 9, 8, 12, b < fr.settings.backlight ? C_AM : RGB(0x3C, 0x3C, 0x3C));
+    for (unsigned b = 0; b < 8; ++b) px_rect(150 + (int)b * 10, 47 + 26 * 2 + 9, 8, 12, b < fr.settings.backlight ? C_AM : RGB(0x3C, 0x3C, 0x3C));
     px_frame(150, 47 + 26 * 5 + 9, 80, 12, C_LN);
     px_rect(151, 47 + 26 * 5 + 10, (int)(fr.cpu * 78U / 100U), 10, fr.cpu >= 85 ? C_AM : C_GR);
     switch (ui.sys_row) {
     case 0: draw_hint("PHONE OR COMPUTER CONNECTS TO THIS UNIT"); break;
-    case 2: draw_hint("NOT AFFECTED BY THE MASTER KNOB"); break;
-    case 1: case 3: case 4: draw_hint("SELECT = ROW  K1 = CHANGE"); break;
+    case 4: draw_hint("K1 = CHANGE  CC74 CUTOFF 71 RES 70 TYPE"); break;
+    case 1: case 2: case 3: draw_hint("SELECT = ROW  K1 = CHANGE"); break;
     default: draw_hint("SELECT = ROW"); break;
     }
 }

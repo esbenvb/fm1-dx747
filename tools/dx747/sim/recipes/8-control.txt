@@ -1,0 +1,184 @@
+# Recipe 8: control from outside. DX7 SysEx edits, CC74 as the BRIGHT macro, CC10/CC11 mirrored for the
+# screens, and the master filter on its own control channel. (midi bytes are hex; 4a = CC74, 47 = CC71, 46 = CC70)
+boot
+wipe
+run 400
+# DX7 parameter change F0 43 1n gg pp dd F7. Device 0 is channel 1, where engine 1 is alone, so engine 1 is the target.
+# Parameter 134 (algorithm) is gg 01 pp 06. Algorithm 1: OP3 and OP1 are carriers, OP6 OP5 OP4 OP2 modulate.
+midi 1 f0 43 10 01 06 00 f7
+midi 1 f0 43 10 00 10 32 f7
+midi 1 f0 43 10 00 25 3c f7
+midi 1 f0 43 10 00 3a 00 f7
+midi 1 f0 43 10 00 64 46 f7
+midi 1 f0 43 10 00 4f 50 f7
+midi 1 f0 43 10 00 79 5a f7
+run 200
+expect_patch 0 134 0
+expect_patch 0 16 50
+expect_patch 0 37 60
+expect_patch 0 58 0
+expect_patch 0 100 70
+expect_patch 0 79 80
+expect_patch 0 121 90
+# a device number nothing listens on changes nothing: channel 12 has no engine
+midi 1 f0 43 1b 00 10 63 f7
+run 100
+expect_patch 0 16 50
+# CC74 = 95 is +24: modulators go up, carriers (the volume) and the level-0 modulator stay
+midi 1 b0 4a 5f
+run 200
+expect_live bright 0 24
+expect_patch 0 16 74
+expect_patch 0 37 84
+expect_patch 0 58 0
+expect_patch 0 100 94
+expect_patch 0 79 80
+expect_patch 0 121 90
+# a workbench download of the voice or the timbre carries the voice's own levels, not the brightened ones
+# (the voice starts at byte 11 of the 223-byte timbre)
+expect_download 1 0 16 50
+expect_download 1 0 37 60
+expect_download 1 0 100 70
+expect_download 2 0 27 50
+# a workbench upload replaces the voice: an uploaded level that equals what the macro last wrote (74) is the
+# voice's own level, so it plays 98, and putting 50 back plays 74 again
+retouch_voice 0 16 74
+run 200
+expect_patch 0 16 98
+expect_patch 0 37 84
+expect_patch 0 79 80
+retouch_voice 0 16 50
+run 200
+expect_patch 0 16 74
+expect_patch 0 37 84
+# CC74 = 64 is the centre: the voice is exactly as it was
+midi 1 b0 4a 40
+run 200
+expect_live bright 0 0
+expect_patch 0 16 50
+expect_patch 0 37 60
+expect_patch 0 100 70
+# an algorithm change while BRIGHT is on: algorithm 5 makes OP5 a carrier, so its raised level must come back down
+midi 1 b0 4a 5f
+run 200
+midi 1 f0 43 10 01 06 04 f7
+run 300
+expect_patch 0 134 4
+expect_patch 0 16 74
+expect_patch 0 37 60
+expect_patch 0 58 0
+expect_patch 0 100 94
+expect_patch 0 79 80
+expect_patch 0 121 90
+# a scene saved with BRIGHT on stores the voice's own levels, so recalling it does not add the offset twice
+tap btn 9
+tap btn 9
+run 300
+midi 1 b0 4a 40
+run 300
+expect_patch 0 16 50
+expect_patch 0 37 60
+expect_patch 0 100 70
+tap btn 12
+white 1
+run 400
+expect_live bright 0 24
+expect_patch 0 134 4
+expect_patch 0 16 74
+expect_patch 0 37 60
+expect_patch 0 100 94
+# pan and expression sent as CC10 / CC11 are mirrored into the screens' state
+midi 1 b0 0a 7f
+midi 1 b0 0b 64
+run 100
+expect_live pan 0 50
+expect_live expr 0 100
+# name character 0 (parameter 145 = gg 01 pp 11) and the operator mask (155 = gg 01 pp 1b): OP6 off
+midi 1 f0 43 10 01 11 41 f7
+midi 1 f0 43 10 01 1b 3e f7
+run 200
+expect_patch 0 145 65
+expect_patch 0 155 62
+midi 1 f0 43 10 01 1b 3f f7
+run 200
+expect_patch 0 155 63
+# a dump whose modulator levels happen to equal the brightened ones: the dump replaced the voice, so those are its own
+# levels (74 and 94 become 98 and 99) and the macro must not mistake them for its own work
+midi 1 f0 43 00 00 01 1b 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 4a 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 3c 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 00 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 50 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 5e 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 5a 00 01 00 07 63 63 63 63 32 32 32 32 04 00 01 23 00 00 00 01 00 03 18 44 55 4d 50 20 54 57 4f 20 20 72 f7
+run 400
+expect_patch 0 134 4
+expect_patch 0 16 98
+expect_patch 0 37 60
+expect_patch 0 58 0
+expect_patch 0 100 99
+expect_patch 0 79 80
+expect_patch 0 121 90
+# a single-voice dump while BRIGHT is +24: the new voice starts from its own levels (40 30 0 20 become 64 54 0 44)
+midi 1 f0 43 00 00 01 1b 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 28 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 1e 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 00 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 46 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 14 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 00 00 5f 00 01 00 07 63 63 63 63 32 32 32 32 00 00 01 23 00 00 00 01 00 03 18 44 55 4d 50 20 54 45 53 54 20 5f f7
+run 400
+expect_patch 0 134 0
+expect_patch 0 145 68
+expect_patch 0 16 64
+expect_patch 0 37 54
+expect_patch 0 58 0
+expect_patch 0 100 44
+expect_patch 0 79 70
+expect_patch 0 121 95
+midi 1 b0 4a 40
+run 300
+expect_patch 0 16 40
+expect_patch 0 37 30
+expect_patch 0 100 20
+# master filter: System screen, row 4, K1 sets the master control channel to 10
+tap btn 7
+expect_screen 12
+enc 0 4
+enc 2 10
+run 100
+shot 8a-master-channel
+# CC74 / CC71 / CC70 on channel 10 move the master filter; an off filter becomes a low-pass when it is swept
+expect_live filter_type 0
+midi 1 b9 4a 40
+run 100
+expect_live filter_type 1
+expect_live filter_hz 650
+midi 1 b9 47 50
+run 100
+expect_live filter_res 80
+midi 1 b9 46 40
+run 100
+expect_live filter_type 2
+# a control channel is not a keyboard waiting to be routed: Setup labels it as one when it is selected
+tap btn 8
+expect_screen 1
+enc 0 9
+run 100
+shot 8c-setup-with-control-channel
+enc 0 -9
+tap btn 2
+tap btn 2
+expect_screen 10
+shot 8b-master-filter-from-midi
+# a recalled scene keeps its keyboard channel when the master control channel is edited afterwards
+tap btn 7
+enc 0 -1
+enc 2 4
+run 100
+expect_cfg kbd_ch 4
+tap btn 9
+tap btn 9
+run 300
+tap btn 7
+enc 2 -4
+run 100
+expect_cfg kbd_ch 0
+tap btn 12
+white 1
+run 300
+expect_cfg kbd_ch 4
+tap btn 7
+enc 0 1
+enc 2 3
+run 100
+expect_cfg master_ch 13
+expect_cfg kbd_ch 4

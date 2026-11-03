@@ -29,6 +29,13 @@
  *                       fails unless the library read-back equals the file and all 32 program names match
  *   expect_peak MS MIN  render MS milliseconds and fail unless the output reaches at least MIN (0..1 full scale);
  *                       prints the peak it measured
+ *   expect_patch E I V  fail unless engine E (0..7) has VCED parameter I (0..155) equal to V
+ *   expect_download K E I V  download engine E's voice (K=1, 156 bytes) or timbre (K=2, 223 bytes) the way the
+ *                       workbench does and fail unless byte I equals V
+ *   retouch_voice E I V download engine E's voice, set byte I to V and upload it back (workbench command sequence)
+ *   expect_cfg NAME V   fail unless the active router configuration has kbd_ch or master_ch equal to V
+ *   expect_live NAME I V  fail unless the UI-owned live value matches: pan I, expr I, bright I (engine I),
+ *                       filter_type, filter_res or filter_hz (I ignored)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +43,11 @@
 #include <string.h>
 #include <zlib.h>
 
+#include "dx747/scene.h"
 extern unsigned dx_route_voices(void);
+extern struct dx_live *dx_live_edit(void);
+extern const struct dx_cfg *dx_route_cfg(void);
+extern int groove_fm_copy(unsigned track, uint8_t patch[156], void *controls);
 extern void sim_boot(unsigned);
 extern void sim_control(unsigned, unsigned, int);
 extern const float *sim_render(void);
@@ -121,6 +132,8 @@ static void tap(unsigned kind, unsigned index) { press(kind, index, 1); run_ms(6
 /* ---- DX7 ROM import, the way the workbench does it (sdk/WebUpdate.js) ---------- */
 
 static unsigned wb_token;
+static uint8_t wb_data[160];   /* the last reply: status byte, then its data */
+static unsigned wb_data_len;
 
 /* One file-protocol request: F0 7D 'F' 'M' 02 cmd token(14 bit) pack7(payload) checksum F7.
  * Returns the device's status byte (0 = ok), -1 for no reply, -2 if the frame was refused outright. */
@@ -146,29 +159,55 @@ static int wb_query(unsigned cmd, const uint8_t *payload, unsigned n)
         unsigned out = sim_midi_output();
         if (!out) continue;
         const uint8_t *r = sim_file();
-        if ((out & 255U) >= 11 && r[5] == (cmd | 64U) && r[6] == f[6] && r[7] == f[7])
-            return (int)((r[8] | (unsigned)(r[9] & 1U) << 7) & 255U); /* first decoded payload byte */
+        if ((out & 255U) >= 11 && r[5] == (cmd | 64U) && r[6] == f[6] && r[7] == f[7]) {
+            unsigned len = out & 255U, v = 0, nb = 0, k = 0;
+            for (unsigned i = 8; i + 2 < len; ++i) {      /* unpack the 7-bit payload */
+                v |= (unsigned)r[i] << nb; nb += 7;
+                if (nb >= 8) { if (k < sizeof wb_data) wb_data[k++] = (uint8_t)v; v >>= 8; nb -= 8; }
+            }
+            wb_data_len = k;
+            return k ? (int)wb_data[0] : -1;
+        }
     }
     return -1;
 }
 
-/* begin write (kind 4 = library group), 64-byte chunks, CRC, and the close the workbench always sends. */
-static int wb_upload_bank(unsigned group, const uint8_t *raw, int corrupt_crc)
+/* Workbench upload: begin write (kind 1 voice, 2 timbre, 4 library group), 64-byte chunks, CRC, and the close
+ * the workbench always sends. */
+static int wb_upload(unsigned kind, unsigned target, const uint8_t *raw, unsigned size, int corrupt_crc)
 {
-    uint8_t chunk[66], begin[4] = {4, (uint8_t)group, 0x00, 0x10}; /* size 4096, little endian */
+    uint8_t chunk[66], begin[4] = {(uint8_t)kind, (uint8_t)target, (uint8_t)size, (uint8_t)(size >> 8)};
     int r = wb_query(3, begin, 4);
-    for (unsigned at = 0; !r && at < 4096; at += 64) {
-        chunk[0] = (uint8_t)at; chunk[1] = (uint8_t)(at >> 8); memcpy(chunk + 2, raw + at, 64);
-        r = wb_query(4, chunk, 66);
+    for (unsigned at = 0; !r && at < size; at += 64) {
+        unsigned n = size - at < 64U ? size - at : 64U;
+        chunk[0] = (uint8_t)at; chunk[1] = (uint8_t)(at >> 8); memcpy(chunk + 2, raw + at, n);
+        r = wb_query(4, chunk, 2 + n);
     }
     if (!r) {
-        uint32_t c = ~groove_crc32(~0U, raw, 4096);
+        uint32_t c = ~groove_crc32(~0U, raw, size);
         if (corrupt_crc) c ^= 1U;
         uint8_t q[4] = {(uint8_t)c, (uint8_t)(c >> 8), (uint8_t)(c >> 16), (uint8_t)(c >> 24)};
         r = wb_query(5, q, 4);
     }
     (void)wb_query(6, NULL, 0);
     return r;
+}
+static int wb_upload_bank(unsigned group, const uint8_t *raw, int corrupt_crc) { return wb_upload(4, group, raw, 4096, corrupt_crc); }
+
+/* Workbench download: command 1 starts it and returns the size, command 2 reads 64-byte chunks, 6 ends it. */
+static int wb_download(unsigned kind, unsigned engine, uint8_t *out, unsigned size)
+{
+    uint8_t p[2] = {(uint8_t)kind, (uint8_t)engine};
+    if (wb_query(1, p, 2) != 0 || wb_data_len < 3) return -1;
+    if ((wb_data[1] | wb_data[2] << 8) != size) return -2;
+    for (unsigned at = 0; at < size; at += 64) {
+        unsigned n = size - at < 64U ? size - at : 64U;
+        uint8_t q[3] = {(uint8_t)at, (uint8_t)(at >> 8), (uint8_t)n};
+        if (wb_query(2, q, 3) != 0 || wb_data_len < 1 + n) return -3;
+        memcpy(out + at, wb_data + 1, n);
+    }
+    (void)wb_query(6, NULL, 0);
+    return 0;
 }
 
 static void dx7_bank_file(uint8_t file[4104], const uint8_t raw[4096])
@@ -294,6 +333,53 @@ int main(int argc, char **argv)
             float got = peak_ms((unsigned)atoi(a)), want = (float)atof(b);
             printf("peak %.4f\n", (double)got);
             if (got < want) { fprintf(stderr, "expect_peak: wanted at least %g, got %g\n", (double)want, (double)got); ++errors; }
+        }
+        else if (!strcmp(p, "expect_patch") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned e = (unsigned)atoi(a), i = (unsigned)atoi(b), want = c3 ? (unsigned)atoi(c3) : 0U;
+            uint8_t v[156];
+            if (groove_fm_copy(e, v, NULL) || i >= 156 || v[i] != want) {
+                fprintf(stderr, "expect_patch %u %u: wanted %u, got %d\n", e, i, want, i < 156 && !groove_fm_copy(e, v, NULL) ? (int)v[i] : -1);
+                ++errors;
+            }
+        }
+        else if (!strcmp(p, "expect_live") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned i = (unsigned)atoi(b);
+            int want = c3 ? atoi(c3) : 0, got = -9999;
+            if (!c3 && !strncmp(a, "filter_", 7)) { want = atoi(b); i = 0; } /* filter_*: the value may stand in place of the index */
+            const struct dx_live *l = dx_live_edit();
+            if (!strcmp(a, "pan") && i < 8) got = l->pan[i];
+            else if (!strcmp(a, "expr") && i < 8) got = l->expr[i];
+            else if (!strcmp(a, "bright") && i < 8) got = l->bright[i];
+            else if (!strcmp(a, "filter_type")) got = l->filter_type;
+            else if (!strcmp(a, "filter_res")) got = l->filter_res;
+            else if (!strcmp(a, "filter_hz")) got = l->filter_hz;
+            if (got != want) { fprintf(stderr, "expect_live %s %u: wanted %d, got %d\n", a, i, want, got); ++errors; }
+        }
+        else if (!strcmp(p, "expect_download") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n"), *c4 = strtok(NULL, " \t\r\n");
+            unsigned kind = (unsigned)atoi(a), e = (unsigned)atoi(b), i = c3 ? (unsigned)atoi(c3) : 0U, want = c4 ? (unsigned)atoi(c4) : 0U;
+            uint8_t buf[256];
+            unsigned size = kind == 1 ? 156U : kind == 2 ? 223U : 0U;
+            int r = size ? wb_download(kind, e, buf, size) : -9;
+            if (r || i >= size || buf[i] != want) {
+                fprintf(stderr, "expect_download %u %u %u: wanted %u, got %d (status %d)\n", kind, e, i, want, !r && i < size ? (int)buf[i] : -1, r);
+                ++errors;
+            }
+        }
+        else if (!strcmp(p, "retouch_voice") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned e = (unsigned)atoi(a), i = (unsigned)atoi(b);
+            uint8_t v[156];
+            int r = i < 156 && c3 ? wb_download(1, e, v, 156) : -9;
+            if (!r) { v[i] = (uint8_t)atoi(c3); r = wb_upload(1, e, v, 156, 0); }
+            if (r) { fprintf(stderr, "retouch_voice %u %u: status %d\n", e, i, r); ++errors; }
+        }
+        else if (!strcmp(p, "expect_cfg") && a && b) {
+            const struct dx_cfg *cf = dx_route_cfg();
+            int got = !strcmp(a, "kbd_ch") ? cf->kbd_ch : !strcmp(a, "master_ch") ? cf->master_ch : -9999;
+            if (got != atoi(b)) { fprintf(stderr, "expect_cfg %s: wanted %d, got %d\n", a, atoi(b), got); ++errors; }
         }
         else if (!strcmp(p, "echo")) { printf("%s%s%s\n", a ? a : "", b ? " " : "", b ? b : ""); }
         else { fprintf(stderr, "unknown or incomplete command: %s\n", p); ++errors; }

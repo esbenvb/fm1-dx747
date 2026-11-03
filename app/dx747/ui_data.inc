@@ -152,6 +152,13 @@ static unsigned engines_on(unsigned k, uint8_t list[DX_ENGINES])
     for (unsigned e = 0; e < DX_ENGINES; ++e) if ((fr.cfg.e[e].rx >> k) & 1U) list[n++] = (uint8_t)e;
     return n;
 }
+/* A channel that carries control messages: an engine's control channel or the master control channel. */
+static unsigned is_control_ch(unsigned k)
+{
+    if (fr.cfg.master_ch == k + 1U) return 1;
+    for (unsigned e = 0; e < DX_ENGINES; ++e) if (((fr.cfg.up >> e) & 1U) && fr.cfg.e[e].ctl == k + 1U) return 1;
+    return 0;
+}
 static uint16_t engine_color(unsigned e) { return fr.cfg.e[e].mute ? C_MU : EC[e]; }
 static unsigned max_layers(unsigned k)
 {

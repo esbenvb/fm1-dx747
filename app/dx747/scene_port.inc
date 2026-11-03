@@ -4,7 +4,12 @@
 #include "master_fx.h"
 
 static int port_export(unsigned e, uint8_t out[DX_PRESET_BYTES])
-{ return groove_timbre_export(e, out, DX_PRESET_BYTES); }
+{
+    int r = groove_timbre_export(e, out, DX_PRESET_BYTES);
+    /* the scene stores the voice as it is and the BRIGHT offset next to it */
+    if (!r) dx_bright_export_fix(&ctl, e, out + offsetof(struct groove_preset, data));
+    return r;
+}
 static int port_import(unsigned e, const uint8_t in[DX_PRESET_BYTES])
 { return groove_timbre_import(e, in, DX_PRESET_BYTES); }
 static int port_muted(unsigned e)
@@ -28,7 +33,8 @@ static void port_cc(unsigned e, unsigned controller, unsigned value)
     uint8_t m[3] = {(uint8_t)(0xb0U | c->priv[e]), (uint8_t)controller, (uint8_t)value};
     (void)fm1_midi_post(m, 3);
 }
-static void port_bright(unsigned e, int offset) { (void)e; (void)offset; /* the BRIGHT macro arrives with the control channels */ }
+/* The preset was just imported, so the voice is new: start from it. */
+static void port_bright(unsigned e, int offset) { dx_bright_apply(&ctl, e, offset, 1); }
 static void port_filter(unsigned type, unsigned hz, unsigned resonance)
 { fm1_master_fx_set(type, hz ? (float)hz : FM1_MFX_CUTOFF_DEFAULT_HZ, resonance); }
 static void port_panic(void) { dx_route_panic(); }

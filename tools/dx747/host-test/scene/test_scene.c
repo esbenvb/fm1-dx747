@@ -393,11 +393,14 @@ static void test_settings(void)
     fresh_flash();
     struct dx_settings st, back;
     CHECK(dx_settings_read(&back) == DX_SCENE_EMPTY);
-    memset(&st, 0, sizeof st); st.radio_off = 2; st.role = 1; st.backlight = 3; st.last_scene = 12; st.kbd_ch = 4; st.flags = 1;
+    memset(&st, 0, sizeof st); st.radio_off = 2; st.role = 1; st.backlight = 3; st.last_scene = 12; st.kbd_ch = 4; st.flags = 1; st.master_ch = 10;
     CHECK(dx_settings_valid(&st));
+    st.master_ch = 16; CHECK(dx_settings_valid(&st));
+    st.master_ch = 17; CHECK(!dx_settings_valid(&st));              /* 0 = off, 1..16 */
+    st.master_ch = 10;
     CHECK(dx_settings_write(&st) == 0);
     memset(&back, 0, sizeof back);
-    CHECK(dx_settings_read(&back) == 0 && !memcmp(&st, &back, sizeof st));
+    CHECK(dx_settings_read(&back) == 0 && !memcmp(&st, &back, sizeof st) && back.master_ch == 10);
     unsigned ops = op_count;
     CHECK(dx_settings_write(&st) == 0 && op_count == ops); /* unchanged settings never touch flash */
     struct dx_scene s, r; make_scene(&s, 1, "WITH SETTING");

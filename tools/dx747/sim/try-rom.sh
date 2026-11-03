@@ -18,7 +18,7 @@ ROM="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 GROUP="${2:-3}"
 OUT="${3:-build/dx747/try-rom}"
 [ -f "$ROM" ] || { echo "error: $ROM not found" >&2; exit 1; }
-make -s -C tools/dx747/sim/native
+tools/dx747/sim/native/ensure-built.sh
 mkdir -p "$OUT"
 python3 - "$ROM" "$GROUP" "$OUT" <<'PY'
 import subprocess, sys

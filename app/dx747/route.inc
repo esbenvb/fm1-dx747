@@ -117,15 +117,22 @@ DX_FN void dx_send(struct dx_router *r, const uint8_t *m, unsigned n)
     unsigned pr = r->pr, pw = r->pw;
     if (pr == pw && r->tokens) { --r->tokens; dx_deliver_p(r, m, n); return; }
     if (pw != pr && dx_coalescible(m)) {
-        /* Never touch the entry at pr: the consumer may be delivering it. */
+        /* Never start at the entry at pr: the consumer may be delivering it. */
         for (unsigned i = pr + 1; i != pw; ++i) {
             uint32_t q = r->pend[i % DX_PEND_MAX];
             unsigned type = m[0] & 0xf0U;
             if ((q & 0xff) != m[0] || (q >> 24) != n) continue;
             if (type == 0xb0 && ((q >> 8) & 0xff) != m[1]) continue;
+            DX_RACE_POINT(r);
             r->pend[i % DX_PEND_MAX] = dx_pack(m, n);
-            return;
+            DX_BARRIER();
+            /* The consumer may have passed the entry since pr was read and would never see
+             * the new value. Only an entry it has not reached yet can stand in for this
+             * message; otherwise the message is queued behind it, which is also in order. */
+            if ((int)(i - r->pr) > 0) return;
+            break;
         }
+        pr = r->pr;
     }
     if (pw - pr >= DX_PEND_SOFT && !dx_critical(m)) { ++r->dropped; return; }
     if (pw - pr >= DX_PEND_MAX) { ++r->dropped; ++r->need_seq; return; } /* even a release no longer fits */
@@ -285,6 +292,20 @@ DX_FN void dx_router_event(struct dx_router *r, unsigned src, const uint8_t *m, 
         return;
     }
     unsigned targets = rx | ctl;
+    if (r->mail && (type == 0xb0 || type == 0xc0)) {
+        unsigned cc = m[1], v = n > 2 ? m[2] : 0;
+        if (type == 0xc0) {
+            /* the engine loads a new voice: the BRIGHT macro has to start from it */
+            for (unsigned e = 0; e < DX_ENGINES; ++e) if (targets & (1U << e)) dx_mail_put(r->mail, DX_MAIL_PC + e, 0);
+        } else if (c->master_ch == ch + 1U && (cc == 70 || cc == 71 || cc == 74)) {
+            /* master filter controls: consumed here, they never reach an engine */
+            dx_mail_put(r->mail, cc == 74 ? DX_MAIL_CUTOFF : cc == 71 ? DX_MAIL_RES : DX_MAIL_TYPE, v);
+            return;
+        } else if (cc == 74 || cc == 71 || cc == 10 || cc == 11) {
+            unsigned base = cc == 10 ? DX_MAIL_PAN : cc == 11 ? DX_MAIL_EXPR : DX_MAIL_BRIGHT;
+            for (unsigned e = 0; e < DX_ENGINES; ++e) if (targets & (1U << e)) dx_mail_put(r->mail, base + e, v);
+        }
+    }
     if (type == 0xb0) {
         unsigned holding = dx_holding(r, src, ch);
         if (m[1] == 64 && m[2] >= 64) {

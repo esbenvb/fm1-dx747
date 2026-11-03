@@ -3,6 +3,8 @@
 #include "tuning_hook.h"
 #include "fm_patch.h"
 #include "fm1_engine_control.h"
+#include "dx747/dx747.h"
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,12 +39,14 @@ static void barrier(void)
 }
 void fm1_app_sysex(const uint8_t *m, size_t n)
 {
+    /* DX7 parameter changes and single-voice dumps go to DX747's own ring: the mailbox below keeps
+     * one frame and drops the rest, which loses the changes of a knob that is being turned. */
+    if (dx_sysex_in(m, n)) return;
     if (!m || n < 6 || n > sizeof incoming.bytes || m[0] != 0xf0 || m[n - 1] != 0xf7 ||
         incoming.length)
         return;
     if (!(n >= 8 && m[1] == 0x7d && m[2] == 'F' && m[3] == 'M' && m[4] == 2) &&
-        !(n == 6 && m[1] == 0x7f && (m[2] == 0 || m[2] == 0x7f) && m[3] == 6) &&
-        !(n == 163 && m[1] == 0x43 && m[2] < 16 && m[3] == 0 && m[4] == 1 && m[5] == 27))
+        !(n == 6 && m[1] == 0x7f && (m[2] == 0 || m[2] == 0x7f) && m[3] == 6))
         return;
     incoming.source = (uint8_t)fm1_midi_input_source();
     memcpy(incoming.bytes, m, n);
@@ -174,6 +178,9 @@ static int command(unsigned cmd, const uint8_t *data, unsigned n, uint8_t *out, 
                 : data[0] == 2 ? groove_timbre_export(data[1], transfer, size)
                 : data[0] == 1 ? groove_fm_copy(data[1], transfer, NULL)
                         : groove_project_export(transfer, size);
+            /* the BRIGHT macro edits the live voice: hand out the voice's own levels */
+            if (!r && data[0] == 1) dx_bright_unbias(data[1], transfer);
+            if (!r && data[0] == 2) dx_bright_unbias(data[1], transfer + offsetof(struct groove_preset, data));
             if (r)
                 transfer_cancel();
             else {
@@ -204,6 +211,7 @@ static int command(unsigned cmd, const uint8_t *data, unsigned n, uint8_t *out, 
                 : transfer_kind == 2 ? groove_timbre_import(transfer_target, transfer, transfer_size)
                 : transfer_kind == 1 ? groove_fm_import(transfer_target, transfer)
                               : groove_project_import(transfer, transfer_size);
+            if (!r && (transfer_kind == 1 || transfer_kind == 2)) dx_bright_force_voice(transfer_target); /* the voice was replaced */
             if (!r)
                 transfer_cancel();
         }
@@ -268,24 +276,6 @@ void groove_transfer_poll(void)
         incoming.length = 0;
         if (groove_midi_clock_accept(source, code == 1 ? 0xfc : 0xfa)) groove_screen_mmc(code);
         return;
-    }
-    if (message[1] == 0x43) {
-        unsigned sum = 0;
-        for (unsigned i = 6; i < 162; ++i)
-            sum += message[i];
-        if (!(sum & 127U)) {
-            uint8_t patch[156];
-            unsigned channel = message[2];
-            memcpy(patch, message + 6, 155);
-            patch[155] = 63;
-            barrier();
-            incoming.length = 0;
-            for (unsigned track=0;track<GROOVE_TRACKS;++track)
-                if (groove_track_role(track) != GROOVE_TRACK_OFF && channel == groove_midi_input_channel(track))
-                    (void)groove_fm_import(track, patch);
-            return;
-        }
-        goto discard;
     }
     if (n < 10 || message[5] >= 64)
         goto discard;

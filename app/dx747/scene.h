@@ -91,6 +91,7 @@ struct dx_settings {
     uint8_t last_scene;  /* scene recalled at power-on when flags bit 0 is set */
     uint8_t kbd_ch;      /* channel the built-in keys play on, 0..15 */
     uint8_t flags;       /* bit 0: last_scene is valid */
+    uint8_t master_ch;   /* master control channel 1..16, 0 = none */
 };
 int dx_settings_read(struct dx_settings *out);   /* DX_SCENE_EMPTY when never saved */
 int dx_settings_write(const struct dx_settings *s);

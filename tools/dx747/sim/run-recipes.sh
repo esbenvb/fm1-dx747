@@ -2,7 +2,7 @@
 # Build the native simulator and run every recipe, saving screenshots to OUTDIR
 # (default docs/screens). Exit status is non-zero if any assertion fails.
 cd "$(dirname "$0")/../../.." || exit 1
-make -s -C tools/dx747/sim/native || exit 1
+tools/dx747/sim/native/ensure-built.sh || exit 1
 out="${1:-docs/screens}"
 mkdir -p "$out"
 status=0

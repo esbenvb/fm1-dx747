@@ -67,6 +67,11 @@ void groove_screen_control(void)
     if (now - last_frame < 33U && !frame_forced) return;
     last_frame = now;
     frame_collect(now & ~255U);
+    { /* DX7 SysEx that arrived with no room left is not applied: say so instead of losing it silently */
+        static uint32_t sx_seen;
+        uint32_t lost = dx_sysex_dropped();
+        if (lost != sx_seen) { sx_seen = lost; notice("DX7 SYSEX LOST"); }
+    }
     learn_poll();
     update_leds();
     uint32_t signature = hash_bytes(&ui, sizeof ui, hash_bytes(&fr, sizeof fr, 2166136261U));
