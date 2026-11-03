@@ -1,0 +1,428 @@
+<style>
+.dx .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.dx .tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.dx .tabs button{padding:3px 10px;font-size:13px}
+.dx .tabs button.on{background:var(--bg-accent);color:var(--text-accent);border-color:var(--border-accent)}
+.dx .main{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.dx .bezel{background:#1d1d1d;padding:6px;border-radius:12px;line-height:0;max-width:100%}
+.dx canvas{width:480px;height:480px;max-width:100%;image-rendering:pixelated;display:block}
+.dx .side{flex:1 1 170px;min-width:0;font-size:13px;line-height:1.55;color:var(--text-secondary)}
+.dx .side h3{font-size:15px;margin:0 0 4px}
+.dx .sel{display:flex;align-items:center;gap:8px;margin:12px 0;color:var(--text-primary)}
+.dx .sel button{padding:2px 8px}
+.dx .sl label{display:block;font-size:12px;margin-top:8px}
+.dx .sl input{width:100%}
+.dx svg text{font-size:11px}
+.dx svg .clk{cursor:pointer}
+</style>
+<div class="dx">
+<h2 class="sr-only">Interactive sketch of the proposed DX747 screens on the 240 by 240 display, with the front panel buttons and white keys that drive each screen.</h2>
+<div class="tabs" id="dx-tabs"></div>
+<div class="main">
+<div class="bezel"><canvas id="dx-lcd" width="240" height="240"></canvas></div>
+<div class="side">
+<h3 id="dx-t"></h3>
+<div id="dx-c"></div>
+<div class="sel"><button id="dx-pv" aria-label="Previous engine"><i class="ti ti-chevron-left" aria-hidden="true"></i></button><span id="dx-en"></span><button id="dx-nx" aria-label="Next engine"><i class="ti ti-chevron-right" aria-hidden="true"></i></button></div>
+<div class="sl" id="dx-sl" hidden>
+<label>Low note <span id="dx-lov"></span><input type="range" id="dx-lo" min="0" max="127" step="1"></label>
+<label>High note <span id="dx-hiv"></span><input type="range" id="dx-hi" min="0" max="127" step="1"></label>
+<label>Shift <span id="dx-shv"></span><input type="range" id="dx-sh" min="-36" max="36" step="12"></label>
+</div>
+</div>
+</div>
+<svg id="dx-panel" width="100%" viewBox="0 0 680 246" style="margin-top:14px" role="img"><title>Front panel schematic</title><desc>Seven encoders, fourteen buttons and the 27 key keyboard with LED states for the selected screen</desc></svg>
+<p style="font-size:12px;color:var(--text-secondary);margin:6px 0 0">Schematic, not to scale. Amber dots are LEDs: dim glow on every idle button and key, bright when active. Click buttons and white keys to try the flow.</p>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('dx-lcd'),c=cv.getContext('2d');
+var BG='#000000',TX='#ffffff',DIM='#aaaaaa',LN='#6a6a6a',AC='#00e5ff',AM='#ffb000',GR='#44ff6e',RD='#ff4d4d',GD='#262626',MU='#5b5b5b';
+var EC=['#ff5a5a','#ffa23a','#ffe34a','#5cf06a','#2de0d0','#5aa9ff','#b68cff','#ff7ad2'];
+var NN=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+function nn(n){return NN[n%12]+(Math.floor(n/12)-2)}
+var FONT={' ':[0,0,0,0,0],'!':[0,0,95,0,0],'#':[20,127,20,127,20],'%':[35,19,8,100,98],'(':[0,28,34,65,0],')':[0,65,34,28,0],'*':[42,28,127,28,42],'+':[8,8,62,8,8],',':[0,64,48,0,0],'-':[8,8,8,8,8],'.':[0,0,96,96,0],'/':[32,16,8,4,2],
+'0':[62,81,73,69,62],'1':[0,66,127,64,0],'2':[114,73,73,73,70],'3':[33,65,73,77,51],'4':[24,20,18,127,16],'5':[39,69,69,69,57],'6':[60,74,73,73,49],'7':[65,33,17,9,7],'8':[54,73,73,73,54],'9':[70,73,73,41,30],
+':':[0,0,20,0,0],'<':[0,8,20,34,65],'=':[20,20,20,20,20],'>':[0,65,34,20,8],'?':[2,1,89,9,6],'_':[64,64,64,64,64],'|':[0,0,127,0,0],'{':[8,28,62,127,0],'}':[0,127,62,28,8],
+'A':[124,18,17,18,124],'B':[127,73,73,73,54],'C':[62,65,65,65,34],'D':[127,65,65,65,62],'E':[127,73,73,73,65],'F':[127,9,9,9,1],'G':[62,65,65,81,115],'H':[127,8,8,8,127],'I':[0,65,127,65,0],'J':[32,64,65,63,1],'K':[127,8,20,34,65],'L':[127,64,64,64,64],'M':[127,2,28,2,127],
+'N':[127,4,8,16,127],'O':[62,65,65,65,62],'P':[127,9,9,9,6],'Q':[62,65,81,33,94],'R':[127,9,25,41,70],'S':[38,73,73,73,50],'T':[3,1,127,1,3],'U':[63,64,64,64,63],'V':[31,32,64,32,31],'W':[63,64,56,64,63],'X':[99,20,8,20,99],'Y':[3,4,120,4,3],'Z':[97,89,73,77,67]};
+function R(x,y,w,h,col){c.fillStyle=col;c.fillRect(x,y,w,h)}
+function F(x,y,w,h,col){R(x,y,w,1,col);R(x,y+h-1,w,1,col);R(x,y,1,h,col);R(x+w-1,y,1,h,col)}
+function L(x0,y0,x1,y1,col){
+x0=Math.round(x0);y0=Math.round(y0);x1=Math.round(x1);y1=Math.round(y1);
+var dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,e=dx+dy;
+c.fillStyle=col;
+for(;;){c.fillRect(x0,y0,1,1);if(x0===x1&&y0===y1)break;var e2=2*e;if(e2>=dy){e+=dy;x0+=sx}if(e2<=dx){e+=dx;y0+=sy}}
+}
+function P(pts,col){
+var y0=1e9,y1=-1e9,i,y;
+for(i=0;i<pts.length;i++){y0=Math.min(y0,pts[i][1]);y1=Math.max(y1,pts[i][1])}
+c.fillStyle=col;
+for(y=Math.floor(y0);y<=Math.ceil(y1);y++){
+var yy=y+0.5,xs=[];
+for(i=0;i<pts.length;i++){var a=pts[i],b=pts[(i+1)%pts.length];
+if((a[1]<=yy&&b[1]>yy)||(b[1]<=yy&&a[1]>yy))xs.push(a[0]+(yy-a[1])*(b[0]-a[0])/(b[1]-a[1]))}
+xs.sort(function(p,q){return p-q});
+for(i=0;i+1<xs.length;i+=2){var xa=Math.round(xs[i]),xb=Math.round(xs[i+1]);if(xb>xa)c.fillRect(xa,y,xb-xa,1)}
+}
+}
+function T(s,x,y,sc,col,al){
+s=String(s).toUpperCase();
+var w=s.length*6*sc-sc;
+if(al==='c')x=Math.round(x-w/2);else if(al==='r')x=x-w;
+c.fillStyle=col;
+for(var i=0;i<s.length;i++){
+var g=FONT[s.charAt(i)]||FONT['?'];
+for(var cx=0;cx<5;cx++){var b=g[cx];if(!b)continue;for(var r=0;r<7;r++)if((b>>r)&1)c.fillRect(x+(i*6+cx)*sc,y+r*sc,sc,sc)}
+}
+return w;
+}
+var E=[
+{n:'E.PIANO 1',m:1,lo:36,hi:71,sh:24,mute:0,lvl:100,pan:-10,br:0,rev:5,dly:2,poly:4,ctl:11,fold:1,act:0.5,v:2},
+{n:'STRINGS 2',m:1,lo:72,hi:107,sh:-12,mute:0,lvl:96,pan:10,br:12,rev:8,dly:0,poly:4,ctl:12,fold:1,act:0.3,v:0},
+{n:'WARM PAD',m:3,lo:0,hi:127,sh:0,mute:0,lvl:80,pan:0,br:-8,rev:10,dly:3,poly:3,ctl:13,fold:0,act:0.6,v:3},
+{n:'BASS 1',m:4,lo:0,hi:127,sh:0,mute:0,lvl:110,pan:0,br:0,rev:1,dly:0,poly:1,ctl:14,fold:0,act:0.8,v:1},
+{n:'SYN LEAD',m:8,lo:0,hi:127,sh:0,mute:0,lvl:100,pan:5,br:20,rev:4,dly:7,poly:2,ctl:15,fold:0,act:0.7,v:1},
+{n:'BELLS',m:24,lo:0,hi:127,sh:0,mute:0,lvl:85,pan:-5,br:0,rev:9,dly:5,poly:3,ctl:16,fold:0,act:0.4,v:2},
+{n:'BRASS 1',m:224,lo:0,hi:127,sh:0,mute:0,lvl:90,pan:0,br:5,rev:3,dly:0,poly:2,ctl:9,fold:0,act:0,v:0},
+{n:'SFX',m:32768,lo:0,hi:127,sh:0,mute:1,lvl:70,pan:0,br:0,rev:6,dly:6,poly:2,ctl:10,fold:0,act:0,v:0}
+];
+var SC=[['LIVE SET',255],['SPLIT',55],['ORCH',78],['ELECTRO',26],['PIANO',1],['SYNTHWV',60],['BELLPAD',36],['DEFAULT',1]];
+var cur=1,a=1,scr='layers',mode='ch',solo=0;
+function full(e){return e.lo===0&&e.hi===127}
+function rng(e){return full(e)?'ALL':nn(e.lo)+'-'+nn(e.hi)}
+function cl(n){return Math.max(0,Math.min(127,n))}
+function sft(s){if(s===0)return '0';if(s%12===0)return (s>0?'+':'')+(s/12);return (s>0?'+':'')+s+'ST'}
+function worst(){var mx=0;for(var ch=0;ch<16;ch++)for(var n=0;n<128;n++){var k=0;for(var i=0;i<8;i++){var e=E[i];if(!e.mute&&((e.m>>ch)&1)&&n>=e.lo&&n<=e.hi)k++}if(k>mx)mx=k}return mx}
+function voices(){var s=0;for(var i=0;i<8;i++)s+=E[i].v;return s}
+function head(){
+R(0,0,240,240,BG);
+T(('0'+(cur+1)).slice(-2),4,5,2,AC);
+T(SC[cur][0],30,5,2,TX);
+var vu=voices();
+T('VOICES '+vu+'/20',236,2,1,DIM,'r');
+for(var i=0;i<20;i++)R(157+i*4,12,3,9,i<vu?(vu>=17?AM:GR):'#2c2c2c');
+R(0,25,240,1,LN);
+}
+function title(t,r){T(t,4,29,2,AC);if(r)T(r,236,33,1,DIM,'r')}
+function hint(s){T(s,120,230,1,DIM,'c')}
+function chip(i,x,y,w,h,sel){
+R(x,y,w,h,E[i].mute?MU:EC[i]);
+T(i+1,x+Math.round(w/2),y+Math.floor((h-14)/2),2,'#000000','c');
+if(sel)F(x-2,y-2,w+4,h+4,TX);
+}
+function tile(i,label,val,col){
+var x=6+59*i,y=195;
+F(x,y,55,32,LN);
+T(label,x+3,y+3,1,DIM);
+var sc=(String(val).length*12-2>49)?1:2;
+T(val,x+27,y+(sc===2?14:19),sc,col||TX,'c');
+}
+function sBoot(){
+R(0,0,240,240,BG);
+T('FM-1 CUSTOM FIRMWARE',120,10,1,DIM,'c');
+P([[12,103],[17,97],[30,94],[42,93],[55,70],[100,70],[130,92],[190,92],[222,86],[222,95],[196,106],[30,106],[17,107]],TX);
+P([[172,92],[192,56],[210,56],[207,89]],AC);
+P([[190,98],[164,104],[184,104],[208,98]],'#cfcfcf');
+P([[96,106],[140,106],[170,128],[150,128]],'#d8d8d8');
+R(112,116,16,8,'#9a9a9a');R(110,117,2,6,AC);
+R(134,120,14,7,'#9a9a9a');R(132,121,2,5,AC);
+P([[22,97],[34,94],[37,97],[26,99]],'#000000');
+var x;
+for(x=50;x<186;x+=6)R(x,99,2,2,AC);
+for(x=62;x<98;x+=5)R(x,77,2,2,'#000000');
+R(0,140,240,1,GD);
+T('DX',47,148,5,TX);
+T('747',107,148,5,AC);
+T('8-PART MULTITIMBRAL DX7 MODULE',120,194,1,DIM,'c');
+T('V0.1 SKETCH',120,218,1,LN,'c');
+}
+function sLayers(){
+head();title('LAYERS','1/2  HOME FOR SPLITS');
+var X0=80,i,k;
+[1,4,8,12,16].forEach(function(ch){T(ch,X0+(ch-1)*8+3,46,1,DIM,'c')});
+for(i=0;i<8;i++){
+var y=56+18*i,e=E[i];
+chip(i,4,y,16,16,i===a);
+T(e.n,24,y+4,1,e.mute?DIM:TX);
+for(k=0;k<16;k++){var on=(e.m>>k)&1,x=X0+k*8;
+if(on)R(x,y+2,6,12,e.mute?MU:EC[i]);else F(x,y+2,6,12,'#555555')}
+T(rng(e),238,y+4,1,full(e)?DIM:AM,'r');
+}
+var mx=worst();
+T('WORST KEY: '+mx+' LAYERS = '+mx+' VOICES',4,205,1,mx>=3?AM:DIM);
+T('3-NOTE CHORD THERE = '+(mx*3)+' VOICES',4,216,1,DIM);
+hint('SEQ ROUTE  ARP SPLIT  EDIT SOUND');
+}
+function ax(n){return 28+Math.round(n*1.36)}
+function sSplits(){
+head();title('SPLITS','2/2  HOME FOR LAYERS');
+var i,n;
+for(n=0;n<=120;n+=12)R(ax(n),54,1,146,(n===36||n===60||n===84||n===108)?'#555555':GD);
+[36,60,84,108].forEach(function(m){T(nn(m),ax(m),46,1,DIM,'c')});
+for(i=0;i<8;i++){
+var y=56+18*i,e=E[i],col=e.mute?MU:EC[i];
+chip(i,4,y,16,16,i===a);
+if(e.m===0){T('NO RX',ax(0)+4,y+4,1,DIM);continue}
+R(ax(e.lo),y+1,ax(e.hi+1)-ax(e.lo),8,col);
+if(e.sh!==0){
+var l2=cl(e.lo+e.sh),h2=cl(e.hi+e.sh);
+F(ax(l2),y+10,Math.max(3,ax(h2+1)-ax(l2)),6,col);
+T(sft(e.sh),238,y+4,1,AM,'r');
+}
+}
+R(4,206,12,6,DIM);T('PLAYED',20,206,1,DIM);
+F(76,206,12,6,DIM);T('SOUNDS AT',92,206,1,DIM);
+T('+N = OCTAVES',236,206,1,AM,'r');
+hint('ARP = SPLIT EDITOR FOR ENGINE');
+}
+function sRoute(){
+head();title('ROUTE','ENGINE '+(a+1)+' '+E[a].n);
+var i,k,e=E[a];
+for(i=0;i<8;i++)chip(i,4+29*i,48,26,18,i===a);
+for(k=0;k<16;k++){
+var x=4+29*(k%8),y=74+34*Math.floor(k/8),on=(e.m>>k)&1;
+if(on)R(x,y,26,30,e.mute?MU:EC[a]);else F(x,y,26,30,LN);
+T(k+1,x+13,y+3,2,on?'#000000':TX,'c');
+for(var j=0;j<8;j++)if((E[j].m>>k)&1)R(x+2+j*3,y+24,2,4,on&&j===a?'#000000':EC[j]);
+}
+var list=[],sh=[];
+for(k=0;k<16;k++)if((e.m>>k)&1)list.push(k+1);
+for(i=0;i<8;i++){if(i!==a&&(E[i].m&e.m))sh.push(i+1)}
+T('RX CH '+(list.length?list.join(','):'NONE'),4,146,2,TX);
+T(sh.length?'LAYERED WITH ENGINE '+sh.join(' '):'NOT LAYERED',4,164,1,sh.length?AM:DIM);
+T(mode==='ch'?'KEYS = RX CHANNELS':'KEYS = ENGINE 1-8',4,178,1,AC);
+T('SEQ AGAIN SWITCHES',236,178,1,DIM,'r');
+tile(0,'CTRL CH',e.ctl);tile(1,'MAX POLY',e.poly);tile(2,'LEVEL',e.lvl);tile(3,'PAN',e.pan===0?'C':(e.pan<0?'L'+(-e.pan):'R'+e.pan));
+hint(mode==='ch'?'WHITE KEYS 1-16 = TOGGLE CHANNEL':'WHITE KEYS 1-8 = PICK ENGINE');
+}
+function kx(n){return 8+Math.round((n-24)*28/12)}
+function sSplit(){
+head();title('SPLIT','ENGINE '+(a+1)+' '+E[a].n);
+var e=E[a],col=EC[a],o,k;
+T('PLAYED',8,49,1,DIM);
+var lo=Math.max(24,e.lo),hi=Math.min(119,e.hi);
+R(kx(lo),58,Math.max(2,kx(hi+1)-kx(lo)),8,col);
+for(o=0;o<8;o++){
+for(k=0;k<7;k++)R(8+o*28+k*4,69,3,22,TX);
+[2,6,14,18,22].forEach(function(px){R(8+o*28+px,69,3,13,BG)});
+T(nn(24+o*12),8+o*28,95,1,DIM);
+}
+var l2=cl(e.lo+e.sh),h2=cl(e.hi+e.sh),a2=Math.max(24,l2),b2=Math.min(119,h2);
+F(kx(a2),106,Math.max(3,kx(b2+1)-kx(a2)),8,col);
+T('SOUNDS AT',8,117,1,DIM);
+T(nn(e.lo)+'-'+nn(e.hi)+'>'+nn(l2)+'-'+nn(h2),4,134,2,col);
+var sh=[];for(var j=0;j<8;j++)if(j!==a&&(E[j].m&e.m)&&E[j].lo<=e.hi&&E[j].hi>=e.lo)sh.push(j+1);
+T(sh.length?'SAME KEYS ALSO PLAY ENGINE '+sh.join(' '):'NO OTHER ENGINE ON THESE KEYS',4,160,1,sh.length?AM:DIM);
+T('OUTPUT WINDOW IS '+(Math.round((h2-l2+1)/12*10)/10)+' OCTAVES',4,172,1,DIM);
+tile(0,'LOW',nn(e.lo),col);tile(1,'HIGH',nn(e.hi),col);tile(2,'SHIFT',sft(e.sh)+' OCT'.slice(0,e.sh%12===0?4:0),AM);tile(3,'FOLD',['CLIP','WRAP','DROP'][e.fold],TX);
+hint('TAP LOW KEY THEN HIGH KEY = LEARN');
+}
+function bar(x,y,w,h,col,fr){F(x,y,w,h,LN);R(x+1,y+1,Math.round((w-2)*fr),h-2,col)}
+function sEngine(){
+head();title('SOUND','ENGINE '+(a+1));
+var e=E[a],col=e.mute?MU:EC[a];
+T(e.n,4,52,3,col);
+T('BANK B  VOICE 17/128  ALG 14',4,78,1,DIM);
+var tabs=['SOUND','SENDS','VOICES'],x=4;
+tabs.forEach(function(t,i){var w=t.length*6+10;if(i===0){R(x,92,w,14,AC);T(t,x+5,96,1,'#000000')}else{F(x,92,w,14,LN);T(t,x+5,96,1,DIM)}x+=w+6});
+T('LEVEL',4,121,1,DIM);bar(64,118,150,12,col,e.lvl/127);T(e.lvl,236,121,1,TX,'r');
+T('PAN',4,145,1,DIM);F(64,142,150,12,LN);R(139,142,1,12,DIM);R(139+Math.round(e.pan*1.4)-2,144,5,8,col);
+T('BRIGHT',4,169,1,DIM);F(64,166,150,12,LN);R(139,166,1,12,DIM);
+if(e.br>=0)R(140,168,Math.round(e.br*1.4),8,AM);else R(139+Math.round(e.br*1.4),168,-Math.round(e.br*1.4),8,AM);
+tile(0,'PATCH','B17',col);tile(1,'LEVEL',e.lvl);tile(2,'PAN',e.pan===0?'C':(e.pan<0?'L'+(-e.pan):'R'+e.pan));tile(3,'BRIGHT',(e.br>0?'+':'')+e.br,AM);
+hint('EDIT AGAIN = SENDS  ENV LFO = DX7 EDIT');
+}
+function sMix(){
+head();title('MIX','SELECT KEY SHOWS THIS');
+for(var i=0;i<8;i++){
+var x=4+29*i,e=E[i],col=e.mute?MU:EC[i];
+chip(i,x,46,26,16,i===a);
+F(x+3,66,12,100,LN);R(x+4,166-Math.round(98*e.lvl/127),10,Math.round(98*e.lvl/127),col);
+F(x+18,66,6,100,LN);
+var m=e.mute?0:e.act,h=Math.round(98*m);
+R(x+19,165-h,4,h,m>0.75?AM:GR);
+R(x+3,170,22,1,LN);R(x+14+Math.round(e.pan/5),169,3,3,col);
+F(x+2,176,11,11,e.mute?RD:LN);T('M',x+7,178,1,e.mute?RD:DIM,'c');
+F(x+14,176,11,11,(solo>>i)&1?AM:LN);T('S',x+19,178,1,(solo>>i)&1?AM:DIM,'c');
+T('V'+e.v,x+14,194,1,DIM,'c');
+}
+T('FADER + METER PER ENGINE, V = VOICES NOW',4,206,1,DIM);
+hint('WHITE KEYS 1-8 MUTE   9-16 SOLO');
+}
+function sFX(){
+head();title('FX','SHARED REVERB + DELAY');
+T('REV SEND',40,46,1,DIM);T('DLY SEND',136,46,1,DIM);
+for(var i=0;i<8;i++){
+var y=56+17*i,e=E[i];
+chip(i,4,y,16,14,i===a);
+bar(40,y+2,80,10,e.mute?MU:'#8fb4ff',e.rev/15);T(e.rev,128,y+3,1,TX);
+bar(136,y+2,80,10,e.mute?MU:'#ffb86b',e.dly/15);T(e.dly,224,y+3,1,TX);
+}
+tile(0,'DECAY','40');tile(1,'DLY TIME','1/8');tile(2,'FEEDBK','30');tile(3,'RETURN','25');
+hint('FX AGAIN = MASTER FILTER');
+}
+function sMaster(){
+head();title('MASTER','LP FILTER + USB TAP');
+F(8,48,224,80,LN);
+var f,fc=4200,q=1.4,x,px=null,py=null;
+[100,1000,10000].forEach(function(g){R(8+Math.round(Math.log(g/20)/Math.log(1000)*224),49,1,78,GD)});
+R(9,68,222,1,GD);
+for(x=9;x<231;x++){
+f=20*Math.pow(1000,(x-8)/224);
+var wr=f/fc,mag=1/Math.sqrt(Math.pow(1-wr*wr,2)+Math.pow(wr/q,2)),db=20*Math.log(mag)/Math.LN10;
+var y=128-((db+36)/48)*80;y=Math.max(50,Math.min(126,y));
+if(px!==null)L(px,py,x,y,AC);
+px=x;py=y;
+}
+var xc=8+Math.round(Math.log(fc/20)/Math.log(1000)*224);
+for(var yy=50;yy<127;yy+=4)R(xc,yy,1,2,AM);
+T('100',8+Math.round(Math.log(5)/Math.log(1000)*224),131,1,DIM,'c');T('1K',8+Math.round(Math.log(50)/Math.log(1000)*224),131,1,DIM,'c');T('10K',8+Math.round(Math.log(500)/Math.log(1000)*224),131,1,DIM,'c');
+T('USB OUT TAP',8,146,1,DIM);T('AFTER FILTER, BEFORE VOLUME',8,158,1,GR);
+T('BT AND USB IN',8,174,1,DIM);T('MIXED AFTER VOLUME',8,186,1,TX);
+tile(0,'TYPE','LP');tile(1,'CUTOFF','4.2K',AM);tile(2,'RES','20');tile(3,'USB OUT','PRE VOL',GR);
+hint('FX AGAIN = BACK TO FX PAGE');
+}
+function sScenes(){
+head();title('SCENES','BANK A  1-16');
+for(var s=0;s<16;s++){
+var x=4+58*(s%4),y=48+38*Math.floor(s/4),has=s<SC.length,on=s===cur;
+if(on){R(x,y,56,34,'#003c44');F(x,y,56,34,AC);F(x+1,y+1,54,32,AC)}else F(x,y,56,34,has?LN:'#3c3c3c');
+T(('0'+(s+1)).slice(-2),x+4,y+4,2,has?(on?AC:TX):'#6a6a6a');
+if(has){
+T(SC[s][0].slice(0,9),x+4,y+23,1,TX);
+for(var j=0;j<8;j++)R(x+30+(j%4)*6,y+5+Math.floor(j/4)*6,4,4,(SC[s][1]>>j)&1?EC[j]:'#2c2c2c');
+}else T('--',x+4,y+23,1,'#6a6a6a');
+}
+hint('WHITE KEYS = RECALL  SAVE = STORE');
+}
+function sSys(){
+head();title('SYSTEM','GLO');
+var rows=[['BLUETOOTH MIDI','ON  PERIPHERAL',GR],['BLUETOOTH AUDIO IN','PLAYING',GR],['USB AUDIO OUT','PRE-VOLUME',GR],['BUTTON LIGHT','DIM 3/8',AM],['KEYBOARD CHANNEL','CH 1',TX],['CPU','62%',TX]];
+for(var i=0;i<6;i++){
+var y=47+29*i;
+T(rows[i][0],4,y,1,DIM);
+T(rows[i][1],4,y+10,2,rows[i][2]);
+}
+for(var b=0;b<8;b++)R(150+b*10,47+29*3+10,8,12,b<3?AM:'#3c3c3c');
+F(150,47+29*5+10,80,12,LN);R(151,47+29*5+11,Math.round(78*0.62),10,GR);
+T('GUARD HITS 0',236,47+29*5,1,DIM,'r');
+hint('GLO HOLD = MIX   HOME+GLO = BLUETOOTH');
+}
+var ENCD=['SELECT','ALGO','K1','K2','K3','K4','PRESET'];
+var BTN=['OCT−','OCT+','FX','SEL','ENV','LFO','EDIT','GLO','HOME','SAVE','ARP','SEQ','PLAY','REC'];
+var ROLE=['OCT−','OCT+','FX/MST','MIX','ENV','LFO','SOUND','SYSTEM','LAYERS','SAVE','SPLIT','ROUTE','SCENES','LEARN'];
+var NAV={2:'fx',3:'mix',6:'engine',7:'sys',8:'layers',10:'split',11:'route',12:'scenes'};
+function eng(a1,a2,a3,a4,a5,a6,a7){return [a1,a2,a3,a4,a5,a6,a7]}
+var S={
+boot:{name:'Boot',draw:sBoot,btn:-1,enc:eng('','','','','','',''),
+cap:'Splash for about a second at power-on. The jumbo silhouette is plain rectangles and polygons, so it costs little flash. Any key skips it.',keys:function(){return ''},lit:function(){return []}},
+layers:{name:'Layers',draw:sLayers,btn:8,enc:eng('ENGINE','','','','','','PATCH'),
+cap:'Home screen. Rows are the 8 engines, columns are MIDI channels 1 to 16. Same column filled on several rows means layered. Amber text shows a key split. Press HOME again for the split view.',keys:function(){return ''},lit:function(){return []}},
+splits:{name:'Splits',draw:sSplits,btn:8,enc:eng('ENGINE','','','','','','PATCH'),
+cap:'Second home view. Solid bar is the played note range, hollow box is where those notes sound after the octave shift, so every split and remap is visible at a glance.',keys:function(){return ''},lit:function(){return []}},
+route:{name:'Route',draw:sRoute,btn:11,enc:eng('ENGINE','','CTRL CH','MAX POLY','LEVEL','PAN','PATCH'),
+cap:'Assign RX channels with the white keys. The 16 white keys are channels 1 to 16, lit means on. Press SEQ again and the same keys pick engine 1 to 8. Coloured dots under each cell show which engines share that channel.',
+keys:function(i){return mode==='ch'?'CH'+(i+1):(i<8?'E'+(i+1):'')},lit:function(){var r=[],i;if(mode==='ch'){for(i=0;i<16;i++)if((E[a].m>>i)&1)r.push(i)}else r.push(a);return r}},
+split:{name:'Split edit',draw:sSplit,btn:10,enc:eng('ENGINE','','LOW','HIGH','SHIFT','FOLD','PATCH'),
+cap:'Per-engine note window. LOW and HIGH set what the engine plays, SHIFT moves it by octaves, FOLD decides what happens when notes land outside the window. Or tap the lowest and highest key on the keyboard to learn the range.',keys:function(){return ''},lit:function(){return []}},
+engine:{name:'Sound',draw:sEngine,btn:6,enc:eng('ENGINE','ALGO','PATCH','LEVEL','PAN','BRIGHT','BROWSE'),
+cap:'Per-engine sound page. BRIGHT is a DX7-native tone macro (scales modulator levels, applies to new notes), because the sealed engine has no per-engine filter. The real filter lives on the master bus.',keys:function(){return ''},lit:function(){return []}},
+mix:{name:'Mix',draw:sMix,btn:3,enc:eng('ENGINE','','','','','',''),
+cap:'All eight engines at once: level, live meter, pan, mute and solo, and voices in use per engine. White keys 1 to 8 mute, 9 to 16 solo.',
+keys:function(i){return i<8?'M'+(i+1):'S'+(i-7)},lit:function(){var r=[];for(var i=0;i<8;i++){if(E[i].mute)r.push(i);if((solo>>i)&1)r.push(i+8)}return r}},
+fx:{name:'FX',draw:sFX,btn:2,enc:eng('ENGINE','','DECAY','DLY TIME','FEEDBK','RETURN',''),
+cap:'Each engine sends to one shared reverb and one shared delay. This is the real extent of per-engine effects on the sealed engine. The four knobs set the shared reverb and delay.',keys:function(){return ''},lit:function(){return []}},
+master:{name:'Master',draw:sMaster,btn:2,enc:eng('','','TYPE','CUTOFF','RES','USB OUT',''),
+cap:'One real filter on the summed mix, live curve shown. The USB audio out is tapped after the filter but before the master volume knob, so turning the knob never changes what a computer records.',keys:function(){return ''},lit:function(){return []}},
+scenes:{name:'Scenes',draw:sScenes,btn:12,enc:eng('SCENE','','','','','','BANK'),
+cap:'Scene browser. Each scene stores patch, channels, splits, mix, sends and filter for all 8 engines. White keys recall scenes 1 to 16 and OCT keys change bank. The dots show which engines each scene uses.',
+keys:function(i){return i<SC.length?'S'+(i+1):''},lit:function(){return [cur]}},
+sys:{name:'System',draw:sSys,btn:7,enc:eng('ITEM','','','','','','VALUE'),
+cap:'Bluetooth MIDI and audio-in status, USB out tap, button backlight level, the channel the built-in keyboard plays on, and a CPU and voice health readout.',keys:function(){return ''},lit:function(){return []}}
+};
+var ORDER=['boot','layers','splits','route','split','engine','mix','fx','master','scenes','sys'];
+var tabsEl=document.getElementById('dx-tabs');
+ORDER.forEach(function(id){var b=document.createElement('button');b.textContent=S[id].name;b.setAttribute('data-id',id);b.onclick=function(){go(id)};tabsEl.appendChild(b)});
+function go(id){scr=id;render()}
+var panel=document.getElementById('dx-panel');
+var WH=[0,2,4,6,7,9,11,12,14,16,18,19,21,23,24,26];
+function panelDraw(){
+var s=S[scr],h='',i,lit=s.lit(),wl={};
+lit.forEach(function(k){wl[k]=1});
+var amb='#EF9F27';
+for(i=0;i<7;i++){
+var x=48+96*i;
+h+='<circle cx="'+x+'" cy="18" r="13" style="fill:var(--surface-1);stroke:var(--border-strong)" stroke-width="0.5"/><line x1="'+x+'" y1="18" x2="'+(x+6)+'" y2="11" style="stroke:var(--text-secondary)" stroke-width="1.5" stroke-linecap="round"/>';
+h+='<text x="'+x+'" y="45" text-anchor="middle" style="fill:var(--text-secondary)">'+ENCD[i]+'</text>';
+h+='<text x="'+x+'" y="59" text-anchor="middle" style="fill:var(--text-accent)">'+(s.enc[i]||'')+'</text>';
+}
+for(i=0;i<14;i++){
+var bx=4+48*i,act=(s.btn===i),nav=NAV[i]!==undefined;
+h+='<g class="'+(nav?'clk':'')+'" data-b="'+i+'"><rect x="'+bx+'" y="72" width="44" height="26" rx="4" style="fill:'+(act?'#FAC775':'var(--surface-1)')+';stroke:var(--border-strong)" stroke-width="0.5"/>';
+h+='<text x="'+(bx+22)+'" y="89" text-anchor="middle" style="fill:'+(act?'#412402':'var(--text-primary)')+'">'+BTN[i]+'</text>';
+h+='<circle cx="'+(bx+38)+'" cy="78" r="2.5" fill="'+amb+'" opacity="'+(act?1:0.3)+'"/></g>';
+h+='<text x="'+(bx+22)+'" y="113" text-anchor="middle" style="fill:var(--text-accent)" font-weight="'+(act?500:400)+'">'+ROLE[i]+'</text>';
+}
+var wi=0,bk=[];
+for(i=0;i<27;i++){
+var pc=(5+i)%12,isW=[0,2,4,5,7,9,11].indexOf(pc)>=0;
+if(isW){
+var wx=20+wi*40,on=wl[wi]===1,lab=s.keys(wi);
+h+='<g class="clk" data-w="'+wi+'"><rect x="'+wx+'" y="124" width="36" height="104" rx="3" style="fill:var(--surface-2);stroke:var(--border-strong)" stroke-width="0.5"/>';
+h+='<circle cx="'+(wx+18)+'" cy="133" r="3.5" fill="'+amb+'" opacity="'+(on?1:0.3)+'"/>';
+h+='<text x="'+(wx+18)+'" y="202" text-anchor="middle" style="fill:var(--text-accent)" font-weight="500">'+lab+'</text>';
+h+='<text x="'+(wx+18)+'" y="220" text-anchor="middle" style="fill:var(--text-secondary)">'+(wi+1)+'</text></g>';
+wi++;
+}else bk.push(20+wi*40-14);
+}
+bk.forEach(function(bx2){h+='<rect x="'+bx2+'" y="124" width="24" height="58" rx="2" fill="#2c2c2a"/><circle cx="'+(bx2+12)+'" cy="172" r="3" fill="'+amb+'" opacity="0.3"/>'});
+panel.innerHTML=h;
+}
+panel.addEventListener('click',function(ev){
+var t=ev.target;
+while(t&&t!==panel&&!(t.getAttribute&&(t.getAttribute('data-b')||t.getAttribute('data-w'))))t=t.parentNode;
+if(!t||t===panel)return;
+var b=t.getAttribute('data-b'),w=t.getAttribute('data-w');
+if(b!==null){
+b=+b;
+if(b===8){go(scr==='layers'?'splits':'layers');return}
+if(b===2){go(scr==='fx'?'master':'fx');return}
+if(b===11){if(scr==='route')mode=mode==='ch'?'eng':'ch';go('route');return}
+if(NAV[b])go(NAV[b]);
+}else{
+w=+w;
+if(scr==='route'){if(mode==='ch'){E[a].m^=(1<<w)}else if(w<8)a=w}
+else if(scr==='scenes'){if(w<SC.length)cur=w}
+else if(scr==='mix'){if(w<8)E[w].mute^=1;else solo^=(1<<(w-8))}
+render();
+}
+});
+function selEng(d){a=(a+d+8)%8;render()}
+document.getElementById('dx-pv').onclick=function(){selEng(-1)};
+document.getElementById('dx-nx').onclick=function(){selEng(1)};
+var lo=document.getElementById('dx-lo'),hi=document.getElementById('dx-hi'),sh=document.getElementById('dx-sh');
+lo.oninput=function(){E[a].lo=Math.min(+lo.value,E[a].hi);render()};
+hi.oninput=function(){E[a].hi=Math.max(+hi.value,E[a].lo);render()};
+sh.oninput=function(){E[a].sh=+sh.value;render()};
+function render(){
+var s=S[scr];
+s.draw();
+panelDraw();
+document.getElementById('dx-t').textContent=s.name;
+document.getElementById('dx-c').textContent=s.cap;
+document.getElementById('dx-en').textContent='Engine '+(a+1)+' '+E[a].n;
+var bs=tabsEl.children;
+for(var i=0;i<bs.length;i++)bs[i].className=bs[i].getAttribute('data-id')===scr?'on':'';
+var sl=document.getElementById('dx-sl');
+sl.hidden=scr!=='split';
+if(scr==='split'){
+lo.value=E[a].lo;hi.value=E[a].hi;sh.value=E[a].sh;
+document.getElementById('dx-lov').textContent=nn(E[a].lo);
+document.getElementById('dx-hiv').textContent=nn(E[a].hi);
+document.getElementById('dx-shv').textContent=sft(E[a].sh)+' oct';
+}
+}
+render();
+})();
+</script>

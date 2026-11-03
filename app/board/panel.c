@@ -10,6 +10,23 @@
 static uint8_t controls_started;
 uint8_t fm1_io_trs_midi_enabled(void) { return 1U; }
 
+/* Power-on recovery chord: OCT- (button 0) and OCT+ (button 1) held together.
+ * It calls fm1_device_recovery(), an undocumented stub into the ROM USB
+ * updater. Its behaviour (does it return? what state is it entered from?) has
+ * not been verified on hardware. Checked once, after the first scans of
+ * fm1_controls_init(); it never writes flash. */
+#define FM1_RECOVERY_CHORD 0x3U
+static int recovery_chord_held(uint32_t buttons)
+{
+    return (buttons & FM1_RECOVERY_CHORD) == FM1_RECOVERY_CHORD;
+}
+
+static void check_recovery_chord(void)
+{
+    /* Debounced state is valid after two scans. With no scan progress, do not guess. */
+    if (fm1_input_settle() && recovery_chord_held(fm1_in.buttons)) fm1_device_recovery();
+}
+
 void fm1_controls_init(void)
 {
     if (!controls_started) {
@@ -22,6 +39,7 @@ void fm1_controls_init(void)
         fm1_input_init();
         fm1_device_start(fm1_input_tick);
         controls_started = 1U;
+        check_recovery_chord();
     }
 }
 
@@ -44,7 +62,20 @@ void fm1_controls_read(struct fm1_controls *state)
     *state = snapshot;
 }
 
+/* on = full brightness; off = the idle level (dark until fm1_led_idle_level()). */
 void fm1_led_set(unsigned key, int on)
 {
     fm1_led_key(key, on);
+}
+
+/* Explicit brightness, 0 (dark) to 8 (full); larger values clamp to 8. */
+void fm1_led_level(unsigned key, unsigned level)
+{
+    fm1_led_key_level(key, level);
+}
+
+/* Brightness of every LED that is not on or at an explicit level. Default 0. */
+void fm1_led_idle_level(unsigned level)
+{
+    fm1_led_key_idle(level);
 }

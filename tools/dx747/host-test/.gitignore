@@ -1,0 +1,7 @@
+# Host test binaries and debug symbols
+*/test_router
+*/test_threads
+*/test_filter
+*/test_backlight
+*.dSYM/
+*/build/
