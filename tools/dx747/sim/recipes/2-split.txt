@@ -1,0 +1,44 @@
+# Recipe 2: layer two engines, then split them with LEARN and an octave shift.
+# (midi bytes are hex: 3c = middle C, 53 = B4 in the DX7 naming the screen uses)
+boot
+wipe
+run 400
+tap btn 11
+white 2
+shot 2a-two-engines-layered
+# layered: one key reaches both engines
+midi 1 90 3c 64
+run 80
+expect_voices 2
+midi 1 80 3c 00
+run 80
+expect_voices 0
+# LEARN: play the lowest then the highest key; engine 2 (the selected lane) takes that range
+tap btn 10
+shot 2b-learn-armed
+midi 1 90 3c 64
+midi 1 80 3c 00
+midi 1 90 53 64
+midi 1 80 53 00
+run 120
+shot 2c-range-learned
+# K4 shifts the lane up two octaves
+enc 5 2
+shot 2d-shifted-two-octaves
+# select the first lane (K1) and give it the lower half only: high = B2 (59)
+enc 2 -1
+enc 4 -68
+shot 2e-first-lane-below
+# now a key in the lower half reaches engine 1 only, a key in the upper half engine 2 only
+midi 1 90 30 64
+run 80
+expect_voices 1
+midi 1 90 40 64
+run 80
+expect_voices 2
+midi 1 80 30 00
+midi 1 80 40 00
+run 80
+expect_voices 0
+tap btn 8
+shot 2f-setup-shows-the-split

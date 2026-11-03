@@ -78,6 +78,8 @@ void dx_settings_update(const struct dx_settings *s)
     settings_mark();
 }
 int dx_storage_state(void) { return storage_state = dx_scene_store_state(); }
+int dx_storage_state_cached(void) { return storage_state; }
+void dx_apply_filter(void) { port_filter(live.filter_type, live.filter_hz, live.filter_res); }
 int dx_storage_claim(void)
 {
     int r = dx_scene_claim();

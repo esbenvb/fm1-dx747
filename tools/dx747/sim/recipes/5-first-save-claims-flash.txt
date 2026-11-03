@@ -1,0 +1,10 @@
+# Recipe 5: a device that still holds the stock sample bank asks before saving.
+boot clear
+run 400
+tap btn 9
+expect_screen 11
+shot 5a-claim-prompt
+tap btn 9
+shot 5b-name-after-claim
+tap btn 8
+shot 5c-cancelled

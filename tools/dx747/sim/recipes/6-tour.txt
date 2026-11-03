@@ -1,0 +1,57 @@
+# Recipe 6: every screen once, with the edits a user makes there.
+boot logo
+run 100
+expect_screen 0
+shot 6a-boot
+# any key press leaves the boot screen
+tap btn 8
+expect_screen 1
+tap btn 8
+expect_screen 2
+shot 6b-engines
+# white key 3 opens engine 3, EDIT steps Sound -> Plays from -> Sends
+white 3
+expect_screen 4
+enc 4 -20
+enc 5 15
+shot 6c-engine-sound
+tap btn 6
+expect_screen 5
+tap btn 6
+expect_screen 6
+enc 2 5
+enc 3 3
+enc 4 -4
+enc 5 2
+shot 6d-engine-sends
+# Mix: levels, pan and sends for the selected engine
+tap btn 3
+expect_screen 8
+enc 2 -10
+enc 3 -15
+shot 6e-mix
+# FX, then FX again for the master filter; the keyboard plays through the router here
+tap btn 2
+expect_screen 9
+shot 6f-fx
+tap btn 2
+expect_screen 10
+enc 2 1
+enc 3 -20
+enc 4 6
+shot 6g-master-filter
+press key 12
+run 80
+expect_voices 1
+release key 12
+run 80
+expect_voices 0
+tap btn 7
+expect_screen 12
+enc 0 3
+shot 6h-system
+tap btn 13
+expect_screen 7
+shot 6i-midi-in-empty
+tap btn 8
+expect_screen 1

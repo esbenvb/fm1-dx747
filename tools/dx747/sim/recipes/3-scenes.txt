@@ -1,0 +1,44 @@
+# Recipe 3: save a scene, change the setup, recall the scene.
+boot
+wipe
+run 400
+# the layered setup of recipe 2, shifted
+tap btn 11
+white 2
+tap btn 10
+midi 1 90 3c 64
+midi 1 80 3c 00
+midi 1 90 53 64
+midi 1 80 53 00
+run 120
+enc 5 2
+# SAVE opens the name editor on the scenes screen
+tap btn 9
+expect_screen 11
+shot 3a-name-editor
+enc 2 6
+enc 3 3
+shot 3b-name-edited
+tap btn 9
+run 200
+shot 3c-saved
+# change the setup: remove engine 2 from channel 1 again
+tap btn 11
+white 2
+midi 1 90 3c 64
+run 80
+expect_voices 1
+midi 1 80 3c 00
+run 80
+shot 3d-changed
+# recall scene 1 with the white key: the layer and the shift come back
+tap btn 12
+white 1
+run 200
+shot 3e-recalled
+tap btn 11
+shot 3f-channel-1-restored
+midi 1 90 40 64
+run 80
+expect_voices 2
+midi 1 80 40 00

@@ -11,12 +11,14 @@
 #define DX_NO_SCENE DX_SCENES
 unsigned dx_engines_up(void);                          /* bit e: engine e is a live DX7 */
 struct dx_live *dx_live_edit(void);                    /* pan, expression, BRIGHT, filter: owned by the UI */
+void dx_apply_filter(void);                         /* push the live master-filter settings to the audio stage */
 int dx_scene_recall(unsigned index);                   /* read and apply; remembered for power-on */
 int dx_scene_save(unsigned index, const char name[12]);/* capture the live state into a slot */
 unsigned dx_scene_current(void);                       /* last recalled or saved, DX_NO_SCENE if none */
 void dx_settings_get(struct dx_settings *out);
 void dx_settings_update(const struct dx_settings *s);  /* applied now, saved after 1.5 s of quiet */
 int dx_storage_state(void);                            /* 0 usable, 1 needs dx_storage_claim, <0 error */
+int dx_storage_state_cached(void);                     /* the same, from the last check; no flash access */
 int dx_storage_claim(void);                            /* erases the stock sample bank: ask the user first */
 
 /* ---- app/board/panel.c ---- */

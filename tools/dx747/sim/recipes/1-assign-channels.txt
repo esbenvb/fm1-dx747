@@ -1,0 +1,31 @@
+# Recipe 1: assign MIDI channels with the white keys and layer engines.
+boot
+wipe
+run 400
+expect_screen 1
+shot 1a-setup-default
+tap btn 11
+expect_screen 3
+shot 1b-channel-1-one-engine
+# white key 2 adds engine 2 to channel 1: two lanes over the same keys, a layer
+white 2
+# SEQ button lit, keys for engines 1 and 2 lit, the rest of the keys dark
+expect_leds ???????????#??#.#........................
+shot 1c-channel-1-layered
+# SELECT moves to channel 3, where engine 3 already listens
+enc 0 2
+shot 1d-channel-3
+# one more engine on channel 3, then open the engine page that lists where it plays
+white 1
+tap btn 6
+expect_screen 4
+tap btn 6
+expect_screen 5
+shot 1e-engine-1-plays-from
+# white keys toggle channels for this engine: add 2, remove 1
+white 2
+white 1
+shot 1f-engine-1-channels-2-and-3
+tap btn 8
+expect_screen 1
+shot 1g-setup-after
