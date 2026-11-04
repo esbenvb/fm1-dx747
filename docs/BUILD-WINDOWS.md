@@ -153,7 +153,10 @@ Firmware: C:\fm1\build\dx7\sdk.elf
 
 This is what the project's Windows PC printed for commit `e59e3e7`. JieLi's Linux
 toolchain, run in Docker on the Mac, gave the same 427,880 bytes for this tree (the
-limit is 453,921), so the Docker numbers are a good stand-in for the Windows ones. On
+limit is 453,921), the same section sizes (`.text` 346,048, allocated image 427,932)
+and the same build identity (`b6715d53...`), so the Docker numbers are a good
+stand-in for the Windows ones. The two `sdk.elf` files are not byte-identical (the
+cause was not examined). On
 the unmodified upstream the Linux toolchain gave 453,576 bytes, about 160 bytes under
 what the official build is recorded at, so the two toolchains have not been shown to
 agree on every tree. A result far from these numbers (say more than a few thousand
