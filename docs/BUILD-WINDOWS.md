@@ -139,23 +139,16 @@ Expected last lines (the numbers vary a little between toolchain builds):
 Build FM1 Official Open V01
 ...
 Link dx7 using prebuilt FM1 SDK
-FM1: 427880 bytes app image; SRAM/BLE/USB checks passed
+FM1: 429544 bytes app image; SRAM/BLE/USB checks passed
 Offline package fits 1 MiB: image 446464, VM 57344, user 536576 bytes
 Firmware: <your clone>\build\dx7\sdk.elf
 ```
 
-The numbers above are what the project's Windows PC printed for commit `e59e3e7`
-(the first line says V01 and the identity is FM-1_8747747 from later commits on). JieLi's Linux
-toolchain, run in Docker on the Mac, gave the same 427,880 bytes for that tree (the
-limit is 453,921), the same section sizes (`.text` 346,048, allocated image 427,932)
-and the same build identity (`b6715d53...`), so the Docker numbers are a good
-stand-in for the Windows ones. The two `sdk.elf` files are not byte-identical (the
-cause was not examined). Later commits add code (safe boot, the scene-store rules, the
-workbench compatibility fixes): the current tree is 429,544 bytes with the Linux
-toolchain, and has not been built on Windows yet, so expect about that number and
-compare. On the unmodified upstream the Linux toolchain gave 453,576 bytes, about 160 bytes under
-what the official build is recorded at, so the two toolchains have not been shown to
-agree on every tree. A result far from these numbers (say more than a few thousand
+The numbers above are what the project's Windows PC printed for commit `2243433`. The
+limit is 453,921 bytes. JieLi's Linux toolchain, run in Docker on the Mac, produced exactly the
+same loadable content for that commit, byte for byte (see "Comparing a Windows build with the
+Docker build" below), so the Docker numbers and gates are a reliable stand-in for the
+Windows ones for this tree. A result far from these numbers (say more than a few thousand
 bytes) means something is off.
 
 Results are in `build\dx7\` (inside your clone):
@@ -354,7 +347,7 @@ It prints the app image size, the headroom under the 453,921 byte limit, the hea
 and whether every gate passed. This tree:
 
 ```
-FM1: 429512 bytes app image (cap 453921, headroom 24409); heap 231052 bytes (min 49152); SRAM/BLE/USB checks passed
+FM1: 429544 bytes app image (cap 453921, headroom 24377); heap 231052 bytes (min 49152); SRAM/BLE/USB checks passed
 ```
 
 and the unmodified upstream (commit `4c7496d`), for comparison:
@@ -417,4 +410,23 @@ and the function and data symbols by name, address and size.
 Two controls tell a toolchain difference from a path or timing difference: build the same commit twice on
 Windows in two clones with different folder names (the sections must be identical), and compare the
 `.fwsc` hashes of those two builds.
+
+**Result, commit `2243433` (4 November 2026).** Two Windows builds, in clones named `fm1-dx747`
+and `fm1-dx747-b`, and one Docker build of a clean export of the same commit gave:
+
+- the same `build_id` (`407e4801ef4b91c7...`) and the same sizes (app image 429,544 bytes, allocated
+  image 429,596 bytes, the same heap symbols and start address);
+- **identical content in every loadable section** (`.text` 347,712 bytes, `.ram0_data`, `.boot_info`,
+  `.cache_ram_data`) between Windows and Linux, and the same 3,633 function and data symbols at the
+  same addresses and sizes;
+- ELF files that differ only in `.symtab` and `.strtab`, which hold the build paths
+  (`C:\Users\...` appears four times in each Windows file, and the two Windows files differ from each
+  other as much as from the Linux one);
+- identical `.fwsc` packages from the two Windows builds (SHA-256 `385f83e5a01a17e2...`, 471,604 bytes),
+  so the build and the packaging do not depend on the folder name.
+
+The `.fwsc` cannot be built here, and its app image is stored in a form this tool cannot read, so
+"the Linux build equals the Windows build" rests on the loadable sections, not on the package. The
+firmware that gets flashed should still come from the Windows build. Earlier, for commit `e59e3e7`,
+the sizes and the build identity already matched; that commit was not compared byte by byte.
 
