@@ -360,4 +360,3 @@ The helper scripts `tools/dx747/docker/fetch-toolchain.sh` and
 `tools/dx747/sim/fetch-wasi-sdk.sh` do these two downloads and the hash checks for you
 (add `--download` to fetch; without it they only verify). `tools/dx747/docker/BASELINE.md`
 and `tools/dx747/sim/README.md` describe the baseline build and the browser build.
-They come from the tooling session and are not committed yet.
