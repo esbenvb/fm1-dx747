@@ -20,19 +20,24 @@ while the build runs.
 Building is not flashing. Nothing here touches a device. Read
 [FLASHING-AND-RECOVERY.md](FLASHING-AND-RECOVERY.md) before you ever flash.
 
+**One rule for every command in this guide: run it from the root of the repository**,
+the folder that contains `build.bat` and `sdk\`. You can clone the repository to any
+folder you like (see Step 1); the commands and the paths in this guide are relative to
+that folder, so there is nothing to adjust.
+
 What was checked and what was not: every check and error message below is read
 from `sdk/Build.ps1` and `tools/Build-Web.ps1`, and the Mac route at the end was
-run. The firmware's browser build was run too, with the same compiler version and
-flags the Windows build uses. Steps 1 to 4 have since been run on the project's
-Windows PC and the check build passed (below). Steps 5 and 6 have not been run on
-Windows, so if a step does not match what you see, trust what you see and send it to
-me (see the end).
+run. Steps 1 to 5 have been run on a Windows PC (the project's) and passed. Step 6,
+installing on a real FM-1, has not been run on a unit, so if a step does not match
+what you see, trust what you see and report it (see the end).
 
 ## What you need
 
 - Windows 10 or 11, 64-bit, with the built-in **Windows PowerShell 5.1** (PowerShell 7 also works).
-- JieLi toolchain **2.5.3**. No other version works: older kits pinned 2.5.2 and reject 2.5.3.
-- This source tree, in a short plain path such as `C:\fm1`.
+- **Git for Windows** (https://git-scm.com/download/win) to get the source.
+- **Code::Blocks**, because JieLi's toolchain installer needs it (Step 2), and
+  JieLi's toolchain **2.5.3**. No other toolchain version works: older kits pinned 2.5.2
+  and reject 2.5.3.
 - For the flashing page only: `curl.exe` and `tar.exe` (both ship with Windows 10
   1803 and later), an internet connection for the first run, about 2 GB of free
   disk space, and the **Microsoft Visual C++ Redistributable for x64, version 14.40 or
@@ -43,71 +48,55 @@ me (see the end).
 
 You do not need Visual Studio, Python, Node, Docker or WSL.
 
-## Step 1: put the source on the PC
+## Step 1: get the source
 
-Use a short folder outside OneDrive and outside Desktop or Documents: `C:\fm1`.
-Windows limits paths to 260 characters, and the flashing page's WASI SDK (Step 5,
-unpacked in `build\tools` inside the source folder) has files about 165 characters
-below the source folder (measured on the macOS build of the same SDK), so keep the
-source folder's own path under about 90 characters.
-
-Only what is **committed and pushed** travels, and a clone of GitHub shows only what
-is on GitHub. On the Mac, commit everything you need first (`git status` must show
-nothing modified or untracked that matters, including this guide, the check script
-and the firmware changes), push, and check that `git log -1 origin/dx747` is the
-commit you mean to build. On the PC, `git log --oneline -1` must then show the same.
-
-**From GitHub**, if the branch is in your own repository (`git remote -v` on the
-Mac shows where; this project's remote is `esbenvb/fm1-dx747`):
+The simplest way, and the only one you need, is to clone the repository. In PowerShell,
+in the folder where you want it:
 
 ```powershell
-git -c core.autocrlf=false clone --branch dx747 https://github.com/esbenvb/fm1-dx747.git C:\fm1
+git -c core.autocrlf=false clone --branch dx747 https://github.com/esbenvb/fm1-dx747.git
+cd fm1-dx747
 ```
 
-A private repository asks you to sign in. The SSH address the Mac uses for it is
-specific to the Mac, so use the HTTPS one on the PC.
+The clone is the whole source: the app, the SDK, the build scripts and these documents.
+It creates a folder called `fm1-dx747` in the folder you ran it in (add a folder name
+at the end of the `git clone` command to call it something else). **That folder is the
+repository root, and every command in this guide is run from it.** It can be anywhere:
+the guide never uses an absolute path to it. `git log --oneline -1` shows which
+commit you have. (A private repository asks you to sign in; use the HTTPS address
+above, not an SSH one.)
 
-**Without GitHub**, on the Mac, in the repository, pick one:
+Choose the folder with two things in mind:
 
-```bash
-git bundle create ~/dx747.bundle dx747
-git archive --format=zip --prefix=fm1/ -o ~/dx747.zip dx747
-```
-
-A bundle is cloned on the PC like a repository:
-
-```powershell
-git -c core.autocrlf=false clone --branch dx747 D:\path\to\dx747.bundle C:\fm1
-```
-
-A zip needs no Git on the PC. Extract it so that the folder is `C:\fm1`:
-
-```powershell
-tar.exe -xf D:\path\to\dx747.zip -C C:\
-```
-
-(or in Explorer: Extract All, and change the destination to `C:\`.)
-
-Do not make the zip with Finder's "Compress". It adds `__MACOSX` folders and
-`.DS_Store` files; a stray file **inside `sdk\`** stops the build ("Unexpected SDK
-file"), and they are not wanted anywhere else either.
-
-Line endings matter. `.gitattributes` keeps the hashed files untouched, so a clone
-or an extracted `git archive` is correct. A copy that has been through an editor, a
-text-mode transfer or "convert line endings" is not: the build stops with `SDK
-payload changed`, `Native DSP kernels and SDK audio contracts do not match` or
-`Fixed DSP coefficients differ from the native kernels` (the last one is what Windows
-line endings in `app\synth\*.inc` cause).
+- **Keep the full path short**, under about 90 characters, plain ASCII, and outside
+  OneDrive, Desktop and Documents. Windows limits paths to 260 characters, and the
+  flashing page's WASI SDK (Step 5, unpacked in `build\tools` inside the clone) has
+  files about 165 characters below the clone's folder. `C:\Users\you\code\fm1-dx747`
+  is fine; a deep OneDrive path is not.
+- **Do not edit files under `sdk\`, and do not let any tool convert line endings.**
+  The build checks those files byte for byte against hashes, which is why the clone
+  command turns line-ending conversion off. A file that went through an editor, a
+  text-mode transfer or "convert line endings" stops the build with `SDK payload
+  changed`, `Native DSP kernels and SDK audio contracts do not match` or `Fixed DSP
+  coefficients differ from the native kernels` (the last one is what Windows line
+  endings in `app\synth\*.inc` cause). If that happens, make a fresh clone.
 
 ## Step 2: install the toolchain
 
-1. Download the 2.5.3 installer from JieLi:
-   `https://jl-update.oss-cn-shenzhen.aliyuncs.com/2.5.3.exe`
-   (JieLi's own installation guide, in Chinese:
-   `https://doc.zh-jieli.com/Tools/zh-cn/dev_tools/dev_env/jl_toolchain.html`).
-2. Run it and keep the default folder, `C:\JL`.
-3. Check that this file exists: `C:\JL\pi32\bin\clang.exe`.
-4. Check its hash. In PowerShell:
+JieLi's installer would not run on the project's PC until Code::Blocks was installed
+and had been started once and closed completely. This is the order that worked:
+
+1. **Install Code::Blocks** (the standard Windows installer from
+   https://www.codeblocks.org/downloads/binaries/). You will not use it for anything else.
+2. **Start Code::Blocks once, then close it completely.** Closing the window is not
+   enough: it can keep running in the background. Open Task Manager and end every
+   `codeblocks.exe` process.
+3. **Download and run JieLi's 2.5.3 installer:**
+   `https://jl-update.oss-cn-shenzhen.aliyuncs.com/2.5.3.exe`. Keep the default
+   folder, `C:\JL`. (The toolchain lives there, separately from your clone of the
+   repository. If you install it somewhere else, use that folder's `pi32` folder
+   wherever this guide says `C:\JL\pi32`.)
+4. **Check that `C:\JL\pi32\bin\clang.exe` exists, and its hash.** In PowerShell:
 
 ```powershell
 (Get-FileHash C:\JL\pi32\bin\clang.exe -Algorithm SHA256).Hash.ToLower()
@@ -116,15 +105,14 @@ line endings in `app\synth\*.inc` cause).
 It must print `d4bc97cf421c1ccc373dd8924ce88720ff7457b3f1478d15df4aeda6ae923bce`.
 If it prints something else, you have a different toolchain version or a damaged
 install: remove it with its own uninstaller (or delete only `C:\JL\pi32`, since
-`C:\JL` may hold other JieLi tools of yours), and install 2.5.3 again.
-
-The installer's own screens could not be checked here; the folder names come from
-the SDK's README and manifest.
+`C:\JL` may hold other JieLi tools of yours), and install 2.5.3 again. JieLi's own
+installation guide is only in Chinese and is not needed for this.
 
 ## Step 3: let the check script find problems first
 
+From the repository root:
+
 ```powershell
-cd C:\fm1
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\dx747\windows\Check-Environment.ps1
 ```
 
@@ -136,8 +124,9 @@ again. When it says "All checks passed" it also prints the exact build command.
 
 ## Step 4: the check build
 
+From the repository root:
+
 ```powershell
-cd C:\fm1
 powershell -NoProfile -ExecutionPolicy Bypass -File sdk\Build.ps1 -FirmwareOnly -Toolchain C:\JL\pi32
 ```
 
@@ -152,23 +141,24 @@ Build FM1 Official Open V01
 Link dx7 using prebuilt FM1 SDK
 FM1: 427880 bytes app image; SRAM/BLE/USB checks passed
 Offline package fits 1 MiB: image 446464, VM 57344, user 536576 bytes
-Firmware: C:\fm1\build\dx7\sdk.elf
+Firmware: <your clone>\build\dx7\sdk.elf
 ```
 
-This is what the project's Windows PC printed for commit `e59e3e7`. JieLi's Linux
+The numbers above are what the project's Windows PC printed for commit `e59e3e7`
+(the first line says V01 and the identity is FM-1_8747747 from later commits on). JieLi's Linux
 toolchain, run in Docker on the Mac, gave the same 427,880 bytes for that tree (the
 limit is 453,921), the same section sizes (`.text` 346,048, allocated image 427,932)
 and the same build identity (`b6715d53...`), so the Docker numbers are a good
 stand-in for the Windows ones. The two `sdk.elf` files are not byte-identical (the
 cause was not examined). Later commits add code (safe boot, the scene-store rules, the
-workbench compatibility fixes): the current tree is 429,512 bytes with the Linux
+workbench compatibility fixes): the current tree is 429,544 bytes with the Linux
 toolchain, and has not been built on Windows yet, so expect about that number and
 compare. On the unmodified upstream the Linux toolchain gave 453,576 bytes, about 160 bytes under
 what the official build is recorded at, so the two toolchains have not been shown to
 agree on every tree. A result far from these numbers (say more than a few thousand
 bytes) means something is off.
 
-Results are in `C:\fm1\build\dx7\`:
+Results are in `build\dx7\` (inside your clone):
 
 | File | What it is |
 |---|---|
@@ -183,37 +173,39 @@ this check build: `sdk.elf`, `sdk.map`, the `.fwsc`, **and the flashing page
 it replaces with a "Build incomplete" stub. All builds write to the same place. The
 page is the only thing that can install DX747 and take you back to V15, so copy it and
 its `SHA256SUMS.txt` out of `build\` before you run anything else. To build another
-version of the source, such as the unmodified upstream for comparison (`git clone
-https://github.com/m-vave/fm1_open.git C:\fm1-upstream`, then `git -C C:\fm1-upstream
-checkout 4c7496d`), use its own folder.
+version of the source, such as the unmodified upstream for comparison (next to your clone, `git clone https://github.com/m-vave/fm1_open.git fm1-upstream`, then
+`git -C fm1-upstream checkout 4c7496d`), use its own folder and run its commands from there.
 
 Note the package's hash, so you can tell builds apart:
 
 ```powershell
-(Get-FileHash C:\fm1\build\dx7\generated\FM1_OFFICIAL_OPEN.fwsc -Algorithm SHA256).Hash
+(Get-FileHash build\dx7\generated\FM1_OFFICIAL_OPEN.fwsc -Algorithm SHA256).Hash
 ```
 
 ## Step 5: the flashing page
 
+From the repository root:
+
 ```powershell
-cd C:\fm1
 $env:FM1_PI32_TOOLCHAIN = 'C:\JL\pi32'
-$env:FM1_SOURCE_URL = 'https://github.com/esbenvb/fm1-dx747/archive/<the full commit id>.zip'
+$env:FM1_SOURCE_URL = "https://github.com/esbenvb/fm1-dx747/archive/$(git rev-parse HEAD).zip"
 .\build.bat --package
 ```
 
 - `build.bat --package` has no toolchain option; it reads `FM1_PI32_TOOLCHAIN`.
 - `FM1_SOURCE_URL` is the address of the source this firmware was built from. The
   page prints it, and the SDK refuses to build without one. The build only checks
-  that it is an `https` address with no password in it. Use the archive address of
-  **the exact commit** (`git rev-parse HEAD`), not of a branch, because a branch
-  moves. If you ever share the page or the firmware, that address has to work for
+  that it is an `https` address with no password in it. The command above builds the
+  archive address of **the exact commit** you cloned (`git rev-parse HEAD`), not of a
+  branch, because a branch moves; a normal clone of the `dx747` branch is on GitHub,
+  so the address works. If you changed the source, commit and push it first, and use
+  your own repository's address. If you ever share the page or the firmware, that address has to work for
   the people who get it, which for a private repository means making it public.
 - The first run downloads the WASI SDK, 518 MiB, with `curl.exe` and checks its
   hash. Set `FM1_WASI_SDK` to an unpacked copy to reuse one. The page contains a
   copy of the instrument that runs in the browser, and this SDK compiles it.
 
-The result is `C:\fm1\build\official-web\FM1-Official-Open-Source.html` (with
+The result is `build\official-web\FM1-Official-Open-Source.html` inside your clone (with
 `SHA256SUMS.txt` beside it). It contains the workbench, the browser instrument, the
 DX747 firmware, and the original V15 firmware for going back. The firmware travels
 inside the page, so installing it downloads nothing. **Copy the page and its
@@ -224,8 +216,8 @@ the Visual C++ runtime was updated, for commit `e59e3e7`):
 
 ```
 Compile the browser application
-Integrated FM1 workbench: C:\fm1\build\official-web\FM1-Official-Open-Source.html
-Firmware: C:\fm1\build\dx7\sdk.elf
+Integrated FM1 workbench: <your clone>\build\official-web\FM1-Official-Open-Source.html
+Firmware: <your clone>\build\dx7\sdk.elf
 ```
 
 **You can try the page with no unit connected.** Open it in Chrome or Edge: it says
@@ -315,8 +307,8 @@ The first line of the error tells you which check failed.
 | `Command failed: ...\wasi-sdk-27.0-x86_64-windows\bin\clang.exe (-1073741819)` with no other message, at "Compile the browser application" | The WASI SDK compiler cannot start: it crashes in `MSVCP140.dll` because the Microsoft Visual C++ runtime is older than 14.40 (`clang.exe --version` crashes the same way, and Event Viewer, Windows Logs, Application shows `Faulting module name: MSVCP140.dll`). Install the latest Visual C++ Redistributable for x64 (https://aka.ms/vs/17/release/vc_redist.x64.exe), check that `build\tools\wasi-sdk-27.0-x86_64-windows\bin\clang.exe --version` prints a version, and run again. The firmware check build is not affected. |
 | `Add-Type` errors, or "language mode" | The packaging step compiles `sdk\Package.cs` with `Add-Type`. A company policy (AppLocker, WDAC) can block it: use a personal machine. |
 | `error:` lines from `clang.exe` | A compile error in the source. Send me the first one with its file and line. |
-| `The specified path ... too long` | Move the folder to `C:\fm1`. |
-| `clang.exe` or `pi32v2-ld.exe` disappears or "Access is denied" | Antivirus quarantined a toolchain file. Restore it and add `C:\JL` and `C:\fm1` to the exclusions. |
+| `The specified path ... too long` | The clone's path is too long: clone to a shorter folder (any short path works, for example `C:\fm1`). |
+| `clang.exe` or `pi32v2-ld.exe` disappears or "Access is denied" | Antivirus quarantined a toolchain file. Restore it and add `C:\JL` and your clone's folder to the exclusions. |
 | `Set FM1_SOURCE_URL or -SourceUrl to the HTTPS URL ...` | Step 5: set `FM1_SOURCE_URL` first. It must start with `https://` and have no user name or password in it. |
 | `WASI SDK archive SHA-256 mismatch`, or `curl.exe` errors | The download was cut off or blocked. Run again (a wrong archive is downloaded again), or unpack a WASI SDK 27 yourself and set `FM1_WASI_SDK`. |
 | `Set FM1_WASI_SDK to an extracted WASI SDK 27 directory.` | The unpacking was interrupted. Delete the folder `build\tools\wasi-sdk-27.0-x86_64-windows` and run again. |
@@ -329,7 +321,7 @@ Send these three things and I can usually say what is wrong:
 
 1. The whole output of `Check-Environment.ps1`.
 2. The last 40 lines of the build output, starting a few lines before the first red text.
-3. The output of `git log --oneline -1` in `C:\fm1`, or say you used the zip.
+3. The output of `git log --oneline -1` in the repository root.
 
 ## Quick checks on the Mac, without Windows
 

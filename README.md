@@ -2,6 +2,43 @@
 >
 > **DX747 is a tribute to the Yamaha DX7.** It is an independent hobby project and is **not in any way associated with, endorsed by or sponsored by Yamaha Corporation or The Boeing Company** (or by M-VAVE). "DX7" is a Yamaha product name and "747" is a Boeing aircraft designation; any trademarks of Yamaha or Boeing, including "DX7" and "747", belong to their owners, and the names are used here only to say what the firmware is a tribute to and what its logo looks like. No rights to them are claimed. The firmware has its own identity (release V01, update identity `FM-1_8747747`) and replaces M-VAVE's Open V14 rather than being a version of it. See [DX747.md](DX747.md), "Licence and names".
 
+## Build DX747 on Windows
+
+Nothing here touches your FM-1: building is not flashing. Read
+[docs/FLASHING-AND-RECOVERY.md](docs/FLASHING-AND-RECOVERY.md) before you ever flash, and
+[docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md) for every step in detail and what to do when one
+fails.
+
+**1. Get the source: clone the repository.** That is all; nothing else needs downloading or
+unpacking. Clone it into any folder you like (keep the full path short, plain ASCII, outside OneDrive):
+
+~~~powershell
+git -c core.autocrlf=false clone --branch dx747 https://github.com/esbenvb/fm1-dx747.git
+cd fm1-dx747
+~~~
+
+The folder the clone creates is the **repository root**. Every command below is run from it and uses
+paths relative to it, so it does not matter where you cloned. (`-c core.autocrlf=false` stops Git
+from changing line endings: the build checks the SDK files byte for byte.)
+
+**2. Install the JieLi 2.5.3 toolchain.** In this order (JieLi's own guide is only in Chinese and is
+not needed):
+
+1. Install [Code::Blocks](https://www.codeblocks.org/downloads/binaries/); JieLi's installer needs it.
+2. Start Code::Blocks once, then **close it completely**: end every `codeblocks.exe` in Task Manager.
+3. Download and run [JieLi's 2.5.3 installer](https://jl-update.oss-cn-shenzhen.aliyuncs.com/2.5.3.exe) and
+   keep the default folder, `C:\JL`. That is where the toolchain lives, whatever folder your clone is in.
+
+**3. Check the machine, then build.** From the repository root:
+
+~~~powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\dx747\windows\Check-Environment.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File sdk\Build.ps1 -FirmwareOnly -Toolchain C:\JL\pi32
+~~~
+
+The first command finds problems before the build does; the second proves that the firmware builds.
+To build the page that installs it on a unit, see Step 5 of [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md).
+
 # FM1 Open V14
 
 English · [简体中文](README.zh-CN.md)
@@ -42,6 +79,8 @@ The eight sample slots share about 19.55 seconds of new sample storage. Existing
 ## Build
 
 You can build on **Windows** or on **macOS and Linux**. The two routes make the same three builds, in the same folders:
+
+On **Windows**: requires Windows x64, PowerShell, `curl.exe` and `tar.exe`. Firmware builds require **JieLi Windows toolchain 2.5.3**, which includes PI32v2 clang 4.0.1. [Download the 2.5.3 installer from JieLi](https://jl-update.oss-cn-shenzhen.aliyuncs.com/2.5.3.exe); install Code::Blocks first, start it once and close it completely, as described in "Build DX747 on Windows" above. Set `FM1_PI32_TOOLCHAIN` to its `pi32` folder containing `bin/clang.exe` (normally `C:\JL\pi32`). FM1 continues to use the `r3` CPU target.
 
 | Build | Windows | macOS / Linux |
 |---|---|---|
