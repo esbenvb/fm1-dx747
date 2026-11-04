@@ -1,0 +1,1192 @@
+{
+ "scale": 2,
+ "shots": [
+  {
+   "file": "00-startup-t0-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [],
+   "atMs": 0
+  },
+  {
+   "file": "01-startup-t300-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [],
+   "atMs": 299
+  },
+  {
+   "file": "02-boot-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    8
+   ],
+   "atMs": 197
+  },
+  {
+   "file": "03-seq-steps.png",
+   "page": "STEPS",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "NOTE",
+     "C4"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "04-seq-again-steps.png",
+   "page": "STEPS",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "NOTE",
+     "C4"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "05-edit-fm-quick.png",
+   "page": "FM_QUICK",
+   "track": 1,
+   "knobs": [
+    [
+     "ALGORITHM",
+     "5"
+    ],
+    [
+     "FEEDBACK",
+     "6"
+    ],
+    [
+     "TRANSPOSE",
+     "0"
+    ],
+    [
+     "LEVEL",
+     "100"
+    ]
+   ],
+   "litLeds": [
+    6
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "06-edit-again-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    8
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "07-env-fm-env.png",
+   "page": "FM_ENV",
+   "track": 1,
+   "knobs": [
+    [
+     "ATTACK",
+     "0%"
+    ],
+    [
+     "DECAY",
+     "0%"
+    ],
+    [
+     "SUSTAIN",
+     "100%"
+    ],
+    [
+     "RELEASE",
+     "0%"
+    ]
+   ],
+   "litLeds": [
+    4
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "08-env-again-preset-browser.png",
+   "page": "PRESET_BROWSER",
+   "track": 1,
+   "knobs": [
+    [
+     "ATTACK",
+     "0%"
+    ],
+    [
+     "DECAY",
+     "0%"
+    ],
+    [
+     "SUSTAIN",
+     "100%"
+    ],
+    [
+     "RELEASE",
+     "0%"
+    ]
+   ],
+   "litLeds": [
+    14
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "09-lfo-fm-lfo.png",
+   "page": "FM_LFO",
+   "track": 1,
+   "knobs": [
+    [
+     "WAVE",
+     "SINE"
+    ],
+    [
+     "SPEED",
+     "15"
+    ],
+    [
+     "PMD",
+     "0"
+    ],
+    [
+     "AMD",
+     "0"
+    ]
+   ],
+   "litLeds": [
+    5
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "10-lfo-again-preset-browser.png",
+   "page": "PRESET_BROWSER",
+   "track": 1,
+   "knobs": [
+    [
+     "WAVE",
+     "SINE"
+    ],
+    [
+     "SPEED",
+     "15"
+    ],
+    [
+     "PMD",
+     "0"
+    ],
+    [
+     "AMD",
+     "0"
+    ]
+   ],
+   "litLeds": [
+    14
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "11-fx-effects.png",
+   "page": "EFFECTS",
+   "track": 1,
+   "knobs": [
+    [
+     "REV SEND",
+     "0"
+    ],
+    [
+     "DLY SEND",
+     "0"
+    ],
+    [
+     "TRK VOL",
+     "100"
+    ],
+    [
+     "ALL RET",
+     "100"
+    ]
+   ],
+   "litLeds": [
+    2
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "12-fx-again-preset-browser.png",
+   "page": "PRESET_BROWSER",
+   "track": 1,
+   "knobs": [
+    [
+     "REV SEND",
+     "0"
+    ],
+    [
+     "DLY SEND",
+     "0"
+    ],
+    [
+     "TRK VOL",
+     "100"
+    ],
+    [
+     "ALL RET",
+     "100"
+    ]
+   ],
+   "litLeds": [
+    14
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "13-sel-fm-edit.png",
+   "page": "FM_EDIT",
+   "track": 1,
+   "knobs": [
+    [
+     "L DEPTH",
+     "0"
+    ],
+    [
+     "R DEPTH",
+     "0"
+    ],
+    [
+     "BREAKPT",
+     "A-1"
+    ],
+    [
+     "",
+     ""
+    ]
+   ],
+   "litLeds": [
+    3,
+    6,
+    17,
+    19,
+    22,
+    24,
+    27,
+    36
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "14-sel-again-fm-edit.png",
+   "page": "FM_EDIT",
+   "track": 1,
+   "knobs": [
+    [
+     "L CURVE",
+     "-LN"
+    ],
+    [
+     "R CURVE",
+     "-LN"
+    ],
+    [
+     "RATE SC",
+     "3"
+    ],
+    [
+     "",
+     ""
+    ]
+   ],
+   "litLeds": [
+    3,
+    6,
+    15,
+    17,
+    19,
+    22,
+    24,
+    27,
+    36
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "15-glo-mix.png",
+   "page": "MIX",
+   "track": 1,
+   "knobs": [
+    [
+     "TRACK 1",
+     "100"
+    ],
+    [
+     "TRACK 2",
+     "100"
+    ],
+    [
+     "TRACK 3",
+     "100"
+    ],
+    [
+     "TRACK 4",
+     "100"
+    ]
+   ],
+   "litLeds": [
+    7,
+    23,
+    25
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "16-glo-again-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    8
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "17-save-project.png",
+   "page": "PROJECT",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    9
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "18-save-again-preset-browser.png",
+   "page": "PRESET_BROWSER",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    14
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "19-arp-preset-browser.png",
+   "page": "PRESET_BROWSER",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    10,
+    14
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "20-arp-again-preset-browser.png",
+   "page": "PRESET_BROWSER",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    14
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "21-play-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "96"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "104"
+    ]
+   ],
+   "litLeds": [
+    8,
+    12
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "22-play-again-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "96"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "104"
+    ]
+   ],
+   "litLeds": [
+    8
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "23-rec-steps.png",
+   "page": "STEPS",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "NOTE",
+     "C4"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11,
+    13
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "24-rec-again-steps.png",
+   "page": "STEPS",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "NOTE",
+     "C4"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11
+   ],
+   "atMs": 618
+  },
+  {
+   "file": "25-home-again-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    8
+   ],
+   "atMs": 479
+  },
+  {
+   "file": "26-edit-k1+3-k4-5-fm-quick.png",
+   "page": "FM_QUICK",
+   "track": 1,
+   "knobs": [
+    [
+     "ALGORITHM",
+     "8"
+    ],
+    [
+     "FEEDBACK",
+     "6"
+    ],
+    [
+     "TRANSPOSE",
+     "0"
+    ],
+    [
+     "LEVEL",
+     "95"
+    ]
+   ],
+   "litLeds": [
+    6
+   ],
+   "atMs": 639
+  },
+  {
+   "file": "open-01-steps.png",
+   "page": "STEPS",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "NOTE",
+     "C4"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-02-fm-edit.png",
+   "page": "FM_EDIT",
+   "track": 1,
+   "knobs": [
+    [
+     "DETUNE",
+     "3"
+    ],
+    [
+     "COARSE",
+     "1"
+    ],
+    [
+     "FINE",
+     "0"
+    ],
+    [
+     "OUT LVL",
+     "99"
+    ]
+   ],
+   "litLeds": [
+    6,
+    17,
+    19,
+    22,
+    24,
+    27,
+    36
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-03-fm-env.png",
+   "page": "FM_ENV",
+   "track": 1,
+   "knobs": [
+    [
+     "ATTACK",
+     "0%"
+    ],
+    [
+     "DECAY",
+     "0%"
+    ],
+    [
+     "SUSTAIN",
+     "100%"
+    ],
+    [
+     "RELEASE",
+     "0%"
+    ]
+   ],
+   "litLeds": [
+    4
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-04-fm-lfo.png",
+   "page": "FM_LFO",
+   "track": 1,
+   "knobs": [
+    [
+     "WAVE",
+     "SINE"
+    ],
+    [
+     "SPEED",
+     "15"
+    ],
+    [
+     "PMD",
+     "0"
+    ],
+    [
+     "AMD",
+     "0"
+    ]
+   ],
+   "litLeds": [
+    5
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-05-tone-edit-overview.png",
+   "page": "OVERVIEW",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    8
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-06-mix.png",
+   "page": "MIX",
+   "track": 1,
+   "knobs": [
+    [
+     "TRACK 1",
+     "100"
+    ],
+    [
+     "TRACK 2",
+     "100"
+    ],
+    [
+     "TRACK 3",
+     "100"
+    ],
+    [
+     "TRACK 4",
+     "100"
+    ]
+   ],
+   "litLeds": [
+    7,
+    23,
+    25
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-07-ble.png",
+   "page": "BLE",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [],
+   "atMs": 279
+  },
+  {
+   "file": "open-09-name.png",
+   "page": "NAME",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [],
+   "atMs": 279
+  },
+  {
+   "file": "open-10-effects.png",
+   "page": "EFFECTS",
+   "track": 1,
+   "knobs": [
+    [
+     "REV SEND",
+     "0"
+    ],
+    [
+     "DLY SEND",
+     "0"
+    ],
+    [
+     "TRK VOL",
+     "100"
+    ],
+    [
+     "ALL RET",
+     "100"
+    ]
+   ],
+   "litLeds": [
+    2
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-11-source.png",
+   "page": "SOURCE",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    9
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-12-actions.png",
+   "page": "ACTIONS",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-13-step-edit-steps.png",
+   "page": "STEPS",
+   "track": 1,
+   "knobs": [
+    [
+     "VELOCITY",
+     "0"
+    ],
+    [
+     "GATE",
+     "50%"
+    ],
+    [
+     "PROB",
+     "100%"
+    ],
+    [
+     "CHORD",
+     "SINGLE"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-14-rhythm-steps.png",
+   "page": "STEPS",
+   "track": 1,
+   "knobs": [
+    [
+     "SWING",
+     "0%"
+    ],
+    [
+     "CLICK",
+     "OFF"
+    ],
+    [
+     "COUNT IN",
+     "OFF"
+    ],
+    [
+     "LENGTH",
+     "64"
+    ]
+   ],
+   "litLeds": [
+    1,
+    11
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-15-fm-quick.png",
+   "page": "FM_QUICK",
+   "track": 1,
+   "knobs": [
+    [
+     "ALGORITHM",
+     "5"
+    ],
+    [
+     "FEEDBACK",
+     "6"
+    ],
+    [
+     "TRANSPOSE",
+     "0"
+    ],
+    [
+     "LEVEL",
+     "100"
+    ]
+   ],
+   "litLeds": [
+    6
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-16-preset-browser.png",
+   "page": "PRESET_BROWSER",
+   "track": 1,
+   "knobs": [
+    [
+     "LEVEL",
+     "100"
+    ],
+    [
+     "SOURCE",
+     "DX7 FM"
+    ],
+    [
+     "STEP",
+     "01"
+    ],
+    [
+     "BPM",
+     "120"
+    ]
+   ],
+   "litLeds": [
+    14
+   ],
+   "atMs": 279
+  },
+  {
+   "file": "open-17-arp-edit.png",
+   "page": "ARP_EDIT",
+   "track": 1,
+   "knobs": [
+    [
+     "RATE",
+     "1/16"
+    ],
+    [
+     "DIRECTION",
+     "UP"
+    ],
+    [
+     "RANGE",
+     "1 OCT"
+    ],
+    [
+     "GATE",
+     "50%"
+    ]
+   ],
+   "litLeds": [],
+   "atMs": 279
+  }
+ ]
+}
