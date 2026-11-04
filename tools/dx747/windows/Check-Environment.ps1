@@ -48,8 +48,8 @@ foreach ($tool in @('curl.exe', 'tar.exe')) {
 Head '2. Where the source is'
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path
 Note $root
-if ($root.Length -gt 150) {
-    Warn ('The path is long (' + $root.Length + ' characters)') 'Windows limits paths to 260 characters and the deepest file the build uses is about 45 characters below this folder. Move the folder to something like C:\fm1.'
+if ($root.Length -gt 90) {
+    Warn ('The path is long (' + $root.Length + ' characters)') 'Windows limits paths to 260 characters and the flashing page unpacks a compiler with files about 165 characters below this folder (build.bat --package). Move the folder to something like C:\fm1.'
 } else { Ok 'path length is fine' }
 if ($root -match '[^\x20-\x7E]') { Warn 'The path contains non-ASCII characters' 'Some of the tools may not cope. Move the folder to a plain ASCII path such as C:\fm1.' }
 if ($root -match 'OneDrive') { Warn 'The folder is inside OneDrive' 'OneDrive can lock or rewrite files while the build runs. Use a folder outside OneDrive, for example C:\fm1.' }

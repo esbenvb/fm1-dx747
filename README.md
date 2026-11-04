@@ -1,3 +1,5 @@
+> **This tree is DX747**, custom firmware that makes the FM-1 an eight-part multitimbral DX7 module controlled over MIDI. It replaces the stock sequencer, sampler and screens. Start with [DX747.md](DX747.md); build instructions for Windows are in [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md); read [docs/FLASHING-AND-RECOVERY.md](docs/FLASHING-AND-RECOVERY.md) before flashing. The text below is the SDK's own README for the stock firmware it is based on.
+
 # FM1 Open V14
 
 English · [简体中文](README.zh-CN.md)

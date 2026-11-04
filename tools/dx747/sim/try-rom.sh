@@ -9,8 +9,9 @@
 #
 # GROUP is the library group the ROM goes into (programs 32*GROUP+1 ..), default 3 (D). OUTDIR defaults to
 # build/dx747/try-rom (gitignored) and receives one screenshot per voice. The ROM file is only read.
-# A slow-attack voice can show a low peak after 0.6 s, and the "BC" voices are silent without breath
-# controller data (CC2): both are the voice, not the import.
+# A slow-attack voice can show a low peak after 0.6 s. The engine keeps voices with amplitude-modulation
+# sensitivity (the "BC" voices) silent until a controller message arrives; DX747 sends one (CC2 = 127)
+# after every voice load and every stop, so they sound here. A silent BC voice would be a regression.
 set -euo pipefail
 [ $# -ge 1 ] || { sed -n '4,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 cd "$(dirname "$0")/../../.."
@@ -42,7 +43,7 @@ if r.returncode or len(peaks) != 32:
 print(f"{rom}: imported into group {'ABCD'[group]}; library read-back and all 32 names verified")
 for v in range(32):
     if peaks[v] >= 0.001: note = ""
-    elif names[v].endswith(" BC") or " BC " in names[v] + " ": note = "   silent without a breath controller (CC2), as on a DX7"
+    elif names[v].endswith(" BC") or " BC " in names[v] + " ": note = "   SILENT: a BC voice should sound (CC2 = 127 is sent after the load)"
     else: note = "   quiet after 0.6 s (slow attack?)"
     print(f"  program {group * 32 + v + 1:3d}  {names[v]:<10s}  peak {peaks[v]:.4f}{note}")
 print(f"screenshots: {out}/voice01.png .. voice32.png")
