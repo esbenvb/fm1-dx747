@@ -39,6 +39,7 @@ static void barrier(void)
 }
 void fm1_app_sysex(const uint8_t *m, size_t n)
 {
+    if (dx_safe_boot()) return; /* the workbench file protocol writes flash; the engine's own update messages never get here */
     /* DX7 parameter changes and single-voice dumps go to DX747's own ring: the mailbox below keeps
      * one frame and drops the rest, which loses the changes of a knob that is being turned. */
     if (dx_sysex_in(m, n)) return;
@@ -208,7 +209,8 @@ static int command(unsigned cmd, const uint8_t *data, unsigned n, uint8_t *out, 
     } else if (cmd == 5 && n == 4 && transfer && transfer_writing && transferred == transfer_size) {
         if (get32(data) == ~groove_crc32(~0U, transfer, transfer_size)) {
             r = transfer_kind == 4 ? groove_fm_library_write(transfer_target,transfer)
-                : transfer_kind == 2 ? groove_timbre_import(transfer_target, transfer, transfer_size)
+                /* a timbre of another source would turn a DX7 engine into a 303, 808, PSG, pluck or sampler */
+                : transfer_kind == 2 ? (transfer[0] == GROOVE_DX7 ? groove_timbre_import(transfer_target, transfer, transfer_size) : GROOVE_PROJECT_INVALID)
                 : transfer_kind == 1 ? groove_fm_import(transfer_target, transfer)
                               : groove_project_import(transfer, transfer_size);
             if (!r && (transfer_kind == 1 || transfer_kind == 2)) dx_bright_force_voice(transfer_target); /* the voice was replaced */

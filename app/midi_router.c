@@ -11,6 +11,7 @@
 #include <string.h>
 #include "dx747/route.inc"
 #include "dx747/boot.inc"
+#include "dx747/dx747.h"
 
 /* Router state. cfg_store is double buffered: the control task fills the idle
  * copy and then swings the pointer, so the routing task always reads a whole
@@ -89,7 +90,7 @@ uint32_t dx_route_dropped(void) { return ext.dropped + loc.dropped + ext.fail_p 
  * forwarded; System Reset cuts everything. */
 void fm1_app_midi_received(unsigned source, const uint8_t *m, size_t n)
 {
-    if (source >= 3 || !m || !n || n > 3) return;
+    if (dx_safe_boot() || source >= 3 || !m || !n || n > 3) return;
     if (m[0] == 0xff) { dx_route_panic(); return; }
     if (m[0] >= 0xf0) return;
     dx_router_event(&ext, source, m, (unsigned)n, fm1_millis());
@@ -130,6 +131,7 @@ uint32_t groove_midi_dropped(void) { return dx_route_dropped(); }
  * calls dx_route_key directly, accept those and route them like any keyboard. */
 int groove_midi_local(const uint8_t *m, size_t n)
 {
+    if (dx_safe_boot()) return 0;
     if (!m || !n || n > 3 || m[0] < 0x80 || (n > 1 && m[1] >= 128) || (n > 2 && m[2] >= 128)) return -1;
     if (m[0] >= 0xf0) { if (m[0] == 0xff) dx_route_panic(); return 0; }
     dx_router_event(&loc, DX_SRC_KEYS, m, (unsigned)n, fm1_millis());

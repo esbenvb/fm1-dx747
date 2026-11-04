@@ -42,8 +42,10 @@ void groove_screen_init(void)
     ui.boot_until = fm1_millis() + 1200U;
     ui.octave = 0;
     fm1_controls_init();
+    if (fm1_panel_safe_boot()) { dx_safe_boot_enter(); ui.screen = S_SAFE; }
     fm1_screen_init();
     for (unsigned i = 0; i < 41; ++i) fm1_led_set(i, 0);
+    if (ui.screen == S_SAFE) { fm1_led_set(BTN_ENV, 1); fm1_led_set(BTN_LFO, 1); } /* a cue that does not need the LCD */
     led_state_lo = led_state_hi = 0;
     band_invalidate();
     frame_forced = 1;
@@ -54,6 +56,10 @@ void groove_screen_control(void)
     uint32_t now = fm1_millis();
     fm1_controls_read(&ctl);
     (void)groove_master_update(ctl.knob);
+    if (ui.screen == S_SAFE) { /* the panel is ignored; the screen is redrawn now and then in case the LCD missed a band */
+        if (frame_forced || now - last_frame >= 250U) { last_frame = now; frame_forced = 0; render_frame(); }
+        return;
+    }
     unsigned pressed = ctl.buttons & ~prev_ctl.buttons;
     if (pressed) on_button(pressed);
     uint32_t down = ctl.keys & ~prev_ctl.keys, up = prev_ctl.keys & ~ctl.keys;

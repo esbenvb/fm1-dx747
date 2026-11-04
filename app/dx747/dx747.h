@@ -32,5 +32,14 @@ int dx_storage_claim(void);                            /* erases the stock sampl
 /* ---- app/board/panel.c ---- */
 void fm1_led_level(unsigned key, unsigned level);      /* 0..8 */
 void fm1_led_idle_level(unsigned level);               /* every LED not set on or to a level */
+unsigned fm1_panel_safe_boot(void);                    /* 1 when the safe-boot chord was held at power-on; valid after fm1_controls_init */
+
+/* ---- safe boot (app/project.c) ----
+ * The chord latches in panel.c; groove_screen_init enters it. While it is on, DX747 runs none of its optional
+ * start-up: no engine recipe, no flash read or write, no Bluetooth setup, no master filter, no button light,
+ * no MIDI routing, no workbench transfer, no panel input. The sealed engine, USB MIDI and the firmware update
+ * keep running, and the screen says SAFE BOOT. Any task may ask; it never changes after start-up. */
+unsigned dx_safe_boot(void);
+void dx_safe_boot_enter(void);                         /* groove_screen_init only, before the first poll */
 
 #endif

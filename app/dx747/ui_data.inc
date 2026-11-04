@@ -2,7 +2,7 @@
 /* DX747 screen state, text formatting and the per-frame snapshot. Included by
  * app/screen.c only, after ui_core.inc. */
 
-enum { S_BOOT, S_SETUP, S_ENGINES, S_CHANNEL, S_ESOUND, S_EPLAYS, S_ESENDS, S_MON, S_MIX, S_FX, S_MASTER, S_SCENES, S_SYS, S_COUNT };
+enum { S_BOOT, S_SETUP, S_ENGINES, S_CHANNEL, S_ESOUND, S_EPLAYS, S_ESENDS, S_MON, S_MIX, S_FX, S_MASTER, S_SCENES, S_SYS, S_SAFE, S_COUNT };
 enum { M_BROWSE, M_NAME, M_CLAIM };                      /* scene screen modes */
 enum { BTN_OCT_DOWN, BTN_OCT_UP, BTN_FX, BTN_SEL, BTN_ENV, BTN_LFO, BTN_EDIT, BTN_GLO, BTN_HOME, BTN_SAVE, BTN_ARP, BTN_SEQ, BTN_PLAY, BTN_REC };
 #define BTN_BIT(b) (1U << (b))

@@ -10,4 +10,9 @@ for r in tools/dx747/sim/recipes/*.txt; do
     echo "== $(basename "$r")"
     tools/dx747/sim/native/dx747-sim "$out" "$r" > /dev/null || status=1
 done
+# The real workbench page code (sdk/WebUpdate.js) against the real firmware: library tab, ROM import, voices.
+if command -v node >/dev/null 2>&1; then
+    echo "== page-flow.mjs"
+    node tools/dx747/sim/page-flow.mjs > /dev/null || status=1
+fi
 exit $status

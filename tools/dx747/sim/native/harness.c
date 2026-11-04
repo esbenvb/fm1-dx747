@@ -3,8 +3,9 @@
  * commands (see README below), drives the same sim_* entry points the browser
  * uses, and writes screenshots as PNG (scaled 2x).
  *
- *   boot [clear] [logo] restart the instrument; "clear" also restores the factory sample bank,
- *                       "logo" starts on the boot screen instead of skipping it
+ *   boot [clear] [logo|safe] restart the instrument; "clear" also restores the factory sample bank,
+ *                       "logo" starts on the boot screen instead of skipping it, "safe" starts as if the
+ *                       safe-boot chord (ENV + LFO) were held at power-on
  *   wipe                erase the scene store and staging sectors (flash offsets 65536..204800)
  *   run MS              let MS milliseconds of simulated time pass
  *   press|release btn N / tap btn N     panel button 0..13 (OCT- OCT+ FX SEL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAY REC)
@@ -17,7 +18,12 @@
  *   leds                print the LED states as a 41 character string
  *   echo TEXT           print TEXT
  *   expect_screen N     fail unless the DX747 screen id is N (0 boot, 1 setup, 2 engines, 3 channel,
- *                       4 engine sound, 5 plays, 6 sends, 7 midi in, 8 mix, 9 fx, 10 master, 11 scenes, 12 system)
+ *                       4 engine sound, 5 plays, 6 sends, 7 midi in, 8 mix, 9 fx, 10 master, 11 scenes, 12 system,
+ *                       13 safe boot)
+ *   flash_mark          remember a checksum of the whole simulated flash
+ *   expect_flash_same   fail unless the flash still has the checksum flash_mark took
+ *   expect_up HEXMASK   fail unless the engines the boot recipe brought up are exactly HEXMASK (bit 0 = engine 1)
+ *   expect_silent_sysex fail if the unit answers a workbench capability request (transfer command 22)
  *   expect_px X Y HEX   fail unless the RGB565 pixel at X,Y (0..239) equals HEX
  *   expect_leds PATTERN fail unless the 41 LED states match PATTERN (# on, . off, ? ignore)
  *   expect_voices N     fail unless the router holds N engine-voices (one per engine a held key reaches)
@@ -39,6 +45,14 @@
  *   expect_cfg NAME V   fail unless the active router configuration has kbd_ch or master_ch equal to V
  *   expect_live NAME I V  fail unless the UI-owned live value matches: pan I, expr I, bright I (engine I),
  *                       filter_type, filter_res or filter_hz (I ignored)
+ *   expect_project_export_valid  fail unless the project the workbench page asks for (sizes 4064 and 4264) is one the
+ *                       engine's own validator accepts and the tuning block's magic, CRC and range checks pass
+ *   expect_timbre_refused E TYPE  upload a 223-byte timbre of source TYPE (not DX7) to track E the way the page does and
+ *                       fail unless the unit refuses it and every track still reports the DX7 source
+ *   wbserve             a bridge for tools/dx747/sim/page-flow.mjs: read lines of hex from stdin, each one SysEx
+ *                       message exactly as the workbench page sends it, deliver it to the unit as USB MIDI and print
+ *                       "R <hex>" with the unit's reply ("R none" if it stays silent for a second of simulated
+ *                       time). An empty line or end of input ends it.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,6 +62,8 @@
 
 #include "dx747/scene.h"
 extern unsigned dx_route_voices(void);
+extern unsigned dx_engines_up(void);
+extern void sim_safe_boot(unsigned);
 extern struct dx_live *dx_live_edit(void);
 extern const struct dx_cfg *dx_route_cfg(void);
 extern int groove_fm_copy(unsigned track, uint8_t patch[156], void *controls);
@@ -62,10 +78,14 @@ extern int sim_midi_from(unsigned, unsigned);
 extern void sim_midi_capture(unsigned);
 extern unsigned sim_midi_output(void);
 extern int groove_fm_library_read(unsigned bank, uint8_t vmem[4096]);
+extern int groove_project_export(uint8_t *bytes, unsigned capacity);
+extern int groove_project_valid(const void *project);
 extern void groove_fm_program(uint8_t patch[156], unsigned program);
 extern uint32_t groove_crc32(uint32_t crc, const void *data, unsigned bytes);
 
 static const char *outdir = ".";
+enum { SIM_FLASH_BYTES = 536576 }; /* GROOVE_FLASH_BYTES */
+static uLong flash_mark_crc;
 static unsigned long long sim_ms_total;
 
 static void run_ms(unsigned ms)
@@ -175,6 +195,36 @@ static int wb_query(unsigned cmd, const uint8_t *payload, unsigned n)
     return -1;
 }
 
+/* Serve the real workbench page code (page-flow.mjs): one hex line in, one "R <hex>" line out. */
+static void wb_serve(void)
+{
+    char line[2048];
+    while (fgets(line, sizeof line, stdin)) {
+        uint8_t f[1024];
+        unsigned at = 0;
+        for (const char *p = line; p[0] && p[1] && p[0] != '\n' && at < sizeof f; p += 2) {
+            unsigned v;
+            if (sscanf(p, "%2x", &v) != 1) break;
+            f[at++] = (uint8_t)v;
+        }
+        if (!at) break;
+        sim_midi_capture(1);
+        memcpy(sim_file(), f, at);
+        int refused = sim_midi_from(1, at);
+        unsigned out = 0;
+        for (int tries = 0; !refused && !out && tries < 50; ++tries) {
+            run_ms(20);
+            while ((out = sim_midi_output()) != 0 && sim_file()[0] != 0xf0) { /* skip anything that is not a SysEx reply */ }
+        }
+        if (refused || !(out & 255U)) { printf("R none\n"); fflush(stdout); continue; }
+        const uint8_t *r = sim_file();
+        printf("R ");
+        for (unsigned i = 0; i < (out & 255U); ++i) printf("%02x", r[i]);
+        printf("\n");
+        fflush(stdout);
+    }
+}
+
 /* Workbench upload: begin write (kind 1 voice, 2 timbre, 4 library group), 64-byte chunks, CRC, and the close
  * the workbench always sends. */
 static int wb_upload(unsigned kind, unsigned target, const uint8_t *raw, unsigned size, int corrupt_crc)
@@ -282,7 +332,52 @@ int main(int argc, char **argv)
         char *p = strtok(line, " \t\r\n");
         if (!p || p[0] == '#') continue;
         char *a = strtok(NULL, " \t\r\n"), *b = strtok(NULL, " \t\r\n");
-        if (!strcmp(p, "boot")) { unsigned flags = 0; for (char *t = a; t; t = (t == a ? b : NULL)) { if (!strcmp(t, "clear")) flags |= 1U; if (!strcmp(t, "logo")) flags |= 2U; } sim_boot(flags); run_ms(100); }
+        if (!strcmp(p, "boot")) {
+            unsigned flags = 0, safe = 0;
+            for (char *t = a; t; t = (t == a ? b : NULL)) { if (!strcmp(t, "clear")) flags |= 1U; if (!strcmp(t, "logo")) flags |= 2U; if (!strcmp(t, "safe")) safe = 1U; }
+            sim_safe_boot(safe); sim_boot(flags); run_ms(100);
+        }
+        else if (!strcmp(p, "flash_mark")) flash_mark_crc = crc32(0, sim_flash(), SIM_FLASH_BYTES);
+        else if (!strcmp(p, "expect_flash_same")) {
+            uLong now = crc32(0, sim_flash(), SIM_FLASH_BYTES);
+            if (now != flash_mark_crc) { fprintf(stderr, "expect_flash_same: flash changed (crc %08lx, was %08lx)\n", (unsigned long)now, (unsigned long)flash_mark_crc); ++errors; }
+        }
+        else if (!strcmp(p, "expect_up") && a) {
+            unsigned want = (unsigned)strtoul(a, NULL, 16), got = dx_engines_up();
+            if (want != got) { fprintf(stderr, "expect_up: wanted %x, got %x\n", want, got); ++errors; }
+        }
+        else if (!strcmp(p, "expect_silent_sysex")) {
+            if (wb_query(22, NULL, 0) != -1) { fprintf(stderr, "expect_silent_sysex: the unit answered\n"); ++errors; }
+        }
+        else if (!strcmp(p, "wbserve")) wb_serve();
+        else if (!strcmp(p, "expect_project_export_valid")) {
+            static uint8_t buf[4264] __attribute__((aligned(8)));
+            for (unsigned size = 4064; size <= 4264; size += 200) {
+                memset(buf, 0xaa, sizeof buf);
+                if (groove_project_export(buf, size)) { fprintf(stderr, "expect_project_export_valid: export of %u bytes refused\n", size); ++errors; continue; }
+                if (!groove_project_valid(buf)) { fprintf(stderr, "expect_project_export_valid: the engine rejects the %u byte export\n", size); ++errors; }
+                if (buf[3852] != 4) { fprintf(stderr, "expect_project_export_valid: version byte %u, the page wants 4\n", buf[3852]); ++errors; }
+                if (size == 4264) {
+                    const uint8_t *b = buf + 4064;
+                    uint32_t magic, crc;
+                    memcpy(&magic, b, 4); memcpy(&crc, b + 196, 4);
+                    int low = 1;
+                    for (unsigned i = 4; i < 196; ++i) low &= b[i] < 128;
+                    if (magic != 0x54314d46U || crc != ~groove_crc32(~0U, b, 196) || !low) { fprintf(stderr, "expect_project_export_valid: the tuning block fails the page's check\n"); ++errors; }
+                }
+            }
+        }
+        else if (!strcmp(p, "expect_timbre_refused") && a && b) {
+            uint8_t t[223];
+            memset(t, 0, sizeof t);
+            t[0] = (uint8_t)atoi(b);
+            int r = wb_upload(2, (unsigned)atoi(a), t, sizeof t, 0);
+            if (!r) { fprintf(stderr, "expect_timbre_refused: a timbre of source %s was accepted\n", b); ++errors; }
+            int q = wb_query(0, NULL, 0);
+            int bad = q != 0 || wb_data_len < 15;
+            for (unsigned i = 0; !bad && i < 8; ++i) bad |= wb_data[7 + i] != 0;
+            if (bad || dx_engines_up() != 0xffU) { fprintf(stderr, "expect_timbre_refused: a track no longer reports the DX7 source (or an engine went down)\n"); ++errors; }
+        }
         else if (!strcmp(p, "wipe")) { memset(sim_flash() + 65536, 0xff, 4096U * 34U); }
         else if (!strcmp(p, "run") && a) run_ms((unsigned)atoi(a));
         else if ((!strcmp(p, "tap") || !strcmp(p, "press") || !strcmp(p, "release")) && a && b) {

@@ -57,7 +57,7 @@ static void begin_name(void)
 static void begin_save(void)
 {
     go(S_SCENES);
-    if (dx_storage_state() == 1) ui.mode = M_CLAIM; else begin_name(); /* a fresh 16-byte read: the bank may have changed since boot */
+    if (dx_storage_state() == 1) ui.mode = M_CLAIM; else begin_name(); /* a fresh read of the store: the bank may have changed since boot */
 }
 static void scene_overlay_button(unsigned pressed)
 {

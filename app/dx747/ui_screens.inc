@@ -24,6 +24,13 @@ static void draw_head(void)
     char *o = put_s(tb, "VOICES ");
     o = put_u(o, fr.voices); *o++ = '/'; put_u(o, fr.cfg.pool);
     px_text_r(236, 2, tb, 1, C_DIM);
+    if (fr.cfg.up != 0xffU) { /* the boot recipe could not start every engine (memory): say so on every screen */
+        unsigned n = 0;
+        for (unsigned e = 0; e < DX_ENGINES; ++e) n += (fr.cfg.up >> e) & 1U;
+        o = put_s(tb, "ENGINES ");
+        o = put_u(o, n); put_s(o, "/8 UP");
+        px_text_r(236, 14, tb, 1, C_AM);
+    }
     unsigned pool = fr.cfg.pool ? fr.cfg.pool : 1U, used = (fr.voices * 20U + pool - 1U) / pool;
     for (unsigned i = 0; i < 20; ++i)
         px_rect(157 + (int)i * 4, 12, 3, 9, i < used ? (fr.voices * 100U >= pool * 85U ? C_AM : C_GR) : RGB(0x2C, 0x2C, 0x2C));
@@ -101,6 +108,21 @@ static void draw_boot(void)
     px_text(107, 148, "747", 5, C_AC);
     px_text_c(120, 194, "8-PART MULTITIMBRAL DX7 MODULE", 1, C_DIM);
     px_text_c(120, 218, "DX747 PREVIEW", 1, C_LN);
+}
+
+/* ---- safe boot: the only screen while dx_safe_boot() is on ----------------- */
+
+static void draw_safe(void)
+{
+    px_text_c(120, 40, "SAFE BOOT", 3, C_AM);
+    px_rect(20, 74, 200, 1, C_LN);
+    px_text_c(120, 90, "DX747 STARTED WITHOUT ITS ENGINES,", 1, C_TX);
+    px_text_c(120, 104, "SCENES, SETTINGS AND RADIO SETUP.", 1, C_TX);
+    px_text_c(120, 126, "NOTHING IS LOADED OR SAVED.", 1, C_DIM);
+    px_text_c(120, 150, "USB MIDI AND THE FIRMWARE UPDATE", 1, C_DIM);
+    px_text_c(120, 164, "PAGE STILL WORK.", 1, C_DIM);
+    px_text_c(120, 196, "POWER OFF, RELEASE ENV + LFO,", 1, C_AC);
+    px_text_c(120, 210, "POWER ON FOR A NORMAL START.", 1, C_AC);
 }
 
 /* ---- setup: the brief overview, one row per channel ---------------------- */
@@ -564,9 +586,10 @@ static void draw_scenes(void)
     } else if (ui.mode == M_CLAIM) {
         px_rect(10, 78, 220, 84, C_BLACK); px_frame(10, 78, 220, 84, C_AM);
         px_text(18, 84, "FIRST SAVE: FLASH SETUP", 1, C_AM);
-        px_text(18, 100, "SCENES NEED THE FLASH THAT HOLDS", 1, C_TX);
-        px_text(18, 111, "THE STOCK SAMPLE BANK. IT WILL BE", 1, C_TX);
-        px_text(18, 122, "ERASED. DX747 CANNOT BACK IT UP.", 1, C_TX);
+        px_text(18, 100, "SCENES NEED FLASH THAT HOLDS STOCK", 1, C_TX);
+        px_text(18, 111, "DATA (SAMPLE BANK OR UNSAVED STOCK", 1, C_TX);
+        px_text(18, 122, "SAVE). IT WILL BE ERASED.", 1, C_TX);
+        px_text(18, 132, "DX747 CANNOT BACK IT UP.", 1, C_TX);
         px_text(18, 142, "SAVE = ERASE AND CONTINUE", 1, C_AM);
         px_text(18, 152, "HOME = CANCEL", 1, C_DIM);
     }
@@ -625,6 +648,7 @@ static void draw_screen(void)
     case S_FX: draw_fx(); break;
     case S_MASTER: draw_master(); break;
     case S_SCENES: draw_scenes(); break;
+    case S_SAFE: draw_safe(); break;
     default: draw_sys(); break;
     }
 }

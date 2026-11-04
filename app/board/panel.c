@@ -10,21 +10,38 @@
 static uint8_t controls_started;
 uint8_t fm1_io_trs_midi_enabled(void) { return 1U; }
 
-/* Power-on recovery chord: OCT- (button 0) and OCT+ (button 1) held together.
- * It calls fm1_device_recovery(), an undocumented stub into the ROM USB
- * updater. Its behaviour (does it return? what state is it entered from?) has
- * not been verified on hardware. Checked once, after the first scans of
- * fm1_controls_init(); it never writes flash. */
+/* Power-on chords. Both are decided once, by the first fm1_controls_init(). The engine reaches that from
+ * groove_screen_init, the last hook of fm1_app_init, so it is before the LCD, before any DX747 poll and before
+ * the engine starts USB MIDI and the update module (fm1_io_start, fm1_update_init). A chord has to be held
+ * on consecutive scan frames; the first mismatch ends the wait, so a normal power-on costs nothing extra. The
+ * wait is a busy loop in the Control task and the watchdog timeout is not known (the sealed library feeds it
+ * from vPortYield, the idle task and its flash erase loops), so the waits are short; the LCD init that follows
+ * already busy-waits 0.22 s.
+ *
+ *   SAFE BOOT  ENV + LFO (buttons 4 and 5; DX747 gives them no function), and any other buttons may be
+ *              down too. DX747 then skips every optional start-up step (see dx747/boot.inc). It writes
+ *              nothing, so a chord that is seen by mistake at every boot costs a "SAFE BOOT" screen
+ *              and nothing else: USB MIDI and the firmware update page keep working.
+ *   ROM UPDATE OCT- + OCT+ and no other button or note key, held for about 0.4 s. Calls fm1_device_recovery(),
+ *              which in the sealed library is platform_enter_mask_usb_update(), the routine behind the
+ *              SysEx F0 22 24 35 7D F7: mask interrupts, copy "usb_update_mode" to the SRAM update
+ *              mailbox (UPDATA_BEG, 0x1c7fd80), set a P33 bit and spin until the reset. It never
+ *              returns and writes no flash. What the boot loader does then is unverified. Safe boot
+ *              wins when both are down. */
+#define FM1_BUTTON_MASK 0x3fffU
+#define FM1_SAFE_CHORD ((1U << 4) | (1U << 5))
 #define FM1_RECOVERY_CHORD 0x3U
-static int recovery_chord_held(uint32_t buttons)
-{
-    return (buttons & FM1_RECOVERY_CHORD) == FM1_RECOVERY_CHORD;
-}
+enum { FM1_SAFE_FRAMES = 64, FM1_RECOVERY_FRAMES = 364 }; /* about 70 ms and 0.4 s of scan frames, busy in the Control task */
 
-static void check_recovery_chord(void)
+static uint8_t safe_boot;
+unsigned fm1_panel_safe_boot(void) { return safe_boot; }
+
+static void check_boot_chords(void)
 {
-    /* Debounced state is valid after two scans. With no scan progress, do not guess. */
-    if (fm1_input_settle() && recovery_chord_held(fm1_in.buttons)) fm1_device_recovery();
+    /* Debounced state is valid after the settle wait. With no scan progress, do not guess. */
+    if (!fm1_input_settle()) return;
+    if (fm1_input_held(FM1_SAFE_CHORD, FM1_SAFE_CHORD, 0U, FM1_SAFE_FRAMES)) { safe_boot = 1U; return; }
+    if (fm1_input_held(FM1_BUTTON_MASK, FM1_RECOVERY_CHORD, ~0U, FM1_RECOVERY_FRAMES)) fm1_device_recovery();
 }
 
 void fm1_controls_init(void)
@@ -39,7 +56,7 @@ void fm1_controls_init(void)
         fm1_input_init();
         fm1_device_start(fm1_input_tick);
         controls_started = 1U;
-        check_recovery_chord();
+        check_boot_chords();
     }
 }
 

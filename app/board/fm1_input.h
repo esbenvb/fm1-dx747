@@ -188,6 +188,25 @@ static int fm1_input_settle(void)
     }
     return 0;
 }
+/* After fm1_input_settle(): 1 when (buttons & mask) == want and (note keys & notes_mask) == 0 at the first
+ * sample and again on each of the next `frames` scan frames (the debounced state is sampled once per frame,
+ * about 1.1 ms apart). Any other state, or no frame change within FM1_SETTLE_SPIN passes, gives 0, so a dead
+ * scan cannot hang boot and a chord that is not held the whole time is not a chord. A stuck row of the key
+ * matrix reads as buttons and note keys together, which a chord that wants no note keys rejects. */
+static int fm1_input_held(uint32_t mask,uint32_t want,uint32_t notes_mask,unsigned frames)
+{
+    unsigned last=fm1_in.frame;
+    for(;;) {
+        if((fm1_in.buttons&mask)!=want||(fm1_in.notes&notes_mask)) return 0;
+        if(!frames--) return 1;
+        unsigned spin=FM1_SETTLE_SPIN;
+        while(fm1_in.frame==last) {
+            FM1_SETTLE_POLL();
+            if(!--spin) return 0;
+        }
+        last=fm1_in.frame;
+    }
+}
 /* Rebuild one LED's latch bits for every frame phase from its effective level. */
 static void fm1_led_apply(unsigned key)
 {

@@ -71,8 +71,9 @@ struct dx_port {
 
 /* Flash. index 0..63. All return 0 or a negative error; reads of an unused
  * scene return DX_SCENE_EMPTY. dx_scene_write and dx_scene_clear return
- * DX_SCENE_NEEDS_CLAIM until the user has agreed to give up the stock sample
- * bank that occupies the same flash (dx_scene_claim). */
+ * DX_SCENE_NEEDS_CLAIM until the user has agreed to give up what stands in the
+ * way (dx_scene_claim): the stock sample bank or other foreign data in the store
+ * flash, or an unfinished stock save in the staging sector. */
 int dx_scene_store_state(void);       /* 0 usable, 1 holds foreign data (needs claim), <0 error */
 int dx_scene_claim(void);
 int dx_scene_recover(void);           /* called with the rest of the staging recovery */

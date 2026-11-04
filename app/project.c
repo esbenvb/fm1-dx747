@@ -66,7 +66,7 @@ uint32_t groove_crc32(uint32_t crc, const void *data, unsigned bytes) { return d
 static struct dx_settings settings = {0, 0, 3, 0, 0, 0, 0};
 static struct dx_live live;
 static struct dx_boot booted;
-static unsigned stage, radio_pending, settings_dirty, current_scene = DX_NO_SCENE;
+static unsigned stage, radio_pending, settings_dirty, settings_failures, current_scene = DX_NO_SCENE, safe_boot;
 static uint32_t settings_changed;
 static int settings_result, storage_state;
 static char project_name[12] = {'D', 'X', '7', '4', '7', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
@@ -82,6 +82,7 @@ int groove_storage_prepare(void) { return recover_staging(); }
 static void settings_mark(void)
 {
     settings_dirty = 1;
+    settings_failures = 0;
     settings_changed = fm1_millis();
     settings_result = 0;
 }
@@ -89,6 +90,8 @@ static void settings_mark(void)
 /* ---- what the screens use ---------------------------------------------- */
 
 unsigned dx_engines_up(void) { return booted.up; }
+unsigned dx_safe_boot(void) { return safe_boot; }
+void dx_safe_boot_enter(void) { safe_boot = 1; }
 struct dx_live *dx_live_edit(void) { return &live; }
 unsigned dx_scene_current(void) { return current_scene; }
 void dx_settings_get(struct dx_settings *out) { *out = settings; }
@@ -179,13 +182,14 @@ void groove_project_init(void)
     live.filter_hz = 1000;
     memset(&booted, 0, sizeof booted);
     settings = (struct dx_settings){0, 0, 3, 0, 0, 0, 0};
-    stage = 0; radio_pending = 0; settings_dirty = 0; settings_result = 0; storage_state = 0;
+    stage = 0; radio_pending = 0; settings_dirty = 0; settings_failures = 0; settings_result = 0; storage_state = 0; safe_boot = 0;
     current_scene = DX_NO_SCENE; project_revision = 0;
 }
 
 void groove_project_poll(void)
 {
     keep_references();
+    if (safe_boot) return; /* the engine calls this every tick and ignores what it does; stage stays 0 */
     if (stage >= 3 && (dx_ctl_poll(&ctl, dx_route_mailbox(), dx_route_cfg(), &live, fm1_millis()) & DX_CTL_FILTER)) dx_apply_filter();
     if (stage == 0) {
         dx_boot_engines(&booted);
@@ -212,7 +216,10 @@ void groove_project_poll(void)
     }
     if (stage == 2) {
         storage_state = dx_scene_store_state();
-        if (!storage_state) {
+        if (storage_state == FM1_FLASH_BUSY) return; /* try again on the next poll */
+        /* Reading is CRC-gated and writes nothing, so scenes that are already there show up and recall even
+         * while the store still has foreign data in it (state 1): the claim only matters for writing. */
+        if (storage_state >= 0) {
             (void)dx_scene_scan();
             if ((settings.flags & 1) && settings.last_scene < DX_SCENES) (void)dx_scene_recall(settings.last_scene);
             settings_dirty = 0; /* recalling at boot is not a change worth a flash write */
@@ -234,7 +241,8 @@ void groove_project_poll(void)
         if (r == DX_SCENE_NEEDS_CLAIM) { storage_state = 1; settings_dirty = 0; } /* the screens ask the user, then dx_storage_claim */
         else {
             settings_result = r;
-            if (!r) settings_dirty = 0; else settings_changed = fm1_millis();
+            /* A failing write erased the shared staging sector on the way: three tries, then wait for the next change. */
+            if (!r || ++settings_failures >= 3) settings_dirty = 0; else settings_changed = fm1_millis();
         }
     }
 }
@@ -264,11 +272,45 @@ void groove_project_rename(unsigned character, char value)
 {
     if (character < 12 && value >= 32 && value <= 126) project_name[character] = value;
 }
-int groove_project_info(unsigned slot, char name[13]) { (void)slot; (void)name; return GROOVE_PROJECT_EMPTY; }
+/* Every slot is empty. The workbench page reads the name of all sixteen before it unlocks its voice-bank controls, so
+ * the name has to be defined (twelve spaces) rather than whatever the caller's stack held. */
+int groove_project_info(unsigned slot, char name[13])
+{
+    (void)slot;
+    memset(name, ' ', 12);
+    name[12] = 0;
+    return GROOVE_PROJECT_EMPTY;
+}
 int groove_project_save_slot(unsigned slot) { (void)slot; return GROOVE_PROJECT_EMPTY; }
 int groove_project_load_slot(unsigned slot) { (void)slot; return GROOVE_PROJECT_EMPTY; }
 int groove_project_import(const uint8_t *bytes, unsigned length) { (void)bytes; (void)length; return GROOVE_PROJECT_INVALID; }
-int groove_project_export(uint8_t *bytes, unsigned capacity) { (void)bytes; (void)capacity; return GROOVE_PROJECT_INVALID; }
+/* DX747 has no project, but the workbench page asks for the working project (size 4064, or 4264 with the tuning
+ * block) before it enables the bank read, import and voice controls, and it checks the file's format: version byte
+ * 4 at 3852, the project name at 3836, and for the tuned size the "FM1T" block with a CRC-32 over its first 196
+ * bytes and bytes 4..195 below 128 (sdk/WebUpdate.js projectVersion, sdk/Update.html.in refreshLibrary). Refusing
+ * it, as the first version of this stand-in did, kept the whole tab locked. So hand out a valid, empty project
+ * (tempo 120 and the default sequence options, whose version byte is the 4 at 3852). */
+int groove_project_export(uint8_t *bytes, unsigned capacity)
+{
+    if (!bytes || (capacity != GROOVE_PROJECT_BYTES && capacity != GROOVE_PROJECT_TUNED_BYTES)) return GROOVE_PROJECT_INVALID;
+    memset(bytes, 0, capacity);
+    /* Fields set through offsets, because the caller's buffer is not necessarily aligned for the struct. The
+     * firmware's own validator (groove_project_valid) accepts this: a stock or Open firmware can restore it. */
+    const uint16_t tempo = 120;
+    struct groove_sequence_options sequence;
+    groove_sequence_defaults(&sequence);
+    memcpy(bytes + offsetof(struct groove_project, tempo), &tempo, sizeof tempo);
+    memcpy(bytes + offsetof(struct groove_project, sequence), &sequence, sizeof sequence);
+    memcpy(bytes + offsetof(struct groove_project, name), project_name, 12);
+    if (capacity == GROOVE_PROJECT_TUNED_BYTES) {
+        uint8_t *block = bytes + GROOVE_PROJECT_BYTES;
+        const uint32_t magic = 0x54314d46U; /* "FM1T" */
+        memcpy(block, &magic, 4);
+        const uint32_t crc = ~dx_crc32(~0U, block, 196);
+        memcpy(block + 196, &crc, 4);
+    }
+    return 0;
+}
 int groove_factory_load(unsigned index) { (void)index; return GROOVE_PROJECT_INVALID; }
 void groove_settings_clock(unsigned mode) { (void)mode; }
 void groove_settings_midi(unsigned track, unsigned parameter, int delta) { (void)track; (void)parameter; (void)delta; }

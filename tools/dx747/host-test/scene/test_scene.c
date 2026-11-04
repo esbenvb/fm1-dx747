@@ -258,13 +258,21 @@ static void test_claim_and_foreign_data(void)
     CHECK(!memcmp(beyond, flash + DX_STORE_BASE + 33U * SECTOR, SECTOR)); /* sample sectors beyond the store survive */
     CHECK(tail_intact() && violations == 0 && pauses == resumes);
 
-    /* Garbage in a single sector deeper in the store blocks only that sector until claimed. */
+    /* Garbage in a single sector deeper in the store makes the whole store read as foreign: nothing
+     * is written, not even to the sectors that are fine, until the user agrees to the claim. */
     fresh_flash();
     flash[DX_STORE_BASE + 7U * SECTOR + 3] = 0x12; /* sector 7 is not erased and not ours */
-    CHECK(dx_scene_store_state() == 0);
-    CHECK(dx_scene_write(0, &s) == 0);
-    CHECK(dx_scene_write(14, &s) == DX_SCENE_NEEDS_CLAIM && dx_scene_write(15, &s) == DX_SCENE_NEEDS_CLAIM);
-    CHECK(dx_scene_claim() == 0 && dx_scene_write(14, &s) == 0);
+    CHECK(dx_scene_store_state() == 1);
+    CHECK(dx_scene_write(0, &s) == DX_SCENE_NEEDS_CLAIM && dx_scene_write(14, &s) == DX_SCENE_NEEDS_CLAIM && op_count == 0);
+    CHECK(dx_scene_claim() == 0 && dx_scene_store_state() == 0 && dx_scene_write(14, &s) == 0);
+    /* The settings sector at the far end counts too, even when sector 0 is clean. */
+    fresh_flash();
+    flash[DX_STORE_BASE + 32U * SECTOR + 100] = 0x34;
+    CHECK(dx_scene_store_state() == 1 && dx_scene_write(0, &s) == DX_SCENE_NEEDS_CLAIM);
+    /* A sector whose first 16 bytes happen to be erased but whose data is not is not blank. */
+    fresh_flash();
+    flash[DX_STORE_BASE + 9U * SECTOR + 200] = 0x56;
+    CHECK(dx_scene_store_state() == 1);
 }
 
 static void test_coexistence_with_other_staging_users(void)
@@ -496,6 +504,247 @@ static void test_torn_sector_reads_as_empty(void)
     CHECK(dx_scene_write(1, &t) == 0 && dx_scene_read(1, &r) == 0 && same(&t, &r)); /* the sector is rebuilt */
 }
 
+/* A power cut in the middle of our own write leaves the destination torn while the committed copy
+ * waits in staging. That is not someone else's data: no claim prompt, nothing refused, nothing lost. */
+static void test_torn_destination_is_ours(void)
+{
+    static const unsigned indexes[3] = {0, 62, 31}; /* sector 0, sector 31, and (via settings) sector 32 below */
+    for (unsigned v = 0; v < 4; ++v) {
+        fresh_flash();
+        struct dx_scene a, b, c, x; make_scene(&a, 11, "OLD"); make_scene(&b, 12, "NEW"); make_scene(&c, 13, "AFTER");
+        struct dx_settings sa, sb;
+        memset(&sa, 0, sizeof sa); sa.backlight = 3; sa.kbd_ch = 1; sb = sa; sb.backlight = 6;
+        unsigned index = v < 3 ? indexes[v] : 0;
+        if (v < 3) CHECK(dx_scene_write(index, &a) == 0); else CHECK(dx_settings_write(&sa) == 0);
+        memcpy(snapshot, flash, sizeof flash);
+        op_count = 0;
+        CHECK((v < 3 ? dx_scene_write(index, &b) : dx_settings_write(&sb)) == 0);
+        unsigned total = op_count, torn_cases = 0;
+        for (unsigned cut = 1; cut <= total; ++cut) for (unsigned mode = 0; mode < 4; ++mode) {
+            memcpy(flash, snapshot, sizeof flash);
+            op_count = 0; dead = 0; violations = 0; pause_depth = 0; cut_at = cut; tear_mode = mode;
+            CHECK((v < 3 ? dx_scene_write(index, &b) : dx_settings_write(&sb)) != 0);
+            dead = 0; op_count = 0; cut_at = 0;
+            memset(&dx_catalog, 0, sizeof dx_catalog);
+            uint32_t m; memcpy(&m, flash + dx_sector_addr(v < 3 ? index / 2 : DX_SETTINGS_SECTOR), 4);
+            torn_cases += m != DX_SEC_MAGIC && m != 0xffffffffU;
+            CHECK(dx_scene_store_state() == 0);            /* straight after the cut, before any recovery */
+            if (v < 3) { CHECK(dx_scene_scan() == 0); CHECK(dx_scene_read(index, &x) == 0 && (same(&x, &a) || same(&x, &b))); }
+            else { struct dx_settings g; CHECK(dx_settings_read(&g) == 0 && (!memcmp(&g, &sa, sizeof g) || !memcmp(&g, &sb, sizeof g))); }
+            CHECK((v < 3 ? dx_scene_write(index, &c) : dx_settings_write(&sa)) == 0);   /* the next write needs no claim */
+            if (v < 3) CHECK(dx_scene_read(index, &x) == 0 && same(&x, &c));
+            CHECK(dx_scene_store_state() == 0 && tail_intact() && violations == 0);
+        }
+        CHECK(torn_cases > 0); /* the cuts really did leave a torn destination */
+    }
+}
+
+/* The stock firmware's project and settings records are staged in the same sector. An unfinished one
+ * is the only complete copy: it is never erased without the user's agreement. */
+static void put_stock_record(uint32_t magic, uint32_t generation, uint32_t target, uint32_t crc, uint32_t commit)
+{
+    uint32_t rec[5] = {magic, generation, target, crc, commit};
+    memset(flash + DX_STAGE, 0xff, SECTOR);
+    memcpy(flash + DX_STAGE, rec, sizeof rec);
+    for (unsigned i = 20; i < 400; ++i) flash[DX_STAGE + i] = (uint8_t)(i * 5U + 3U);
+}
+static void put_stock_dest(uint32_t magic, uint32_t generation, uint32_t target, uint32_t crc, uint32_t commit)
+{
+    uint32_t rec[5] = {magic, generation, target, crc, commit};
+    memset(flash + target * SECTOR, 0xff, SECTOR);
+    memcpy(flash + target * SECTOR, rec, sizeof rec);
+}
+static int staging_blank(void) { for (unsigned i = 0; i < SECTOR; ++i) if (flash[DX_STAGE + i] != 0xff) return 0; return 1; }
+static void test_stranded_stock_save(void)
+{
+    struct dx_scene s, r; make_scene(&s, 5, "AFTER STOCK");
+    struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 4;
+    static uint8_t staged[SECTOR];
+    /* the target sector is erased: the staged record is the only copy */
+    for (unsigned variant = 0; variant < 5; ++variant) {
+        fresh_flash();
+        put_stock_record(0x36504d46U, 5, 3, 0x1234abcdU, 0);
+        switch (variant) {
+        case 1: put_stock_dest(0x36504d46U, 4, 3, 0x1111U, 0); break;          /* the target is older */
+        case 2: put_stock_dest(0x36504d46U, 5, 3, 0x9999U, 0); break;          /* same generation, different record */
+        case 3: put_stock_dest(0x36504d46U, 5, 3, 0x1234abcdU, 0xffffffffU); break; /* same record but not committed */
+        case 4: put_stock_record(0x35534d46U, 7, 15, 0x77U, 0); break;          /* an older settings record, target erased */
+        default: break;
+        }
+        memcpy(staged, flash + DX_STAGE, SECTOR);
+        CHECK(dx_scene_recover() == DX_SCENE_NEEDS_CLAIM && !memcmp(staged, flash + DX_STAGE, SECTOR));
+        CHECK(dx_scene_store_state() == 1);
+        op_count = 0;
+        CHECK(dx_scene_write(0, &s) == DX_SCENE_NEEDS_CLAIM && dx_settings_write(&st) == DX_SCENE_NEEDS_CLAIM);
+        CHECK(op_count == 0 && !memcmp(staged, flash + DX_STAGE, SECTOR));      /* nothing was erased or written */
+        CHECK(groove_storage_prepare() == DX_SCENE_NEEDS_CLAIM && !memcmp(staged, flash + DX_STAGE, SECTOR));
+        CHECK(dx_scene_claim() == 0 && staging_blank() && dx_scene_store_state() == 0);
+        CHECK(dx_scene_write(0, &s) == 0 && dx_scene_read(0, &r) == 0 && same(&s, &r) && tail_intact() && violations == 0);
+    }
+    /* not stranded: the target caught up (equal, or newer), the record was never committed, or it is junk */
+    for (unsigned variant = 0; variant < 6; ++variant) {
+        fresh_flash();
+        put_stock_record(0x36504d46U, 5, 3, 0x1234abcdU, 0);
+        switch (variant) {
+        case 0: put_stock_dest(0x36504d46U, 5, 3, 0x1234abcdU, 0); break;      /* equal: the usual leftover duplicate */
+        case 1: put_stock_dest(0x36504d46U, 6, 3, 0x4242U, 0); break;          /* newer */
+        case 2: put_stock_dest(0x35504d46U, 6, 3, 0x4242U, 0); break;          /* newer, older record format */
+        case 3: put_stock_record(0x36504d46U, 5, 3, 0x1234abcdU, 0xffffffffU); break; /* staged but never committed */
+        case 4: put_stock_record(0x36504d46U, 5, 40, 0x1234abcdU, 0); break;   /* target out of range */
+        default: put_stock_record(0x12345678U, 5, 3, 0x1234abcdU, 0); break;   /* not a stock record at all */
+        }
+        CHECK(dx_scene_recover() == 0);
+        CHECK(dx_scene_store_state() == 0);
+        CHECK(dx_scene_write(0, &s) == 0 && dx_scene_read(0, &r) == 0 && same(&s, &r));
+        CHECK(staging_blank() && tail_intact() && violations == 0);
+    }
+    /* a power cut while the user's claim erases staging and the store: asking again finishes it */
+    fresh_flash();
+    put_stock_record(0x36504d46U, 5, 3, 0x1234abcdU, 0);
+    { uint32_t sample_magic = 0x53314d46U; memcpy(flash + DX_STORE_BASE, &sample_magic, 4);
+      for (unsigned i = 16; i < 40U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U); } /* and a stock bank in the store */
+    memcpy(snapshot, flash, sizeof flash);
+    op_count = 0; CHECK(dx_scene_claim() == 0);
+    unsigned total = op_count;
+    CHECK(total == 34); /* staging, then the 33 foreign store sectors */
+    for (unsigned cut = 1; cut <= total; ++cut) for (unsigned mode = 0; mode < 4; ++mode) {
+        memcpy(flash, snapshot, sizeof flash);
+        op_count = 0; dead = 0; cut_at = cut; tear_mode = mode; pause_depth = 0;
+        CHECK(dx_scene_claim() != 0 && pause_depth == 0);
+        dead = 0; op_count = 0; cut_at = 0;
+        /* a cut inside the erase of staging itself may leave junk there; it is no stock record any more */
+        CHECK(dx_scene_claim() == 0 && (cut == 1 || staging_blank()) && dx_stock_stranded() == 0 && dx_scene_store_state() == 0);
+        CHECK(dx_scene_write(0, &s) == 0 && violations == 0 && tail_intact());
+    }
+}
+
+/* The claim erases what stands in the way and nothing else: scenes that are already there survive. */
+static void test_claim_is_surgical(void)
+{
+    struct dx_scene s[3], r; make_scene(&s[0], 41, "ZERO"); make_scene(&s[1], 42, "TWO"); make_scene(&s[2], 43, "SIXTY");
+    struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 5; st.kbd_ch = 3;
+    static uint8_t before[FLASH_BYTES];
+    /* an unfinished stock save in staging: the claim erases staging only */
+    fresh_flash();
+    CHECK(dx_scene_write(0, &s[0]) == 0 && dx_scene_write(5, &s[1]) == 0 && dx_scene_write(60, &s[2]) == 0 && dx_settings_write(&st) == 0);
+    put_stock_record(0x36504d46U, 5, 3, 0x1234abcdU, 0);
+    memcpy(before, flash, sizeof flash);
+    CHECK(dx_scene_store_state() == 1);
+    CHECK(dx_scene_scan() == 0 && dx_scene_read(5, &r) == 0 && same(&r, &s[1]));      /* what is there is still readable */
+    op_count = 0; CHECK(dx_scene_claim() == 0 && op_count == 1 && staging_blank());
+    CHECK(!memcmp(before + DX_STORE_BASE, flash + DX_STORE_BASE, 33U * SECTOR));        /* the store was not touched */
+    CHECK(dx_scene_store_state() == 0 && dx_scene_read(0, &r) == 0 && same(&r, &s[0]) && dx_scene_read(60, &r) == 0 && same(&r, &s[2]));
+    struct dx_settings g; CHECK(dx_settings_read(&g) == 0 && !memcmp(&g, &st, sizeof g));
+    /* one foreign sector among our scenes: only that sector is erased */
+    fresh_flash();
+    CHECK(dx_scene_write(0, &s[0]) == 0 && dx_scene_write(30, &s[1]) == 0 && dx_scene_write(60, &s[2]) == 0 && dx_settings_write(&st) == 0);
+    flash[DX_STORE_BASE + 20U * SECTOR + 100] = 0x5a;                                  /* sector 20: not ours */
+    memcpy(before, flash, sizeof flash);
+    CHECK(dx_scene_store_state() == 1);
+    op_count = 0; CHECK(dx_scene_claim() == 0 && op_count == 1);
+    for (unsigned i = 0; i < 33; ++i)
+        CHECK(i == 20 ? flash[DX_STORE_BASE + i * SECTOR + 100] == 0xff
+                      : !memcmp(before + DX_STORE_BASE + i * SECTOR, flash + DX_STORE_BASE + i * SECTOR, SECTOR));
+    CHECK(dx_scene_store_state() == 0 && dx_scene_scan() == 0);
+    CHECK(dx_scene_read(0, &r) == 0 && same(&r, &s[0]) && dx_scene_read(30, &r) == 0 && same(&r, &s[1]) && dx_scene_read(60, &r) == 0 && same(&r, &s[2]));
+    CHECK(dx_settings_read(&g) == 0 && !memcmp(&g, &st, sizeof g) && tail_intact() && violations == 0);
+}
+
+/* A stock bank that fits in sector 0 and a stale image of ours for that sector: the bank stays, no phantom scene
+ * is listed, nothing is written until the user agrees, and the claim clears sector 0 and staging only. */
+static void test_stale_image_over_small_bank(void)
+{
+    for (unsigned variant = 0; variant < 2; ++variant) {
+        fresh_flash();
+        struct dx_scene a, b, x; make_scene(&a, 51, "KEPT"); make_scene(&b, 52, "STALE"); struct dx_scene other; make_scene(&other, 53, "OTHER");
+        CHECK(dx_scene_write(0, &a) == 0 && dx_scene_write(10, &other) == 0);     /* sector 0 and sector 5 */
+        memcpy(snapshot, flash, sizeof flash);
+        int found = 0;
+        for (unsigned cut = 3; cut <= 5 && !found; ++cut) {
+            memcpy(flash, snapshot, sizeof flash);
+            op_count = 0; dead = 0; cut_at = cut; tear_mode = 0;
+            CHECK(dx_scene_write(0, &b) != 0);
+            dead = 0; op_count = 0; cut_at = 0;
+            uint32_t m, c; memcpy(&m, flash + DX_STAGE, 4); memcpy(&c, flash + DX_STAGE + DX_SEC_COMMIT, 4);
+            found = m == DX_SEC_MAGIC && c == 0;
+        }
+        CHECK(found);
+        /* stock firmware uploads a 1.6 KB sample bank: only sector 0 is erased and rewritten */
+        memset(flash + DX_STORE_BASE, 0xff, SECTOR);
+        uint32_t sample_magic = 0x53314d46U; memcpy(flash + DX_STORE_BASE, &sample_magic, 4);
+        for (unsigned i = 16; i < 1652; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 11U + 3U);
+        static uint8_t bank[SECTOR]; memcpy(bank, flash + DX_STORE_BASE, SECTOR);
+        static uint8_t stale[SECTOR]; memcpy(stale, flash + DX_STAGE, SECTOR);
+        if (variant) for (unsigned i = 2000; i < 2100; ++i) flash[DX_STORE_BASE + i] = 0xff; /* the bank's tail erased too: still its header */
+        memcpy(bank, flash + DX_STORE_BASE, SECTOR);
+        CHECK(dx_scene_store_state() == 1);                                        /* no silent "ours" */
+        CHECK(dx_scene_scan() == 0 && dx_scene_read(0, &x) == DX_SCENE_EMPTY);     /* no phantom scene from the stale copy */
+        CHECK(dx_scene_read(10, &x) == 0 && same(&x, &other));                      /* the other scene is still there */
+        struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 2;
+        op_count = 0;
+        CHECK(dx_settings_write(&st) == DX_SCENE_NEEDS_CLAIM);
+        CHECK(!memcmp(bank, flash + DX_STORE_BASE, SECTOR));                        /* the bank survived every write attempt */
+        CHECK(groove_storage_prepare() == 0 && !memcmp(bank, flash + DX_STORE_BASE, SECTOR));
+        CHECK(dx_scene_claim() == 0 && staging_blank() && dx_scene_store_state() == 0);
+        CHECK(dx_scene_read(0, &x) == DX_SCENE_EMPTY && dx_scene_read(10, &x) == 0 && same(&x, &other));
+        CHECK(tail_intact() && violations == 0);
+        (void)stale;
+    }
+}
+
+/* A committed scene image of ours can sit in staging for good: after a power cut in the middle of a
+ * write, with stock firmware installed and used before DX747 comes back. It must never be written
+ * over the samples that stock firmware put in its sector. */
+static void test_stale_image_never_overwrites_foreign_data(void)
+{
+    for (unsigned stale_sector = 0; stale_sector < 3; ++stale_sector) {
+        fresh_flash();
+        struct dx_scene a, b, x; make_scene(&a, 21, "KEPT"); make_scene(&b, 22, "STALE");
+        unsigned index = stale_sector == 0 ? 0 : stale_sector == 1 ? 22 : 62;  /* sectors 0, 11 and 31 */
+        CHECK(dx_scene_write(index, &a) == 0);
+        memcpy(snapshot, flash, sizeof flash);
+        int found = 0;
+        for (unsigned cut = 3; cut <= 5 && !found; ++cut) {
+            memcpy(flash, snapshot, sizeof flash);
+            op_count = 0; dead = 0; cut_at = cut; tear_mode = 0;
+            CHECK(dx_scene_write(index, &b) != 0);
+            dead = 0; op_count = 0; cut_at = 0;
+            uint32_t m, c; memcpy(&m, flash + DX_STAGE, 4); memcpy(&c, flash + DX_STAGE + DX_SEC_COMMIT, 4);
+            found = m == DX_SEC_MAGIC && c == 0;
+        }
+        CHECK(found);
+        /* stock firmware ran: its sample bank now fills the store, the staged image was left alone */
+        for (unsigned i = 0; i < 33U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
+        static uint8_t bank[33U * SECTOR]; memcpy(bank, flash + DX_STORE_BASE, sizeof bank);
+        struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 2;
+        CHECK(dx_scene_store_state() == 1);
+        CHECK(dx_settings_write(&st) == DX_SCENE_NEEDS_CLAIM);       /* even a settings write runs recovery */
+        CHECK(!memcmp(bank, flash + DX_STORE_BASE, sizeof bank));    /* the samples were not touched */
+        CHECK(staging_blank());                                       /* the stale image was discarded */
+        CHECK(dx_scene_claim() == 0 && dx_scene_store_state() == 0);
+        CHECK(dx_scene_read(index, &x) == DX_SCENE_EMPTY);
+        CHECK(tail_intact() && violations == 0);
+    }
+    /* a stale image is also thrown away by the claim itself, when no write ran recovery first */
+    fresh_flash();
+    struct dx_scene a, b, x; make_scene(&a, 31, "KEPT"); make_scene(&b, 32, "STALE");
+    CHECK(dx_scene_write(10, &a) == 0);
+    memcpy(snapshot, flash, sizeof flash);
+    op_count = 0; dead = 0; cut_at = 4; tear_mode = 0;
+    CHECK(dx_scene_write(10, &b) != 0);
+    dead = 0; op_count = 0; cut_at = 0;
+    for (unsigned i = 0; i < 33U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 3U + 5U);
+    CHECK(dx_scene_claim() == 0 && staging_blank() && dx_scene_store_state() == 0);
+    CHECK(dx_scene_write(0, &a) == 0 && dx_scene_read(10, &x) == DX_SCENE_EMPTY && dx_scene_read(0, &x) == 0 && same(&x, &a));
+    /* a library record in staging is left for its own owner */
+    fresh_flash();
+    uint32_t foreign[8] = {FOREIGN_MAGIC, 1, 2, 3, 0, 0, 0, 0};
+    memset(flash + DX_STAGE, 0xff, SECTOR); memcpy(flash + DX_STAGE, foreign, sizeof foreign);
+    flash[DX_STORE_BASE + 5] = 0x11;
+    uint8_t before[64]; memcpy(before, flash + DX_STAGE, sizeof before);
+    CHECK(dx_scene_claim() == 0 && !memcmp(before, flash + DX_STAGE, sizeof before));
+}
+
 /* ---- capture and apply with a recording engine -------------------------- */
 static char trace[4096];
 static void tr(const char *fmt, int a, int b, int c)
@@ -591,6 +840,11 @@ int main(void)
     test_recover_power_cuts();
     test_memory_failure();
     test_torn_sector_reads_as_empty();
+    test_torn_destination_is_ours();
+    test_stranded_stock_save();
+    test_stale_image_never_overwrites_foreign_data();
+    test_claim_is_surgical();
+    test_stale_image_over_small_bank();
     test_capture_and_apply();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

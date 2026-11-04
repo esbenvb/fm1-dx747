@@ -53,6 +53,10 @@ void fm1_audio_stats_read(struct fm1_audio_stats *stats)
 }
 uint32_t fm1_millis(void) { return now_ms; }
 void fm1_controls_init(void) {}
+/* Safe boot is a power-on chord on the device (app/board/panel.c); here the harness asks for it before sim_boot. */
+static unsigned safe_boot_chord;
+unsigned fm1_panel_safe_boot(void) { return safe_boot_chord; }
+EXPORT("sim_safe_boot") void sim_safe_boot(unsigned on) { safe_boot_chord = on != 0; }
 void fm1_controls_read(struct fm1_controls *value)
 {
     *value = controls;

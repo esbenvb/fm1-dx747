@@ -1,5 +1,5 @@
 /* Host test for the DX747 panel LED brightness (app/board/fm1_input.h) and the
- * power-on recovery chord (app/board/panel.c).
+ * power-on chords, safe boot and the ROM update (app/board/panel.c).
  *
  * The real scan interrupt, LED latch and panel.c run against a model of the
  * hardware: mocked GPIO registers, the scan shift register (what the DMA'd word
@@ -29,7 +29,7 @@ static uint8_t contact[FM1_NCOL];            /* bit r: contact (column, row r) c
 static unsigned hw_col;                      /* column the scan shift register has selected */
 static unsigned scan_frame;                  /* completed 11-column scans */
 static unsigned total_ticks, release_at;     /* release_at: tick at which all contacts open */
-static unsigned recovery_calls;
+static unsigned recovery_calls, recovery_frame;
 static int timer_running = 1;
 
 struct tick_info {
@@ -123,10 +123,11 @@ static void host_reset_model(void)
     memset(contact, 0, sizeof contact);
     for (unsigned key = 0; key < FM1_NKEY; key++) model_own[key] = -1;
     model_idle = 0;
-    hw_col = scan_frame = total_ticks = release_at = recovery_calls = 0;
+    hw_col = scan_frame = total_ticks = release_at = recovery_calls = recovery_frame = 0;
     timer_running = 1;
     observer = NULL;
     controls_started = 0;
+    safe_boot = 0;
     fm1_led_idle_level(0); /* all LEDs back to the stock "off" */
     for (unsigned key = 0; key < FM1_NKEY; key++) fm1_led_set(key, 0);
 }
@@ -442,7 +443,7 @@ static void test_dma_stall(void)
     CHECK(scan_frame == saved_frame + 20, "scan did not resume after a stall");
 }
 
-/* ---- Recovery chord (panel.c) ------------------------------------------ */
+/* ---- Power-on chords (panel.c) ----------------------------------------- */
 
 void fm1_device_start(void (*scan)(void))
 {
@@ -452,66 +453,150 @@ void fm1_device_start(void (*scan)(void))
 uint32_t fm1_device_irq_save(void) { return 0; }
 void fm1_device_irq_restore(uint32_t state) { (void)state; }
 int fm1_device_adc(unsigned channel) { (void)channel; return 0; }
-void fm1_device_recovery(void) { ++recovery_calls; }
+void fm1_device_recovery(void) { ++recovery_calls; recovery_frame = scan_frame; }
 
-static unsigned chord_run(uint32_t buttons, int timer, unsigned release)
+#define BTN(n) (1u << (n))
+#define OCT_DOWN BTN(0)
+#define OCT_UP BTN(1)
+#define ENV BTN(4)
+#define LFO BTN(5)
+#define ALL_BUTTONS 0x3fffu
+
+/* Power on with these buttons down; contacts open at tick `release` (0 = never). */
+static void chord_run(uint32_t buttons, int timer, unsigned release)
 {
     host_reset_model();
     for (unsigned b = 0; b < 14; b++) if (buttons >> b & 1u) press_key(b);
     timer_running = timer;
     release_at = release;
     fm1_controls_init();
+}
+static unsigned safe_of(uint32_t buttons, unsigned release)
+{
+    chord_run(buttons, 1, release);
+    return fm1_panel_safe_boot();
+}
+static unsigned rom_of(uint32_t buttons, unsigned release)
+{
+    chord_run(buttons, 1, release);
     return recovery_calls;
 }
 
-static void test_recovery_chord(void)
+static unsigned flicker_period;
+static void flicker_obs(const struct tick_info *t)
 {
-    /* The decision itself, over every button pattern. */
-    for (uint32_t buttons = 0; buttons < 1u << 14; buttons++)
-        CHECK(recovery_chord_held(buttons) == ((buttons & 3u) == 3u), "chord decision for 0x%x", (unsigned)buttons);
+    if ((t->frame / flicker_period) & 1u) memset(contact, 0, sizeof contact);
+    else { press_key(4); press_key(5); press_key(0); press_key(1); }
+}
 
-    CHECK(chord_run(0, 1, 0) == 0, "recovery without any button");
-    CHECK(chord_run(1u << 0, 1, 0) == 0, "recovery with OCT- only");
-    CHECK(chord_run(1u << 1, 1, 0) == 0, "recovery with OCT+ only");
-    CHECK(chord_run(3u, 1, 0) == 1, "no recovery with OCT- and OCT+ held");
-    CHECK(chord_run(0x3fffu, 1, 0) == 1, "no recovery with every button held");
-    CHECK(chord_run(3u | 1u << 5 | 1u << 12, 1, 0) == 1, "no recovery with the chord plus other buttons");
-    CHECK(chord_run(0x3fffu & ~1u, 1, 0) == 0, "recovery without OCT-");
-    CHECK(chord_run(0x3fffu & ~2u, 1, 0) == 0, "recovery without OCT+");
+static void late_key_obs(const struct tick_info *t)
+{
+    if (t->frame == 100) press_key(20);
+}
+
+static void test_boot_chords(void)
+{
+    /* Nothing held: neither, and a normal power-on pays only the settle wait. */
+    chord_run(0, 1, 0);
+    CHECK(!fm1_panel_safe_boot() && !recovery_calls, "chord without any button");
+    CHECK(total_ticks < 100, "a power-on without a chord took %u scan ticks", total_ticks);
+    CHECK(controls_started == 1, "init did not finish");
+
+    /* Safe boot: ENV + LFO, any other buttons allowed. */
+    CHECK(safe_of(ENV | LFO, 0) == 1 && recovery_calls == 0, "safe boot with ENV + LFO");
+    CHECK(fm1_in.buttons == (ENV | LFO), "chord not debounced into the button state");
+    CHECK(safe_of(ENV, 0) == 0, "safe boot with ENV only");
+    CHECK(safe_of(LFO, 0) == 0, "safe boot with LFO only");
+    for (unsigned b = 0; b < 14; b++) {
+        if (b == 4 || b == 5) continue;
+        CHECK(safe_of(ENV | LFO | BTN(b), 0) == 1, "safe boot with ENV + LFO + button %u", b);
+        CHECK(safe_of(ENV | BTN(b), 0) == 0 && safe_of(LFO | BTN(b), 0) == 0, "safe boot from ENV or LFO plus button %u", b);
+    }
+    /* every other pair of buttons does nothing at all */
     for (unsigned a = 0; a < 14; a++)
-        for (unsigned b = a + 1; b < 14; b++)
-            if (!(a == 0 && b == 1)) CHECK(chord_run(1u << a | 1u << b, 1, 0) == 0, "recovery for buttons %u+%u", a, b);
+        for (unsigned b = a + 1; b < 14; b++) {
+            uint32_t pair = BTN(a) | BTN(b);
+            if (pair == (ENV | LFO) || pair == (OCT_DOWN | OCT_UP)) continue;
+            chord_run(pair, 1, 0);
+            CHECK(!fm1_panel_safe_boot() && recovery_calls == 0, "buttons %u+%u started something", a, b);
+        }
+
+    /* The ROM updater: OCT- + OCT+ and nothing else, held for about a second. */
+    CHECK(rom_of(OCT_DOWN | OCT_UP, 0) == 1 && !fm1_panel_safe_boot(), "ROM update with OCT- + OCT+");
+    CHECK(recovery_frame >= FM1_RECOVERY_FRAMES, "ROM update after only %u scan frames", recovery_frame);
+    CHECK(rom_of(OCT_DOWN, 0) == 0 && rom_of(OCT_UP, 0) == 0, "ROM update from one OCT button");
+    for (unsigned b = 2; b < 14; b++)
+        if (b != 4 && b != 5) CHECK(rom_of(OCT_DOWN | OCT_UP | BTN(b), 0) == 0, "ROM update with OCT- + OCT+ + button %u", b);
+    CHECK(rom_of(ALL_BUTTONS, 0) == 0 && fm1_panel_safe_boot() == 1, "all buttons: safe boot wins, no ROM update");
+    CHECK(rom_of(OCT_DOWN | OCT_UP | ENV | LFO, 0) == 0 && fm1_panel_safe_boot() == 1, "both chords: safe boot wins");
+    CHECK(rom_of(ALL_BUTTONS & ~OCT_DOWN, 0) == 0 && rom_of(ALL_BUTTONS & ~OCT_UP, 0) == 0, "ROM update without an OCT button");
+
+    /* The ROM chord wants no note key: a stuck row of the matrix reads as buttons and keys together. */
+    host_reset_model();
+    press_key(0); press_key(1); press_key(20);
+    fm1_controls_init();
+    CHECK(recovery_calls == 0, "ROM update with OCT- + OCT+ and a note key down");
+    for (unsigned row = 0; row < 8; row++) {
+        host_reset_model();
+        for (unsigned col = 0; col < FM1_NCOL; col++) contact[col] |= (uint8_t)(1u << row);
+        fm1_controls_init();
+        CHECK(recovery_calls == 0, "ROM update from a stuck row %u", row);
+    }
+    /* a note key pressed after the chord has begun ends it too */
+    host_reset_model();
+    press_key(0); press_key(1);
+    observer = late_key_obs;
+    fm1_controls_init();
+    CHECK(recovery_calls == 0, "ROM update although a key went down during the hold");
 
     /* Note keys never count. */
     host_reset_model();
     for (unsigned key = 14; key < FM1_NKEY; key++) press_key(key);
     fm1_controls_init();
-    CHECK(recovery_calls == 0, "recovery from note keys");
+    CHECK(recovery_calls == 0 && !fm1_panel_safe_boot(), "a chord from note keys");
 
     /* A dead scan timer: bounded wait, no guess, init completes. */
-    CHECK(chord_run(3u, 0, 0) == 0, "recovery without a running scan");
-    CHECK(controls_started == 1, "init did not finish without a scan");
+    chord_run(ENV | LFO, 0, 0);
+    CHECK(!fm1_panel_safe_boot() && recovery_calls == 0 && controls_started == 1, "chord without a running scan");
+    chord_run(OCT_DOWN | OCT_UP, 0, 0);
+    CHECK(!fm1_panel_safe_boot() && recovery_calls == 0 && controls_started == 1, "ROM update without a running scan");
 
-    /* Contact noise shorter than the debounce is not a chord. */
-    CHECK(chord_run(3u, 1, 12) == 0, "recovery from a one-scan glitch");
+    /* Contact noise and early release are not a chord: it has to last the whole window. */
+    CHECK(safe_of(ENV | LFO, 12) == 0, "safe boot from a one-frame glitch");
+    CHECK(safe_of(ENV | LFO, 11 * (FM1_SAFE_FRAMES - 8)) == 0, "safe boot released inside the window");
+    CHECK(safe_of(ENV | LFO, 11 * (FM1_SAFE_FRAMES + 12)) == 1, "safe boot held past the window");
+    CHECK(rom_of(OCT_DOWN | OCT_UP, 11 * 200) == 0, "ROM update released after 0.2 s");
+    CHECK(rom_of(OCT_DOWN | OCT_UP, 11 * (FM1_RECOVERY_FRAMES - 20)) == 0, "ROM update released just short of the window");
+    CHECK(rom_of(OCT_DOWN | OCT_UP, 11 * (FM1_RECOVERY_FRAMES + 40)) == 1, "ROM update held past the window");
+    /* A chord that flickers (down and up every `period` frames) is not held. The debounce keeps a released
+     * button "down" for 8 more scans, so periods up to about FM1_SAFE_FRAMES - 8 can never pass. */
+    static const unsigned periods[] = {1, 2, 5, 13, 31, 50};
+    for (unsigned i = 0; i < sizeof periods / sizeof periods[0]; i++) {
+        host_reset_model();
+        flicker_period = periods[i];
+        observer = flicker_obs;
+        fm1_controls_init();
+        CHECK(!fm1_panel_safe_boot() && recovery_calls == 0, "chord that flickers every %u frames acted", periods[i]);
+    }
 
-    /* Held through the settle wait: the debounced state decided. */
-    CHECK(chord_run(3u, 1, 0) == 1 && fm1_in.buttons == 3u, "chord not debounced into the button state");
+    /* Held through the settle wait: the debounced state decided; the flag stays after release. */
+    CHECK(safe_of(ENV | LFO, 0) == 1, "setup");
     struct fm1_controls state;
     fm1_controls_read(&state);
-    CHECK(state.buttons == 3u && state.keys == 0, "controls_read after init: 0x%x", (unsigned)state.buttons);
-
-    /* Only at init: pressing the chord later, or calling init again, does nothing. */
-    CHECK(chord_run(0, 1, 0) == 0, "setup");
-    press_key(0);
-    press_key(1);
+    CHECK(state.buttons == (ENV | LFO) && state.keys == 0, "controls_read after init: 0x%x", (unsigned)state.buttons);
+    memset(contact, 0, sizeof contact);
     run_frames(40);
-    CHECK(recovery_calls == 0 && fm1_in.buttons == 3u, "recovery fired after init");
+    CHECK(fm1_panel_safe_boot() == 1, "safe boot forgot itself after the buttons were released");
     fm1_controls_init();
-    CHECK(recovery_calls == 0, "recovery on a repeated init");
-    CHECK(chord_run(3u, 1, 0) == 1, "setup");
+    CHECK(fm1_panel_safe_boot() == 1, "safe boot cleared by a repeated init");
+
+    /* Only at init: pressing a chord later, or calling init again, does nothing. */
+    chord_run(0, 1, 0);
+    press_key(0); press_key(1); press_key(4); press_key(5);
+    run_frames(1200);
+    CHECK(recovery_calls == 0 && !fm1_panel_safe_boot() && fm1_in.buttons == (OCT_DOWN | OCT_UP | ENV | LFO), "a chord after init acted");
     fm1_controls_init();
-    CHECK(recovery_calls == 1, "recovery repeated on a second init");
+    CHECK(recovery_calls == 0 && !fm1_panel_safe_boot(), "a repeated init acted");
 }
 
 int main(void)
@@ -528,7 +613,7 @@ int main(void)
     test_random_calls();
     test_inputs_unaffected();
     test_dma_stall();
-    test_recovery_chord();
+    test_boot_chords();
     printf("%u checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;
 }

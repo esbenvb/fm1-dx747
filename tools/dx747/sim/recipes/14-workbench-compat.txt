@@ -1,0 +1,12 @@
+# Recipe 14: what the workbench page can and cannot do to the unit. The project the page reads before it unlocks
+# the bank controls is valid for the engine and for the page; a timbre of a source other than DX7 is refused and
+# every engine stays a DX7 (the page's "import track timbre" button would otherwise turn an engine into a 303,
+# 808, PSG, pluck or sampler). The page's own code runs against the unit in tools/dx747/sim/page-flow.mjs.
+boot
+wipe
+run 400
+expect_project_export_valid
+expect_timbre_refused 3 1
+expect_timbre_refused 0 2
+expect_timbre_refused 7 5
+expect_up ff

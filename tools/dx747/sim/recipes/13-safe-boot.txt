@@ -1,0 +1,33 @@
+# Recipe 13: safe boot. With the ENV + LFO chord held at power-on DX747 skips every optional start-up step,
+# shows SAFE BOOT and ignores the panel, MIDI and the workbench file protocol; nothing is written to flash.
+boot clear
+run 1500
+expect_up ff
+expect_screen 1
+boot clear safe
+run 1500
+expect_screen 13
+expect_up 0
+expect_leds ????##???????????????????????????????????
+shot 13a-safe-boot
+flash_mark
+tap btn 9
+tap btn 7
+tap btn 8
+white 1
+enc 0 3
+knob 500
+midi 1 90 3c 64
+midi 0 90 3c 64
+midi 2 b0 78 00
+run 1000
+expect_screen 13
+expect_voices 0
+expect_up 0
+expect_silent_sysex
+expect_flash_same
+# the next boot without the chord is the normal one, in the same flash
+boot
+run 1500
+expect_screen 1
+expect_up ff

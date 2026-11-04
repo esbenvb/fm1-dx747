@@ -148,7 +148,10 @@ static int dx_sec_valid_at(uint32_t addr, unsigned sector, struct dx_sec *h)
     return crc == h->crc ? 0 : DX_SCENE_EMPTY;
 }
 
-/* Newest valid copy of a sector: the destination, or staging if it is newer. */
+static int dx_sector_is_sample_bank(unsigned sector);
+
+/* Newest valid copy of a sector: the destination, or staging if it is newer. A staged copy of a sector
+ * that now holds the stock sample bank is stale (stock firmware ran in between) and does not count. */
 static int dx_locate(unsigned sector, uint32_t *addr, struct dx_sec *h)
 {
     struct dx_sec d, s;
@@ -158,14 +161,24 @@ static int dx_locate(unsigned sector, uint32_t *addr, struct dx_sec *h)
     int rs = dx_sec_valid_at(DX_STAGE, sector, &s);
     if (rs < 0) return rs;
     if (!rd && (rs || (int32_t)(d.generation - s.generation) >= 0)) { *addr = dest; *h = d; return 0; }
-    if (!rs) { *addr = DX_STAGE; *h = s; return 0; }
+    if (!rs) {
+        int bank = dx_sector_is_sample_bank(sector);
+        if (bank < 0) return bank;
+        if (bank) return DX_SCENE_EMPTY;
+        *addr = DX_STAGE; *h = s; return 0;
+    }
     return DX_SCENE_EMPTY;
 }
 
-/* A sector is free for scenes when it already holds ours or is erased. */
-static int dx_sector_free(unsigned sector)
+/* The stock sample bank starts with this magic ("FM1S", app/samples.c in stock). */
+enum { DX_SAMPLE_MAGIC = 0x53314d46 };
+
+/* A sector holds ours or nothing: it starts with our magic, or its first 256 bytes
+ * are erased. Samples and other data never look like that, and a sector that lost
+ * power in the middle of an erase usually does not either (see dx_sector_free). */
+static int dx_sector_ours_or_blank(unsigned sector)
 {
-    uint8_t head[16];
+    uint8_t head[256];
     int r = fm1_flash_read(dx_sector_addr(sector), head, sizeof head);
     if (r) return r;
     uint32_t magic;
@@ -175,22 +188,96 @@ static int dx_sector_free(unsigned sector)
     return 0;
 }
 
+/* True when the sector starts with the stock sample bank's header. */
+static int dx_sector_is_sample_bank(unsigned sector)
+{
+    uint32_t magic;
+    int r = fm1_flash_read(dx_sector_addr(sector), &magic, sizeof magic);
+    return r < 0 ? r : magic == DX_SAMPLE_MAGIC;
+}
+
+/* A sector is free for scenes when it holds ours or is erased, or when it was torn by a power
+ * cut in the middle of our own write and the committed copy that finishes it waits in staging.
+ * Never when it plainly holds the stock sample bank, whatever waits in staging. */
+static int dx_sector_free(unsigned sector)
+{
+    int r = dx_sector_ours_or_blank(sector);
+    if (r != DX_SCENE_NEEDS_CLAIM) return r;
+    r = dx_sector_is_sample_bank(sector);
+    if (r) return r < 0 ? r : DX_SCENE_NEEDS_CLAIM;
+    struct dx_sec staged;
+    r = dx_sec_valid_at(DX_STAGE, sector, &staged);
+    if (r < 0) return r;
+    return r ? DX_SCENE_NEEDS_CLAIM : 0;
+}
+
+/* The stock firmware's project and settings records (magic "FMP6", "FMS6", the v5 and the
+ * legacy ones), laid out {magic, generation, target sector, crc, commit}, are staged in the same
+ * sector. A committed one whose target sector has not caught up is a stock save that a power cut
+ * interrupted: staging holds the only complete copy, and stock would finish it at its next write. */
+static int dx_stock_magic(uint32_t magic)
+{
+    return magic == 0x36504d46U || magic == 0x36534d46U || magic == 0x35504d46U ||
+           magic == 0x35534d46U || magic == 0x34504d46U || magic == 0x34534d46U;
+}
+/* 1 when staging holds such an unfinished stock save, 0 when not, negative on a flash error. */
+static int dx_stock_stranded(void)
+{
+    uint32_t w[5], d[5];
+    int r = fm1_flash_read(DX_STAGE, w, sizeof w);
+    if (r) return r;
+    if (!dx_stock_magic(w[0]) || w[4] != 0 || w[2] >= DX_STAGE / DX_SECTOR_BYTES) return 0;
+    r = fm1_flash_read(w[2] * DX_SECTOR_BYTES, d, sizeof d);
+    if (r) return r;
+    if (dx_stock_magic(d[0]) && d[4] == 0) {
+        uint32_t diff = d[1] - w[1];
+        if ((!diff && d[3] == w[3]) || (diff && diff < 0x80000000U)) return 0; /* the target caught up: staging is a duplicate */
+    }
+    return 1;
+}
+
+/* 1 when a store sector other than `except` holds someone else's data, negative on a flash error. */
+static int dx_store_foreign_besides(unsigned except)
+{
+    for (unsigned s = 0; s < DX_STORE_SECTORS; ++s) {
+        if (s == except) continue;
+        int r = dx_sector_ours_or_blank(s);
+        if (r) return r == DX_SCENE_NEEDS_CLAIM ? 1 : r;
+    }
+    return 0;
+}
+
+/* 0 when the whole store is ours or erased and staging holds nothing of someone else's that
+ * only the user may give up; 1 when the user has to agree to dx_scene_claim first. */
 int dx_scene_store_state(void)
 {
     if (fm1_flash_size() < DX_STORE_BASE + (uint32_t)DX_STORE_SECTORS * DX_SECTOR_BYTES) return FM1_FLASH_UNAVAILABLE;
-    int r = dx_sector_free(0);
-    return r == DX_SCENE_NEEDS_CLAIM ? 1 : r;
+    for (unsigned s = 0; s < DX_STORE_SECTORS; ++s) {
+        int r = dx_sector_free(s);
+        if (r) return r == DX_SCENE_NEEDS_CLAIM ? 1 : r;
+    }
+    return dx_stock_stranded();
 }
 
-/* The user agreed to replace the stock sample bank. Sector 0 goes last: until
- * it is erased the store still reads as foreign, so an interrupted claim is
- * simply asked for again. */
+/* The user agreed to give up what stands in the way: the stock sample bank (or any other foreign data)
+ * in the store, an unfinished stock save, or a stale scene image of ours in staging. Only that is
+ * erased: sectors that already hold our scenes or nothing are left alone, so scenes survive a claim
+ * whose only reason was one foreign sector or a stock save in staging. A voice-library record in
+ * staging is left for its own owner to finish. An interrupted claim leaves foreign sectors behind, so
+ * the store still reads as foreign and the user is asked again. */
 int dx_scene_claim(void)
 {
     if (fm1_flash_size() < DX_STORE_BASE + (uint32_t)DX_STORE_SECTORS * DX_SECTOR_BYTES) return FM1_FLASH_UNAVAILABLE;
+    uint32_t magic;
+    int r = fm1_flash_read(DX_STAGE, &magic, sizeof magic);
+    if (r) return r;
     fm1_engine_pause();
-    int r = 0;
-    for (unsigned i = 0; !r && i < DX_STORE_SECTORS; ++i) r = fm1_flash_erase(dx_sector_addr((i + 1) % DX_STORE_SECTORS));
+    if (magic == DX_SEC_MAGIC || dx_stock_magic(magic)) r = fm1_flash_erase(DX_STAGE);
+    for (unsigned i = 0; !r && i < DX_STORE_SECTORS; ++i) {
+        int f = dx_sector_ours_or_blank(i);
+        if (f == DX_SCENE_NEEDS_CLAIM) r = fm1_flash_erase(dx_sector_addr(i)); /* the torn sector of our own write counts as foreign here: its staged copy was just discarded */
+        else r = f;
+    }
     fm1_engine_resume();
     return r;
 }
@@ -227,13 +314,18 @@ static int dx_program(unsigned sector, const uint8_t *img, uint32_t crc)
 }
 
 /* Finish a committed staged image, or discard a half-written one. Anything in
- * staging that is not ours (a library bank, a project) is left alone. */
+ * staging that is not ours (a library bank, a project) is left alone, and the one
+ * thing of someone else's that the next write would destroy for good, an unfinished
+ * stock save, makes recovery refuse until the user has agreed to dx_scene_claim. */
 int dx_scene_recover(void)
 {
     struct dx_sec st;
     int r = fm1_flash_read(DX_STAGE, &st, sizeof st);
     if (r) return r;
-    if (st.magic != DX_SEC_MAGIC) return 0;
+    if (st.magic != DX_SEC_MAGIC) {
+        r = dx_stock_stranded();
+        return r < 0 ? r : r ? DX_SCENE_NEEDS_CLAIM : 0;
+    }
     if (st.commit || st.version != DX_SEC_VERSION || st.sector >= DX_STORE_SECTORS) return fm1_flash_erase(DX_STAGE);
     r = dx_sec_valid_at(DX_STAGE, st.sector, &st);
     if (r < 0) return r;
@@ -243,6 +335,16 @@ int dx_scene_recover(void)
     r = dx_sec_valid_at(dest, st.sector, &d);
     if (r < 0) return r;
     if (!r && (int32_t)(d.generation - st.generation) >= 0) return fm1_flash_erase(DX_STAGE);
+    /* A committed image can be stale: stranded by a power cut, then stock firmware ran and used the
+     * flash for its samples. Our own interrupted write leaves every other store sector ours or
+     * erased, and its destination torn or ours; if the destination plainly holds the stock sample bank,
+     * or another sector holds someone else's data, this image no longer belongs here. */
+    r = dx_sector_is_sample_bank(st.sector);
+    if (r < 0) return r;
+    if (r) return fm1_flash_erase(DX_STAGE);
+    r = dx_store_foreign_besides(st.sector);
+    if (r < 0) return r;
+    if (r) return fm1_flash_erase(DX_STAGE);
     fm1_engine_pause();
     r = fm1_flash_erase(dest);
     for (unsigned at = 0; !r && at < DX_SEC_IMAGE;) {
@@ -267,9 +369,12 @@ int dx_scene_recover(void)
 static int dx_slot_put(unsigned sector, unsigned slot, const uint8_t *payload, unsigned n)
 {
     if (sector >= DX_STORE_SECTORS || slot > 1 || n > DX_SLOT_BYTES) return DX_SCENE_INVALID;
-    int r = dx_sector_free(sector);
-    if (!r) r = groove_storage_prepare();
-    if (r) return r;
+    /* Recovery first: it finishes the write that a power cut left half done, which a sector check
+     * would otherwise mistake for someone else's data. Then nothing is written until the whole
+     * store is ours or erased. */
+    int r = groove_storage_prepare();
+    if (!r) r = dx_scene_store_state();
+    if (r) return r == 1 ? DX_SCENE_NEEDS_CLAIM : r;
     uint8_t *img = malloc(DX_SEC_IMAGE);
     if (!img) return DX_SCENE_MEMORY;
     uint32_t addr, generation = 0;
@@ -279,7 +384,7 @@ static int dx_slot_put(unsigned sector, unsigned slot, const uint8_t *payload, u
     else if (r == DX_SCENE_EMPTY) { memset(img, 0xff, DX_SEC_IMAGE); r = 0; }
     if (r) { free(img); return r; }
     uint8_t *slotp = img + DX_SEC_HEADER + slot * DX_SLOT_BYTES;
-    uint8_t fresh[DX_SLOT_BYTES];
+    static uint8_t fresh[DX_SLOT_BYTES]; /* control task only; off the 8 KB stack */
     memset(fresh, 0xff, sizeof fresh);
     if (payload) memcpy(fresh, payload, n);
     if (!payload && !generation) { free(img); return 0; } /* clearing a slot of a sector that does not exist */
@@ -301,7 +406,7 @@ int dx_scene_write(unsigned index, const struct dx_scene *s)
 {
     if (!dx_scene_valid(s)) return DX_SCENE_INVALID;
     if (index >= DX_SCENES) return DX_SCENE_INVALID;
-    uint8_t image[DX_SCENE_BYTES];
+    static uint8_t image[DX_SCENE_BYTES]; /* control task only; off the 8 KB stack */
     dx_scene_pack(s, image);
     return dx_slot_put(index / 2, index % 2, image, sizeof image);
 }
@@ -348,7 +453,7 @@ int dx_scene_read(unsigned index, struct dx_scene *out)
     struct dx_sec h;
     int r = dx_locate(index / 2, &addr, &h);
     if (r) return r;
-    uint8_t image[DX_SCENE_BYTES];
+    static uint8_t image[DX_SCENE_BYTES]; /* control task only; off the 8 KB stack */
     r = fm1_flash_read(addr + DX_SEC_HEADER + (index % 2) * DX_SLOT_BYTES, image, sizeof image);
     return r ? r : dx_scene_unpack(image, out);
 }
