@@ -425,8 +425,19 @@ and `fm1-dx747-b`, and one Docker build of a clean export of the same commit gav
 - identical `.fwsc` packages from the two Windows builds (SHA-256 `385f83e5a01a17e2...`, 471,604 bytes),
   so the build and the packaging do not depend on the folder name.
 
-The `.fwsc` cannot be built here, and its app image is stored in a form this tool cannot read, so
-"the Linux build equals the Windows build" rests on the loadable sections, not on the package. The
-firmware that gets flashed should still come from the Windows build. Earlier, for commit `e59e3e7`,
-the sizes and the build identity already matched; that commit was not compared byte by byte.
+- **The package itself, made on the Mac.** `tools/dx747/compare/make_fwsc.py` is a port of the SDK's
+  packager (`sdk/Package.cs` and the image step of `Build.ps1`, which need PowerShell and .NET). Given
+  the **Linux-built** `sdk.elf` it produced a `.fwsc` of 471,604 bytes with SHA-256 `385f83e5a01a17e2...`:
+  **byte for byte the package the two Windows builds produced.** That settles the question end to
+  end, from compiler to flashable package, and it also checks the port itself.
+
+```bash
+python3 tools/dx747/compare/make_fwsc.py /tmp/dx747-out/sdk.elf /tmp/dx747.fwsc
+shasum -a 256 /tmp/dx747.fwsc
+```
+
+What is still Windows-only is the flashing **page** (`build.bat --package`): it is built by PowerShell
+scripts (`tools/Build-Web.ps1`) and is what actually installs the package on a unit
+([Step 5](#step-5-the-flashing-page)). The page embeds the same `.fwsc`. Earlier, for commit `e59e3e7`, the sizes and
+the build identity already matched; that commit was not compared byte by byte.
 
