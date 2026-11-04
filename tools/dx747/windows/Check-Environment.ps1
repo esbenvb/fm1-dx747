@@ -44,6 +44,18 @@ foreach ($tool in @('curl.exe', 'tar.exe')) {
     if (Get-Command $tool -ErrorAction SilentlyContinue) { Ok ($tool + ' (needed only for build.bat --package, to fetch the WASI SDK)') }
     else { Warn ($tool + ' not found') 'Only build.bat --package needs it. It ships with Windows 10 (1803 and later) and 11; check that C:\Windows\System32 is on PATH.' }
 }
+$vcrt = Join-Path $env:WINDIR 'System32\msvcp140.dll'
+if (Test-Path -LiteralPath $vcrt) {
+    $vcrtInfo = (Get-Item -LiteralPath $vcrt).VersionInfo
+    $vcrtLabel = $vcrtInfo.FileMajorPart.ToString() + '.' + $vcrtInfo.FileMinorPart + '.' + $vcrtInfo.FileBuildPart
+    if (($vcrtInfo.FileMajorPart -gt 14) -or (($vcrtInfo.FileMajorPart -eq 14) -and ($vcrtInfo.FileMinorPart -ge 40))) {
+        Ok ('Microsoft Visual C++ runtime ' + $vcrtLabel + ' (the WASI SDK compiler needs 14.40 or newer)')
+    } else {
+        Warn ('Microsoft Visual C++ runtime is ' + $vcrtLabel + ', older than 14.40') 'Only build.bat --package needs this: the WASI SDK compiler crashes with no message (exit code -1073741819, faulting module MSVCP140.dll) on an older runtime. Install the latest Microsoft Visual C++ Redistributable for x64 (https://aka.ms/vs/17/release/vc_redist.x64.exe), then run this check again.'
+    }
+} else {
+    Warn 'MSVCP140.dll not found in System32' 'Only build.bat --package needs it. Install the latest Microsoft Visual C++ Redistributable for x64 (https://aka.ms/vs/17/release/vc_redist.x64.exe).'
+}
 
 Head '2. Where the source is'
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path

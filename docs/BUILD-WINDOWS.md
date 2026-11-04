@@ -34,8 +34,12 @@ me (see the end).
 - JieLi toolchain **2.5.3**. No other version works: older kits pinned 2.5.2 and reject 2.5.3.
 - This source tree, in a short plain path such as `C:\fm1`.
 - For the flashing page only: `curl.exe` and `tar.exe` (both ship with Windows 10
-  1803 and later), an internet connection for the first run, and about 2 GB of free
-  disk space.
+  1803 and later), an internet connection for the first run, about 2 GB of free
+  disk space, and the **Microsoft Visual C++ Redistributable for x64, version 14.40 or
+  newer**. Windows can have an older one (14.34, from 2023, was found on the project's
+  PC), and the WASI SDK compiler then crashes at start-up with no message (see the
+  table). Install the latest from https://aka.ms/vs/17/release/vc_redist.x64.exe.
+  `Check-Environment.ps1` (Step 3) reports the version.
 
 You do not need Visual Studio, Python, Node, Docker or WSL.
 
@@ -286,6 +290,7 @@ The first line of the error tells you which check failed.
 | `Set FM1_RELEASE_VERSION in app/version.h`, or `Set a compatible FM1_UPDATE_PRODUCT in app/version.h` | `app\version.h` was edited. Restore it. |
 | `Required runtime symbol absent: <name>` or `Application callback was lost or replaced by a weak default: <name>` | A code change removed something the firmware must keep. A source problem, not a PC problem: send me the line. |
 | `FM1 runtime heap is N bytes; need at least 49152` | The program uses too much RAM. Source problem: send me the line. |
+| `Command failed: ...\wasi-sdk-27.0-x86_64-windows\bin\clang.exe (-1073741819)` with no other message, at "Compile the browser application" | The WASI SDK compiler cannot start: it crashes in `MSVCP140.dll` because the Microsoft Visual C++ runtime is older than 14.40 (`clang.exe --version` crashes the same way, and Event Viewer, Windows Logs, Application shows `Faulting module name: MSVCP140.dll`). Install the latest Visual C++ Redistributable for x64 (https://aka.ms/vs/17/release/vc_redist.x64.exe), check that `build\tools\wasi-sdk-27.0-x86_64-windows\bin\clang.exe --version` prints a version, and run again. The firmware check build is not affected. |
 | `Add-Type` errors, or "language mode" | The packaging step compiles `sdk\Package.cs` with `Add-Type`. A company policy (AppLocker, WDAC) can block it: use a personal machine. |
 | `error:` lines from `clang.exe` | A compile error in the source. Send me the first one with its file and line. |
 | `The specified path ... too long` | Move the folder to `C:\fm1`. |
