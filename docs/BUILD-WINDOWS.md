@@ -382,3 +382,39 @@ The helper scripts `tools/dx747/docker/fetch-toolchain.sh` and
 `tools/dx747/sim/fetch-wasi-sdk.sh` do these two downloads and the hash checks for you
 (add `--download` to fetch; without it they only verify). `tools/dx747/docker/BASELINE.md`
 and `tools/dx747/sim/README.md` describe the baseline build and the browser build.
+
+## Comparing a Windows build with the Docker build
+
+The two toolchains are builds of the same JieLi compiler (clang 4.0.1, GNU ld 2.26.51), but nothing
+proves that they generate the same code, so check it rather than assume it. The `sdk.elf` files of two
+builds are never byte-identical (their symbol and string tables hold file names and build paths), so
+`tools/dx747/compare/elf_report.py` compares what the chip loads: every loadable section byte by byte,
+and the function and data symbols by name, address and size.
+
+1. Build the **same commit** both ways. On Windows, from the repository root, run Step 4. On the Mac, build
+   a clean export of that commit, so that no working-tree change gets in:
+
+   ```bash
+   mkdir -p /tmp/dx747-src /tmp/dx747-out
+   git archive <commit> | tar -x -C /tmp/dx747-src
+   tools/dx747/docker/build.sh -o /tmp/dx747-out /tmp/dx747-src
+   ```
+
+2. Copy these files from the Windows `build\dx7\` folder to the Mac: `sdk.elf`, `sdk.map`,
+   `build-identity.json`, `firmware-report.json` and `generated\FM1_OFFICIAL_OPEN.fwsc`. The
+   `build_id` in `build-identity.json` is a hash of the sources: it must be the same on both sides, or the
+   builds are not of the same source.
+3. Compare the two ELF files on the Mac:
+
+   ```bash
+   python3 tools/dx747/compare/elf_report.py /tmp/dx747-out/sdk.elf <folder>/sdk.elf
+   ```
+
+   It prints one line per section and ends with `loadable content: IDENTICAL` or `DIFFERENT`; for a
+   difference it gives the number of differing bytes and where the first one is. With one file
+   it prints a report of that file alone.
+
+Two controls tell a toolchain difference from a path or timing difference: build the same commit twice on
+Windows in two clones with different folder names (the sections must be identical), and compare the
+`.fwsc` hashes of those two builds.
+
