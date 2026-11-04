@@ -24,6 +24,7 @@ int dx_scene_save(unsigned index, const char name[12]);/* capture the live state
 unsigned dx_scene_current(void);                       /* last recalled or saved, DX_NO_SCENE if none */
 void dx_settings_get(struct dx_settings *out);
 void dx_settings_update(const struct dx_settings *s);  /* applied now, saved after 1.5 s of quiet */
+void dx_keyboard_channel_step(int delta);              /* the built-in keys' channel, one step from the active one */
 int dx_storage_state(void);                            /* 0 usable, 1 needs dx_storage_claim, <0 error */
 int dx_storage_state_cached(void);                     /* the same, from the last check; no flash access */
 int dx_storage_claim(void);                            /* erases the stock sample bank: ask the user first */

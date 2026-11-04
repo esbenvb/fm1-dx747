@@ -1,0 +1,25 @@
+# Recipe 9: the velocity of a note from outside reaches the engine (the built-in keys are fixed at 100).
+# The default patch is the same engine each time; only the velocity differs.
+boot
+wipe
+run 400
+# soft: velocity 10
+midi 1 90 3c 0a
+expect_below 300 0.16
+midi 1 80 3c 00
+midi 1 b0 78 00
+run 400
+# firm: velocity 80
+midi 1 90 3c 50
+expect_peak 300 0.19
+midi 1 80 3c 00
+midi 1 b0 78 00
+run 400
+# a layer plays every engine at the sender's velocity
+tap btn 11
+white 2
+midi 1 90 3c 0a
+run 100
+expect_voices 2
+expect_below 300 0.30
+midi 1 80 3c 00

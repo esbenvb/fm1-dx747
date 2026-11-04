@@ -18,7 +18,7 @@ static int failures, checks;
 #define CHECK(c) do { ++checks; if (!(c)) { ++failures; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
 
 /* ---- the fake engine ---- */
-static struct { uint8_t voice[156]; int alive, refuse_import; unsigned edits, imports, names, toggles; } eng[DX_ENGINES];
+static struct { uint8_t voice[156]; int alive, refuse_import, refresh_fails; unsigned edits, imports, names, toggles, refreshes; } eng[DX_ENGINES];
 static void (*edit_hook)(unsigned);   /* runs once, just before the next edit: a program change handled in the audio block */
 static unsigned limit_of(unsigned p)
 {
@@ -43,7 +43,8 @@ static int f_import(unsigned e, const uint8_t v[156])
     for (unsigned i = 0; i < 156; ++i) if (v[i] > limit_of(i)) return -1;   /* the engine rejects the whole voice */
     memcpy(eng[e].voice, v, 156); ++eng[e].imports; return 0;
 }
-static const struct dx_edit_port port = {f_copy, f_edit, f_name, f_toggle, f_import};
+static int f_refresh(unsigned e) { if (eng[e].refresh_fails) { --eng[e].refresh_fails; return -1; } ++eng[e].refreshes; return 0; }
+static const struct dx_edit_port port = {f_copy, f_edit, f_name, f_toggle, f_import, f_refresh};
 
 static struct dx_ctl ctl;
 static struct dx_cfg cfg;
@@ -584,6 +585,42 @@ static void test_sysex_level_under_bright(void)
     drain(1, 100);
     CHECK(lvl(0, 3) == 55 && lvl(0, 0) == 70);
 }
+/* ---- regressions found by the second fact-check ---- */
+static void test_target_rule_and_mask(void)
+{
+    reset();
+    /* two engines play on channel 1; one has a control channel elsewhere: a SysEx for device 0 is ambiguous */
+    cfg.e[1].rx |= 1U << 0;
+    cfg.e[1].ctl = 9;
+    CHECK(dx_sysex_targets(&cfg, 0) == 0);
+    cfg.e[1].rx &= (uint16_t)~(1U << 0);                              /* alone again: engine 1 is the only listener */
+    CHECK(dx_sysex_targets(&cfg, 0) == 1U);
+    cfg.e[0].ctl = 5;                                                 /* it has a control channel of its own, so its play channel does not edit it */
+    CHECK(dx_sysex_targets(&cfg, 0) == 0);
+    CHECK(dx_sysex_targets(&cfg, 4) == 1U);                           /* ...its control channel does */
+    /* the operator mask is six bits: a larger value means all on, not a truncated mask */
+    reset();
+    static const uint8_t a[6] = {50, 60, 0, 80, 70, 90};
+    set_voice(0, 0, a);
+    eng[0].voice[155] = 0x15;
+    CHECK(pc(0, 155, 64));                                            /* low six bits are 0: not "all off" */
+    drain(1, 100);
+    CHECK(eng[0].voice[155] == 63);
+    eng[0].voice[155] = 0x15;
+    CHECK(pc(0, 155, 100));                                           /* low six bits are 36 */
+    drain(1, 101);
+    CHECK(eng[0].voice[155] == 63);
+}
+static void test_controller_reset(void)
+{
+    reset();
+    live.pan[0] = 30; live.expr[0] = 40; live.pan[1] = -20; live.expr[1] = 90;
+    dx_mail_put(&mail, DX_MAIL_PAN + 0, 64);                          /* what the router writes for CC121: the values the engine puts back */
+    dx_mail_put(&mail, DX_MAIL_EXPR + 0, 127);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 100);
+    CHECK(live.pan[0] == 0 && live.expr[0] == 127);
+    CHECK(live.pan[1] == -20 && live.expr[1] == 90);                  /* only the engines that got it */
+}
 static void test_sysex_after_program_change(void)
 {
     static const uint8_t a[6] = {50, 60, 0, 80, 70, 90}, b[6] = {10, 20, 30, 40, 55, 65};
@@ -604,6 +641,60 @@ static void test_sysex_after_program_change(void)
     CHECK(pc(0, 18, 7));
     dx_ctl_poll(&ctl, &mail, &cfg, &live, 2001);
     CHECK(eng[0].voice[18] == 7);
+}
+/* A loaded voice, or a panicked engine, would stay quiet if it has amplitude-modulation sensitivity: breath is opened
+ * again. A program change and all sound off are followed by it in the router's own stream; what DX747 loads itself and
+ * every engine-wide stop is handled here. */
+static void test_refresh(void)
+{
+    static const uint8_t a[6] = {50, 60, 0, 80, 70, 90};
+    uint8_t voice[155];
+    memset(voice, 0, sizeof voice);
+    /* a voice dump */
+    reset(); set_voice(0, 0, a); set_voice(1, 0, a);
+    queue_dump(0, voice);
+    drain(1, 100);
+    CHECK(eng[0].imports == 1 && eng[0].refreshes == 1 && eng[1].refreshes == 0);
+    drain(3, 101);
+    CHECK(eng[0].refreshes == 1);                                    /* once, not at every poll */
+    /* a dump the engine refused changed nothing: nothing to refresh */
+    reset(); set_voice(0, 0, a);
+    eng[0].refuse_import = 1;
+    queue_dump(0, voice);
+    drain(2, 100);
+    CHECK(eng[0].refreshes == 0);
+    /* a program change is followed by the refresh in the router's stream: nothing here, only BRIGHT starts again */
+    reset(); set_voice(0, 0, a);
+    dx_mail_put(&mail, DX_MAIL_PC + 0, 0);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1000);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1000 + DX_PC_SETTLE_MS);
+    CHECK(eng[0].refreshes == 0);
+    /* the UI, a scene or a workbench upload replaced the voice */
+    reset(); set_voice(2, 0, a);
+    dx_voice_loaded(&ctl, 2);
+    dx_ctl_poll(&ctl, NULL, &cfg, &live, 2000);
+    CHECK(eng[2].refreshes == 1 && eng[0].refreshes == 0);
+    /* every engine was stopped (System Reset, the stop buttons, a scene recall): all that exist get it, at once */
+    reset();
+    for (unsigned e = 0; e < DX_ENGINES; ++e) set_voice(e, 0, a);
+    cfg.up = 0xfd;                                                   /* engine 2 does not exist */
+    dx_mail_put(&mail, DX_MAIL_PANIC, 0);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 3000);
+    for (unsigned e = 0; e < DX_ENGINES; ++e) CHECK(eng[e].refreshes == (e == 1 ? 0U : 1U));
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 3001);
+    CHECK(eng[0].refreshes == 1);
+    /* a refresh that could not be posted (the engine's ring was full) is tried again at the next poll, once it works only once */
+    reset(); set_voice(0, 0, a);
+    eng[0].refresh_fails = 2;
+    dx_mail_put(&mail, DX_MAIL_PANIC, 0);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 4000);
+    CHECK(eng[0].refreshes == 0);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 4001);
+    CHECK(eng[0].refreshes == 0);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 4002);
+    CHECK(eng[0].refreshes == 1);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 4003);
+    CHECK(eng[0].refreshes == 1);
 }
 static void swap_in_b(unsigned e)
 {
@@ -644,7 +735,10 @@ int main(void)
     test_bright_force_guard();
     test_sysex_level_under_bright();
     test_sysex_after_program_change();
+    test_target_rule_and_mask();
+    test_controller_reset();
     test_bright_race_with_program_change();
+    test_refresh();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

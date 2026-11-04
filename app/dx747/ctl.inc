@@ -29,6 +29,10 @@ struct dx_edit_port {
     void (*name)(unsigned engine, unsigned index, char c);
     void (*toggle_op)(unsigned engine, unsigned ui_operator);       /* UI OP1..OP6 as 0..5 */
     int (*import)(unsigned engine, const uint8_t voice[156]);       /* 0 when the voice was loaded */
+    /* After a voice is loaded or the engine was panicked, its controller attenuation stays closed until some controller
+     * message arrives: a voice with amplitude-modulation sensitivity stays silent. The engine's own default (breath
+     * open, CC2 = 127) is applied by sending exactly that. */
+    int (*refresh)(unsigned engine);                                 /* 0 when posted; non-zero is retried at the next poll */
 };
 
 enum { DX_SX_RING = 64, DX_SX_BATCH = 6, DX_DUMPS = 8, DX_DUMP_COST = 3, DX_BRIGHT_SCAN_MS = 100, DX_PC_SETTLE_MS = 20 };
@@ -47,6 +51,7 @@ struct dx_ctl {
     struct dx_bright br[DX_ENGINES];
     uint8_t dirty;            /* engines whose BRIGHT must be (re)applied */
     uint8_t force;            /* engines whose voice was replaced by an import: start from the voice as it is */
+    uint8_t refresh;          /* engines that need their controller state applied again (see struct dx_edit_port) */
     uint8_t pc_wait;          /* program change seen, waiting for the engine to load the voice */
     uint32_t pc_at[DX_ENGINES], scan_ms;
     DX_A(uint32_t) sx[DX_SX_RING]; /* DX7 parameter changes: dev | param << 4 | value << 12 */
@@ -153,7 +158,18 @@ DX_FN void dx_bright_export_fix(const struct dx_ctl *c, unsigned e, uint8_t voic
         if (((mods >> k) & 1U) && voice[DX_LEVEL(k)] == b->applied[k]) voice[DX_LEVEL(k)] = b->base[k];
 }
 DX_FN void dx_bright_changed_ctl(struct dx_ctl *c, unsigned e) { if (e < DX_ENGINES) c->dirty |= (uint8_t)(1U << e); }
-DX_FN void dx_bright_force(struct dx_ctl *c, unsigned e) { if (e < DX_ENGINES) c->force |= (uint8_t)(1U << e), c->dirty |= (uint8_t)(1U << e); }
+/* The voice was replaced (a program change that has settled): start BRIGHT from the voice as it is. The refresh of a
+ * program change is sent by the router, in order, right behind the message. */
+DX_FN void dx_bright_force(struct dx_ctl *c, unsigned e)
+{
+    if (e < DX_ENGINES) c->force |= (uint8_t)(1U << e), c->dirty |= (uint8_t)(1U << e);
+}
+/* The voice was replaced by something DX747 did itself (a dump, a scene, an upload, the patch encoder): re-base BRIGHT,
+ * and send the refresh. */
+DX_FN void dx_voice_loaded(struct dx_ctl *c, unsigned e)
+{
+    if (e < DX_ENGINES) dx_bright_force(c, e), c->refresh |= (uint8_t)(1U << e);
+}
 
 /* ---- DX7 SysEx ------------------------------------------------------------ */
 
@@ -224,9 +240,12 @@ DX_FN unsigned dx_sysex_targets(const struct dx_cfg *cfg, unsigned dev)
     for (unsigned e = 0; e < DX_ENGINES; ++e) {
         if (!((cfg->up >> e) & 1U)) continue;
         if (cfg->e[e].ctl == dev + 1U) ctl |= 1U << e;
-        if (((cfg->e[e].rx >> dev) & 1U) && !cfg->e[e].ctl) { rx |= 1U << e; ++nrx; }
+        if ((cfg->e[e].rx >> dev) & 1U) { rx |= 1U << e; ++nrx; }   /* every listener counts, with or without a control channel */
     }
-    return ctl ? ctl : nrx == 1 ? rx : 0U;
+    if (ctl) return ctl;
+    if (nrx != 1) return 0U;
+    for (unsigned e = 0; e < DX_ENGINES; ++e) if ((rx >> e) & 1U) return cfg->e[e].ctl ? 0U : rx;
+    return 0U;
 }
 
 DX_FN void dx_sx_apply(struct dx_ctl *c, unsigned e, unsigned param, unsigned value)
@@ -250,6 +269,7 @@ DX_FN void dx_sx_apply(struct dx_ctl *c, unsigned e, unsigned param, unsigned va
     } else if (param < 155) {
         p->name(e, param - 145U, (char)value);
     } else {
+        if (value > 63U) value = 63U;
         if (p->copy(e, v)) return;
         for (unsigned i = 0; i < 6; ++i) { /* UI operator i is bit 5 - i of the VCED mask */
             unsigned want = (value >> (5U - i)) & 1U, have = (v[155] >> (5U - i)) & 1U;
@@ -283,6 +303,7 @@ DX_FN unsigned dx_ctl_poll(struct dx_ctl *c, struct dx_ctl_mail *mail, const str
             if (dx_mail_take(mail, DX_MAIL_EXPR + e, &v)) live->expr[e] = (uint8_t)v;
             if (dx_mail_take(mail, DX_MAIL_PC + e, &v)) { c->pc_wait |= (uint8_t)(1U << e); c->pc_at[e] = now; }
         }
+        if (dx_mail_take(mail, DX_MAIL_PANIC, &v)) c->refresh |= cfg->up;   /* every engine was stopped */
         /* A cutoff or resonance move is meant to be heard: an off filter becomes a low-pass. */
         if (dx_mail_take(mail, DX_MAIL_CUTOFF, &v)) {
             live->filter_hz = (uint16_t)dx_cc_to_hz(v);
@@ -317,7 +338,7 @@ DX_FN unsigned dx_ctl_poll(struct dx_ctl *c, struct dx_ctl_mail *mail, const str
             voice[155] = 63; /* all operators on, as the stock import does */
             dx_clamp_voice(voice);
             for (unsigned e = 0; e < DX_ENGINES; ++e)
-                if ((targets & (1U << e)) && c->port->import(e, voice) == 0) dx_bright_force(c, e);
+                if ((targets & (1U << e)) && c->port->import(e, voice) == 0) dx_voice_loaded(c, e);
             c->dump_r = dr + 1;
             budget = budget > DX_DUMP_COST ? budget - DX_DUMP_COST : 0;
             continue;
@@ -338,6 +359,8 @@ DX_FN unsigned dx_ctl_poll(struct dx_ctl *c, struct dx_ctl_mail *mail, const str
     /* BRIGHT waits for engines that are still loading a program change: any step taken now would land on
      * a voice that is about to be replaced, or on the new one before it can be told apart. */
     unsigned hold = c->pc_wait, dirty = c->dirty, force = c->force;
+    for (unsigned e = 0; e < DX_ENGINES; ++e)
+        if ((((c->refresh & ~hold) >> e) & 1U) && c->port->refresh(e) == 0) c->refresh &= (uint8_t)~(1U << e);
     c->dirty = (uint8_t)(dirty & hold); c->force = (uint8_t)(force & hold);
     for (unsigned e = 0; e < DX_ENGINES; ++e)
         if (((dirty & ~hold) >> e) & 1U) dx_bright_apply(c, e, live->bright[e], (force >> e) & 1U);

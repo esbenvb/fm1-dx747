@@ -30,6 +30,13 @@ expect_screen 8
 enc 2 -10
 enc 3 -15
 shot 6e-mix
+# white keys 1-8 mute, 9-16 solo: engine 3 muted, engine 2 solo (the others go quiet, shown dimmed)
+white 3
+white 10
+run 100
+shot 6e2-mix-mute-and-solo
+white 3
+white 10
 # FX, then FX again for the master filter; the keyboard plays through the router here
 tap btn 2
 expect_screen 9

@@ -304,7 +304,7 @@ static void draw_channel(void)
     put_note(tb, se->hi); tile(2, "HIGH", tb, EC[e]);
     o = put_shift(tb, se->shift); put_s(o, se->shift % 12 ? "" : " OCT");
     tile(3, "SHIFT", tb, C_AM);
-    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY" : "KEYS 1-8 = ADD / REMOVE ENGINE HERE");
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "KEYS 1-8 = ADD / REMOVE ENGINE HERE");
 }
 
 /* ---- engine pages --------------------------------------------------------- */
@@ -374,7 +374,7 @@ static void draw_eplays(void)
     put_note(tb, c->hi); tile(1, "HIGH", tb, col);
     o = put_shift(tb, c->shift); put_s(o, c->shift % 12 ? "" : " OCT"); tile(2, "SHIFT", tb, C_AM);
     tile(3, "FOLD", c->fold == DX_FOLD_WRAP ? "WRAP" : c->fold == DX_FOLD_CLIP ? "CLIP" : "DROP", C_TX);
-    draw_hint("WHITE KEYS 1-16 = TOGGLE CHANNEL");
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "WHITE KEYS 1-16 = TOGGLE CHANNEL");
 }
 static void draw_esends(void)
 {
@@ -439,15 +439,17 @@ static void draw_mix(void)
     draw_title("MIX", "SELECT KEY SHOWS THIS");
     for (unsigned e = 0; e < DX_ENGINES; ++e) {
         int x = 4 + 29 * (int)e;
-        uint16_t col = engine_color(e);
         const struct dx_engine_cfg *c = &fr.cfg.e[e];
-        int fill = 98 * (int)fr.e[e].volume / 127, meter = c->mute ? 0 : 98 * (int)fr.e[e].level / 127;
+        uint16_t col = !c->mute && !fr.e[e].audible ? C_MU : engine_color(e);   /* silenced by another engine's solo */
+        int fill = 98 * (int)fr.e[e].volume / 127, meter = c->mute || !fr.e[e].audible ? 0 : 98 * (int)fr.e[e].level / 127;
         chip(e, x, 46, 26, 16, e == ui.engine);
         px_frame(x + 3, 66, 12, 100, C_LN); px_rect(x + 4, 166 - fill, 10, fill, col);
         px_frame(x + 18, 66, 6, 100, C_LN); px_rect(x + 19, 165 - meter, 4, meter, fr.e[e].level >= 100 ? C_AM : C_GR);
         px_rect(x + 3, 170, 22, 1, C_LN); px_rect(x + 14 + fr.live.pan[e] / 5, 169, 3, 3, col);
-        px_frame(x + 2, 176, 11, 11, c->mute ? C_RD : C_LN); px_text_c(x + 7, 178, "M", 1, c->mute ? C_RD : C_DIM);
-        px_frame(x + 14, 176, 11, 11, C_LN); px_text_c(x + 19, 178, "S", 1, C_DIM);
+        if (c->mute) px_rect(x + 2, 176, 11, 11, C_RD); else px_frame(x + 2, 176, 11, 11, C_LN);
+        px_text_c(x + 7, 178, "M", 1, c->mute ? C_BLACK : C_DIM);
+        if (fr.e[e].solo) px_rect(x + 14, 176, 11, 11, C_AM); else px_frame(x + 14, 176, 11, 11, C_LN);
+        px_text_c(x + 19, 178, "S", 1, fr.e[e].solo ? C_BLACK : C_DIM);
     }
     px_text(4, 206, "FADER + METER PER ENGINE", 1, C_DIM);
     draw_hint("WHITE KEYS 1-8 MUTE  9-16 SOLO");
@@ -516,7 +518,7 @@ static void draw_master(void)
     if (l->filter_type != DX_FILTER_OFF) for (int y = 50; y < 127; y += 4) px_rect(xc, y, 1, 2, C_AM);
     px_text_c(axis_x(100), 131, "100", 1, C_DIM); px_text_c(axis_x(1000), 131, "1K", 1, C_DIM); px_text_c(axis_x(10000), 131, "10K", 1, C_DIM);
     px_text(8, 146, "USB OUT TAP", 1, C_DIM); px_text(8, 158, "AFTER FILTER, BEFORE VOLUME", 1, C_GR);
-    px_text(8, 174, "BT AND USB IN", 1, C_DIM); px_text(8, 186, "MIXED AFTER VOLUME", 1, C_TX);
+    px_text(8, 174, "BT AND USB IN", 1, C_DIM); px_text(8, 186, "FOLLOW THE KNOB", 1, C_TX);
     static const char *const types[4] = {"OFF", "LP", "HP", "BP"};
     tile(0, "TYPE", types[l->filter_type & 3U], C_TX);
     unsigned hz = l->filter_hz ? l->filter_hz : 1000U;
@@ -564,7 +566,7 @@ static void draw_scenes(void)
         px_text(18, 84, "FIRST SAVE: FLASH SETUP", 1, C_AM);
         px_text(18, 100, "SCENES NEED THE FLASH THAT HOLDS", 1, C_TX);
         px_text(18, 111, "THE STOCK SAMPLE BANK. IT WILL BE", 1, C_TX);
-        px_text(18, 122, "ERASED. BACK IT UP FIRST.", 1, C_TX);
+        px_text(18, 122, "ERASED. DX747 CANNOT BACK IT UP.", 1, C_TX);
         px_text(18, 142, "SAVE = ERASE AND CONTINUE", 1, C_AM);
         px_text(18, 152, "HOME = CANCEL", 1, C_DIM);
     }
@@ -588,7 +590,7 @@ static void draw_sys(void)
         case 0: o = put_s(tb, s->role ? "CENTRAL" : "PERIPHERAL"); col = C_GR; break;
         case 1: val = (s->radio_off & GROOVE_RADIO_AUDIO) ? "OFF" : "ON"; col = (s->radio_off & GROOVE_RADIO_AUDIO) ? C_DIM : C_GR; break;
         case 2: o = put_u(tb, s->backlight); put_s(o, " / 8"); col = C_AM; break;
-        case 3: o = put_s(tb, "CH "); put_u(o, s->kbd_ch + 1U); break;
+        case 3: o = put_s(tb, "CH "); put_u(o, fr.cfg.kbd_ch + 1U); break;   /* the active one: a scene sets it too */
         case 4: if (s->master_ch) { o = put_s(tb, "CH "); put_u(o, s->master_ch); col = C_AC; } else { val = "OFF"; col = C_DIM; } break;
         case 5: o = put_u(tb, fr.cpu); put_s(o, "%"); break;
         default: val = fr.storage ? (fr.storage > 0 ? "NEEDS SETUP" : "ERROR") : "READY"; col = fr.storage ? C_AM : C_GR; break;

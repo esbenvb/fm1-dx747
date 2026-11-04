@@ -34,7 +34,11 @@ static void port_cc(unsigned e, unsigned controller, unsigned value)
     (void)fm1_midi_post(m, 3);
 }
 /* The preset was just imported, so the voice is new: start from it. */
-static void port_bright(unsigned e, int offset) { dx_bright_apply(&ctl, e, offset, 1); }
+static void port_bright(unsigned e, int offset)
+{
+    if (ctl.port->refresh(e)) ctl.refresh |= (uint8_t)(1U << e); /* the engine panicked and loaded a voice: let its controller state apply */
+    dx_bright_apply(&ctl, e, offset, 1);
+}
 static void port_filter(unsigned type, unsigned hz, unsigned resonance)
 { fm1_master_fx_set(type, hz ? (float)hz : FM1_MFX_CUTOFF_DEFAULT_HZ, resonance); }
 static void port_panic(void) { dx_route_panic(); }

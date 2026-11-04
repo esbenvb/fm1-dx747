@@ -29,10 +29,13 @@
  *                       fails unless the library read-back equals the file and all 32 program names match
  *   expect_peak MS MIN  render MS milliseconds and fail unless the output reaches at least MIN (0..1 full scale);
  *                       prints the peak it measured
+ *   expect_below MS MAX render MS milliseconds and fail unless the output stays at or below MAX (0..1 full scale)
  *   expect_patch E I V  fail unless engine E (0..7) has VCED parameter I (0..155) equal to V
  *   expect_download K E I V  download engine E's voice (K=1, 156 bytes) or timbre (K=2, 223 bytes) the way the
  *                       workbench does and fail unless byte I equals V
  *   retouch_voice E I V download engine E's voice, set byte I to V and upload it back (workbench command sequence)
+ *   expect_rx E HEXMASK fail unless engine E (0..7) plays on exactly the channels in HEXMASK (bit 0 = channel 1)
+ *   expect_engine E LO HI  fail unless engine E (0..7) has the note window LO..HI
  *   expect_cfg NAME V   fail unless the active router configuration has kbd_ch or master_ch equal to V
  *   expect_live NAME I V  fail unless the UI-owned live value matches: pan I, expr I, bright I (engine I),
  *                       filter_type, filter_res or filter_hz (I ignored)
@@ -334,6 +337,11 @@ int main(int argc, char **argv)
             printf("peak %.4f\n", (double)got);
             if (got < want) { fprintf(stderr, "expect_peak: wanted at least %g, got %g\n", (double)want, (double)got); ++errors; }
         }
+        else if (!strcmp(p, "expect_below") && a && b) {
+            float got = peak_ms((unsigned)atoi(a)), limit = (float)atof(b);
+            printf("peak %.4f\n", (double)got);
+            if (got > limit) { fprintf(stderr, "expect_below: wanted at most %g, got %g\n", (double)limit, (double)got); ++errors; }
+        }
         else if (!strcmp(p, "expect_patch") && a && b) {
             char *c3 = strtok(NULL, " \t\r\n");
             unsigned e = (unsigned)atoi(a), i = (unsigned)atoi(b), want = c3 ? (unsigned)atoi(c3) : 0U;
@@ -375,6 +383,20 @@ int main(int argc, char **argv)
             int r = i < 156 && c3 ? wb_download(1, e, v, 156) : -9;
             if (!r) { v[i] = (uint8_t)atoi(c3); r = wb_upload(1, e, v, 156, 0); }
             if (r) { fprintf(stderr, "retouch_voice %u %u: status %d\n", e, i, r); ++errors; }
+        }
+        else if (!strcmp(p, "expect_rx") && a && b) {
+            unsigned e = (unsigned)atoi(a), want = (unsigned)strtoul(b, NULL, 16);
+            const struct dx_cfg *cf = dx_route_cfg();
+            if (e >= 8 || cf->e[e].rx != want) { fprintf(stderr, "expect_rx %s: wanted %x, got %x\n", a, want, e < 8 ? cf->e[e].rx : 0U); ++errors; }
+        }
+        else if (!strcmp(p, "expect_engine") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned e = (unsigned)atoi(a);
+            const struct dx_cfg *cf = dx_route_cfg();
+            if (e >= 8 || !c3 || cf->e[e].lo != (unsigned)atoi(b) || cf->e[e].hi != (unsigned)atoi(c3)) {
+                fprintf(stderr, "expect_engine %s: wanted %s..%s, got %d..%d\n", a, b, c3 ? c3 : "?", e < 8 ? cf->e[e].lo : -1, e < 8 ? cf->e[e].hi : -1);
+                ++errors;
+            }
         }
         else if (!strcmp(p, "expect_cfg") && a && b) {
             const struct dx_cfg *cf = dx_route_cfg();

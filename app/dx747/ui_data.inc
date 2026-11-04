@@ -74,7 +74,7 @@ static char *put_channels(char *o, unsigned mask)
 /* ---- the snapshot every draw function reads ------------------------------- */
 
 struct fr_engine {
-    uint8_t level, volume, muted, program, rev, dly;
+    uint8_t level, volume, muted, solo, audible, program, rev, dly;
     char name[11];
 };
 static struct frame {
@@ -111,7 +111,7 @@ static void frame_collect(uint32_t now)
         struct groove_view v;
         groove_get_view(t, 0, &v);
         struct fr_engine *e = &fr.e[t];
-        e->level = v.level; e->volume = v.volume; e->muted = v.muted; e->program = v.program;
+        e->level = v.level; e->volume = v.volume; e->muted = v.muted; e->solo = v.solo; e->audible = v.audible; e->program = v.program;
         uint8_t sends[2] = {0, 0}, patch[156];
         groove_sends_get(t, sends);
         e->rev = sends[0] & 15U; e->dly = sends[1] & 15U;

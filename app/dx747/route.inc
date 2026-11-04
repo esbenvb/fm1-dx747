@@ -141,9 +141,10 @@ DX_FN void dx_send(struct dx_router *r, const uint8_t *m, unsigned n)
     r->pw = pw + 1;
 }
 
-DX_FN void dx_note_msg(struct dx_router *r, const struct dx_cfg *c, unsigned eng, unsigned on, unsigned note)
+/* A note on carries the velocity it arrived with (1..127); a note off always goes out with 0. */
+DX_FN void dx_note_msg(struct dx_router *r, const struct dx_cfg *c, unsigned eng, unsigned vel, unsigned note)
 {
-    uint8_t m[3] = {(uint8_t)((on ? 0x90U : 0x80U) | c->priv[eng]), (uint8_t)note, (uint8_t)(on ? 100 : 0)};
+    uint8_t m[3] = {(uint8_t)((vel ? 0x90U : 0x80U) | c->priv[eng]), (uint8_t)note, (uint8_t)(vel ? vel : 0)};
     dx_send(r, m, 3);
 }
 
@@ -165,7 +166,7 @@ DX_FN int dx_oldest(const struct dx_router *r, int eng)
     return best;
 }
 
-DX_FN void dx_note_on(struct dx_router *r, const struct dx_cfg *c, unsigned src, unsigned ch, unsigned note)
+DX_FN void dx_note_on(struct dx_router *r, const struct dx_cfg *c, unsigned src, unsigned ch, unsigned note, unsigned vel)
 {
     unsigned key = src << 4 | ch;
     for (unsigned e = 0; e < DX_ENGINES; ++e) {
@@ -191,7 +192,7 @@ DX_FN void dx_note_on(struct dx_router *r, const struct dx_cfg *c, unsigned src,
         n->key = (uint8_t)key; n->note = (uint8_t)note; n->eng = (uint8_t)e; n->out = (uint8_t)out;
         n->sust = 0; n->seq = ++r->seq;
         r->nheld = slot + 1;
-        dx_note_msg(r, c, e, 1, out);
+        dx_note_msg(r, c, e, vel, out);
     }
 }
 
@@ -261,6 +262,15 @@ DX_FN void dx_forward(struct dx_router *r, const struct dx_cfg *c, unsigned targ
     }
 }
 
+/* CC2 = 127 to the engines in mask, through the same paced stream as everything else. */
+DX_FN void dx_refresh_engines(struct dx_router *r, const struct dx_cfg *c, unsigned mask)
+{
+    for (unsigned e = 0; e < DX_ENGINES; ++e) {
+        if (!(mask & (1U << e)) || !(c->up & (1U << e))) continue;
+        uint8_t o[3] = {(uint8_t)(0xb0U | c->priv[e]), 2, 127};
+        dx_send(r, o, 3);
+    }
+}
 DX_FN unsigned dx_size(unsigned status) { return (status & 0xe0U) == 0xc0U ? 2U : 3U; }
 
 /* One complete short channel message from source src. Nothing is reported to
@@ -279,7 +289,7 @@ DX_FN void dx_router_event(struct dx_router *r, unsigned src, const uint8_t *m, 
         if ((c->e[e].rx >> ch) & 1U) rx |= 1U << e;
         if (c->e[e].ctl == ch + 1U) ctl |= 1U << e;
     }
-    if (type == 0x90 && m[2]) { dx_note_on(r, c, src, ch, m[1]); return; }
+    if (type == 0x90 && m[2]) { dx_note_on(r, c, src, ch, m[1], m[2]); return; }
     if (type == 0x80 || type == 0x90) { dx_note_off(r, c, src, ch, m[1]); return; }
     if (type == 0xa0) {
         for (unsigned e = 0; e < DX_ENGINES; ++e) {
@@ -301,6 +311,10 @@ DX_FN void dx_router_event(struct dx_router *r, unsigned src, const uint8_t *m, 
             /* master filter controls: consumed here, they never reach an engine */
             dx_mail_put(r->mail, cc == 74 ? DX_MAIL_CUTOFF : cc == 71 ? DX_MAIL_RES : DX_MAIL_TYPE, v);
             return;
+        } else if (cc == 121) {
+            /* the engine puts pan in the centre and expression to 127: the same slots as CC10 and CC11, so the order is kept */
+            for (unsigned e = 0; e < DX_ENGINES; ++e)
+                if (targets & (1U << e)) { dx_mail_put(r->mail, DX_MAIL_PAN + e, 64); dx_mail_put(r->mail, DX_MAIL_EXPR + e, 127); }
         } else if (cc == 74 || cc == 71 || cc == 10 || cc == 11) {
             unsigned base = cc == 10 ? DX_MAIL_PAN : cc == 11 ? DX_MAIL_EXPR : DX_MAIL_BRIGHT;
             for (unsigned e = 0; e < DX_ENGINES; ++e) if (targets & (1U << e)) dx_mail_put(r->mail, base + e, v);
@@ -323,6 +337,11 @@ DX_FN void dx_router_event(struct dx_router *r, unsigned src, const uint8_t *m, 
         }
     }
     if (targets) dx_forward(r, c, targets, m, n);
+    /* A program change or all sound off panics the engine, and a panicked engine keeps a voice with amplitude-modulation
+     * sensitivity silent until some controller message arrives. Breath fully open is the engine's own default, so it
+     * costs nothing; sent right behind the message it follows it in the same ordered stream, and a breath value that the
+     * sender sends later still comes after it (or replaces it, while both are queued). */
+    if (targets && (type == 0xc0 || (type == 0xb0 && m[1] == 120))) dx_refresh_engines(r, c, targets);
 }
 
 /* Built-in keys: a note on the keyboard channel, fixed velocity like stock. */
@@ -386,12 +405,13 @@ DX_FN void dx_router_poll(struct dx_router *r, uint32_t now)
     if (need != r->need_done && r->pr == r->pw && c) {
         /* Resumable: the budget may cover only part of the eight messages. */
         if (!r->rec_next) r->rec_mark = r->seq;
-        while (r->ctok && r->rec_next < DX_ENGINES) {
-            uint8_t off[3] = {(uint8_t)(0xb0U | c->priv[r->rec_next]), 123, 0};
+        while (r->ctok && r->rec_next < 2U * DX_ENGINES) {
+            /* per engine: all notes off, then breath open (the engine's reset left it silent for some voices) */
+            uint8_t msg[3] = {(uint8_t)(0xb0U | c->priv[r->rec_next / 2U]), (r->rec_next & 1U) ? 2U : 123U, (r->rec_next & 1U) ? 127U : 0U};
             --r->ctok; ++r->rec_next;
-            if (r->post(off, 3)) ++r->fail_c;
+            if (r->post(msg, 3)) ++r->fail_c;
         }
-        if (r->rec_next == DX_ENGINES) {
+        if (r->rec_next == 2U * DX_ENGINES) {
             r->rec_next = 0; r->need_done = need;
             r->drop_mark = r->rec_mark; DX_BARRIER(); ++r->drop_seq;
         }

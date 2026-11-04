@@ -209,7 +209,8 @@ static void test_controllers_and_ctl_channel(void)
     ev3(&ext, DX_SRC_USB, 0x94, 60, 100, 0);    /* notes on a control channel are ignored */
     CHECK(nposted == 0);
     ev3(&ext, DX_SRC_USB, 0xc0, 12, 0, 0);      /* program change reaches both ch 1 engines */
-    CHECK(nposted == 2 && posted[0].n == 2 && posted[0].m[0] == (0xc0U | cfg.priv[0]) && posted[0].m[1] == 12);
+    CHECK(nposted == 4 && posted[0].n == 2 && posted[0].m[0] == (0xc0U | cfg.priv[0]) && posted[0].m[1] == 12);
+    CHECK(posted[1].m[0] == (0xc0U | cfg.priv[1]) && posted[2].m[1] == 2 && posted[3].m[1] == 2);   /* then breath open for each */
     fresh();
     ev3(&ext, DX_SRC_USB, 0xe0, 0, 80, 0);      /* pitch bend */
     CHECK(nposted == 2 && (posted[0].m[0] & 0xf0U) == 0xe0 && posted[0].m[2] == 80);
@@ -345,7 +346,7 @@ static void test_ring_overflow_recovers(void)
     CHECK(ext.nheld == 1 && ext.held[0].note == 70);
     unsigned cc123 = 0;
     for (unsigned i = 0; i < nposted; ++i) cc123 += posted[i].m[1] == 123 && (posted[i].m[0] & 0xf0U) == 0xb0;
-    CHECK(cc123 == DX_PEND_MAX - 4 + DX_ENGINES); /* 2 note ons and 2 note offs shared the ring, plus 8 recovery messages */
+    CHECK(cc123 == DX_PEND_MAX - 4 + DX_ENGINES); /* 2 note ons and 2 note offs shared the ring, plus one all notes off per engine after it */
 }
 
 static void test_post_failure_clears_state(void)
@@ -520,6 +521,110 @@ static void test_coalesce_race(void)
     CHECK(cc7 == 1 && last == 99);
 }
 
+/* The velocity a note arrives with is the velocity every engine that plays it gets. */
+static void test_velocity(void)
+{
+    static const uint8_t vels[5] = {1, 20, 64, 100, 127};
+    reset();
+    cfg.e[0].rx = 1U << 0; cfg.e[1].rx = 1U << 0; cfg.e[1].shift = 12;   /* a layer, one engine an octave up */
+    for (unsigned i = 0; i < 5; ++i) {
+        fresh();
+        ev3(&ext, DX_SRC_USB, 0x90, 40 + i, vels[i], 1000 + i * 50);
+        CHECK(nposted == 2);
+        CHECK(posted[0].m[0] == (0x90U | cfg.priv[0]) && posted[0].m[1] == 40U + i && posted[0].m[2] == vels[i]);
+        CHECK(posted[1].m[0] == (0x90U | cfg.priv[1]) && posted[1].m[1] == 52U + i && posted[1].m[2] == vels[i]);
+        fresh();
+        ev3(&ext, DX_SRC_USB, 0x80, 40 + i, 90, 1020 + i * 50);          /* the release velocity is not passed on */
+        CHECK(nposted == 2 && posted[0].m[0] == (0x80U | cfg.priv[0]) && posted[0].m[2] == 0 && posted[1].m[2] == 0);
+    }
+    /* the same key struck again: a release, then the new velocity */
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 60, 30, 2000);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 60, 110, 2100);
+    CHECK(nposted == 4);
+    CHECK(posted[0].m[0] == (0x80U | cfg.priv[0]) && posted[0].m[2] == 0 && posted[1].m[0] == (0x90U | cfg.priv[0]) && posted[1].m[2] == 110);
+    CHECK(posted[2].m[0] == (0x80U | cfg.priv[1]) && posted[2].m[2] == 0 && posted[3].m[0] == (0x90U | cfg.priv[1]) && posted[3].m[2] == 110);
+    /* a note on with velocity 0 is a release and starts nothing */
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 61, 0, 2200);
+    CHECK(nposted == 0);
+    /* the built-in keys have a fixed velocity */
+    nposted = 0;
+    dx_router_key(&loc, 62, 1, 2300);
+    CHECK(nposted == 2 && posted[0].m[2] == 100 && posted[1].m[2] == 100);
+    /* a stolen note is released with 0, and the note that took its place keeps its own velocity */
+    reset();
+    cfg.e[0].rx = 1U << 0; cfg.e[0].poly = 1;
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 50, 90, 3000);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 52, 17, 3100);
+    CHECK(nposted == 2 && (posted[0].m[0] & 0xf0) == 0x80 && posted[0].m[1] == 50 && posted[0].m[2] == 0);
+    CHECK((posted[1].m[0] & 0xf0) == 0x90 && posted[1].m[1] == 52 && posted[1].m[2] == 17);
+}
+
+/* A program change or all sound off panics the engine: the refresh (breath fully open) follows it in the same stream. */
+static unsigned cc2_after(unsigned from, unsigned channel)
+{
+    for (unsigned i = from; i < nposted; ++i) if (posted[i].m[0] == (0xb0U | channel) && posted[i].m[1] == 2 && posted[i].m[2] == 127) return i;
+    return nposted;
+}
+static void test_refresh_in_stream(void)
+{
+    reset();
+    cfg.e[0].rx = 1U << 0; cfg.e[1].rx = 1U << 0; cfg.e[2].ctl = 3;
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xc0, 5, 0, 1000);                          /* program change on a channel two engines play */
+    CHECK(nposted == 4);
+    CHECK(posted[0].m[0] == (0xc0U | cfg.priv[0]) && posted[1].m[0] == (0xc0U | cfg.priv[1]));
+    CHECK(posted[2].m[0] == (0xb0U | cfg.priv[0]) && posted[2].m[1] == 2 && posted[2].m[2] == 127);   /* right behind it */
+    CHECK(posted[3].m[0] == (0xb0U | cfg.priv[1]) && posted[3].m[1] == 2 && posted[3].m[2] == 127);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xb0, 120, 0, 1100);                        /* all sound off */
+    CHECK(nposted == 4 && posted[0].m[1] == 120 && posted[1].m[1] == 120 && posted[2].m[1] == 2 && posted[3].m[1] == 2);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xb2, 120, 0, 1200);                        /* ...also on a control channel */
+    CHECK(nposted == 2 && posted[0].m[0] == (0xb0U | cfg.priv[2]) && posted[0].m[1] == 120 && posted[1].m[1] == 2);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xb0, 123, 0, 1300);                        /* all notes off does not panic the engine: no refresh */
+    CHECK(cc2_after(0, cfg.priv[0]) == nposted);
+    /* an engine that does not exist gets nothing, and a channel nobody listens on neither */
+    cfg.up = 0xfe;
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xc0, 1, 0, 1400);
+    CHECK(cc2_after(0, cfg.priv[0]) == nposted && cc2_after(0, cfg.priv[1]) < nposted);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xc9, 1, 0, 1500);
+    CHECK(nposted == 0);
+    /* a breath value the sender sends after the program change comes after the refresh, and replaces it while both are queued */
+    reset();
+    cfg.e[0].rx = 1U << 0;
+    ext.started = 1; ext.last_ms = 1000; ext.tokens = 0;              /* everything queues */
+    ev3(&ext, DX_SRC_USB, 0xc0, 5, 0, 1000);
+    ev3(&ext, DX_SRC_USB, 0xb0, 2, 40, 1000);
+    dx_router_poll(&ext, 8000);
+    unsigned last = 255;
+    for (unsigned i = 0; i < nposted; ++i) if (posted[i].m[0] == (0xb0U | cfg.priv[0]) && posted[i].m[1] == 2) last = posted[i].m[2];
+    CHECK(last == 40);
+}
+/* After an overflow the engine reset itself: every engine gets all notes off and then the refresh. */
+static void test_recovery_refreshes(void)
+{
+    reset();
+    cfg.e[0].rx = 0xffff; cfg.pool = 200;
+    ext.tokens = 0; ext.started = 1; ext.last_ms = 0;
+    for (unsigned n = 0; n < DX_PEND_MAX + 8; ++n) ev3(&ext, DX_SRC_USB, 0xb0, 123, 0, 0);   /* the ring overflows, so the engine is told to start over */
+    CHECK(ext.need_seq != ext.need_done);
+    drain(100);
+    CHECK(ext.need_seq == ext.need_done);
+    for (unsigned e = 0; e < DX_ENGINES; ++e) {
+        unsigned off = 0, open = 0;
+        for (unsigned i = 0; i < nposted; ++i) if (posted[i].m[0] == (0xb0U | cfg.priv[e])) { off += posted[i].m[1] == 123; open += posted[i].m[1] == 2 && posted[i].m[2] == 127; }
+        CHECK(off >= 1 && open >= 1);
+    }
+}
+
 /* Controller mailbox: CC74/71 (BRIGHT), CC10/11 (mirrored), program changes and the master channel. */
 static void test_controller_mail(void)
 {
@@ -548,7 +653,24 @@ static void test_controller_mail(void)
     ev3(&ext, DX_SRC_USB, 0xc0, 5, 0, 1006);                      /* program change */
     CHECK(dx_mail_take(&mail, DX_MAIL_PC + 0, &v));
     CHECK(!dx_mail_take(&mail, DX_MAIL_PC + 1, &v));
-    /* mirrored controllers are still delivered to the engine */
+    ev3(&ext, DX_SRC_USB, 0xb0, 121, 0, 1006);                        /* reset controllers: the values the engine puts back */
+    CHECK(dx_mail_take(&mail, DX_MAIL_PAN + 0, &v) && v == 64);
+    CHECK(dx_mail_take(&mail, DX_MAIL_EXPR + 0, &v) && v == 127);
+    CHECK(!dx_mail_take(&mail, DX_MAIL_PAN + 1, &v));
+    ev3(&ext, DX_SRC_USB, 0xb2, 121, 0, 1006);                        /* on a control channel too */
+    CHECK(dx_mail_take(&mail, DX_MAIL_PAN + 1, &v) && v == 64);
+    CHECK(dx_mail_take(&mail, DX_MAIL_EXPR + 1, &v) && v == 127);
+    /* the same slots as CC10 and CC11, so the order the sender used is the order that wins */
+    ev3(&ext, DX_SRC_USB, 0xb0, 10, 100, 1006);
+    ev3(&ext, DX_SRC_USB, 0xb0, 121, 0, 1006);
+    CHECK(dx_mail_take(&mail, DX_MAIL_PAN + 0, &v) && v == 64);       /* value, then reset: the reset wins */
+    ev3(&ext, DX_SRC_USB, 0xb0, 121, 0, 1006);
+    ev3(&ext, DX_SRC_USB, 0xb0, 10, 100, 1006);
+    CHECK(dx_mail_take(&mail, DX_MAIL_PAN + 0, &v) && v == 100);      /* reset, then value: the value wins */
+    /* mirrored controllers are still delivered to the engine (first let the queue empty, the events above were many) */
+    for (unsigned k = 0; k < 40; ++k) dx_router_poll(&ext, 3000 + k * 10);
+    CHECK(ext.pr == ext.pw);
+    fresh();
     unsigned before = nposted;
     ev3(&ext, DX_SRC_USB, 0xb0, 10, 64, 1007);
     CHECK(nposted == before + 1 && (posted[nposted - 1].m[0] & 0xf0) == 0xb0 && posted[nposted - 1].m[1] == 10);
@@ -579,6 +701,9 @@ static void test_controller_mail(void)
 int main(void)
 {
     test_basic_and_mask();
+    test_velocity();
+    test_refresh_in_stream();
+    test_recovery_refreshes();
     test_controller_mail();
     test_coalesce_race();
     test_layering_and_split();

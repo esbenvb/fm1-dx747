@@ -6,6 +6,7 @@
 static struct fm1_controls ctl, prev_ctl;
 static uint32_t keys_playing, led_state_lo, led_state_hi;
 static uint8_t audition_note[27];      /* note sounding on the engine under test, 255 = none */
+static uint8_t audition_eng[27];       /* ...and the engine it was started on: SELECT may have moved since */
 static struct dx_cfg cw;               /* working copy of the router configuration */
 
 static void notice(const char *text) { ui.notice = text; ui.notice_until = fr.now + 1800U; }
@@ -33,7 +34,7 @@ static void release_keys(void)
 {
     for (unsigned k = 0; k < 27; ++k) {
         if ((keys_playing >> k) & 1U) dx_route_key(key_note(k), 0);
-        if (audition_note[k] != 255) { audition(ui.engine, audition_note[k], 0); audition_note[k] = 255; }
+        if (audition_note[k] != 255) { audition(audition_eng[k], audition_note[k], 0); audition_note[k] = 255; }
     }
     keys_playing = 0;
 }
@@ -87,6 +88,7 @@ static void scene_overlay_encoder(void)
 
 /* ---- the panel -------------------------------------------------------------- */
 
+static int lane_engine(void);
 static void on_button(unsigned pressed)
 {
     if (ui.screen == S_BOOT) { go(S_SETUP); return; }
@@ -102,7 +104,8 @@ static void on_button(unsigned pressed)
     else if (pressed & BTN_BIT(BTN_GLO)) go(S_SYS);
     else if (pressed & BTN_BIT(BTN_SAVE)) begin_save();
     else if (pressed & BTN_BIT(BTN_ARP)) {
-        if (ui.screen == S_CHANNEL || ui.screen == S_EPLAYS) { ui.learn = ui.learn ? 0 : 1; ui.learn_sig = fr.nlog ? fr.log[0].ms ^ fr.log[0].d1 : 0; }
+        if (ui.screen == S_CHANNEL && !ui.learn && lane_engine() < 0) notice("LEARN: ADD AN ENGINE FIRST");
+        else if (ui.screen == S_CHANNEL || ui.screen == S_EPLAYS) { ui.learn = ui.learn ? 0 : 1; ui.learn_sig = fr.nlog ? fr.log[0].ms ^ fr.log[0].d1 : 0; }
         else notice("LEARN: OPEN CHANNEL OR ENGINE PLAYS");
     }
     else if (pressed & (BTN_BIT(BTN_OCT_DOWN) | BTN_BIT(BTN_OCT_UP))) {
@@ -120,6 +123,20 @@ static int lane_engine(void)
     return n ? list[ui.lane < n ? ui.lane : n - 1U] : -1;
 }
 
+/* The lowest and the highest note play: the first sets one end, the second the other, in either order. */
+static void learn_note(unsigned note)
+{
+    if (ui.learn == 1) { ui.learn_lo = (uint8_t)note; ui.learn = 2; return; }
+    int e = ui.screen == S_CHANNEL ? lane_engine() : (int)ui.engine;
+    ui.learn = 0;
+    if (e < 0) return;
+    struct dx_cfg *c = cfg_begin();
+    unsigned lo = ui.learn_lo < note ? ui.learn_lo : note, hi = ui.learn_lo < note ? note : ui.learn_lo;
+    c->e[e].lo = (uint8_t)lo; c->e[e].hi = (uint8_t)hi;
+    cfg_commit();
+    notice("RANGE LEARNED");
+}
+/* Notes from MIDI come through the router log, from any channel and port. */
 static void learn_poll(void)
 {
     if (!ui.learn || fr.nlog == 0) return;
@@ -127,25 +144,26 @@ static void learn_poll(void)
     uint32_t sig = l->ms ^ l->d1;
     if (sig == ui.learn_sig || (l->status & 0xf0U) != 0x90U || !l->d2) return;
     ui.learn_sig = sig;
-    if (ui.learn == 1) { ui.learn_lo = l->d1; ui.learn = 2; return; }
-    int e = ui.screen == S_CHANNEL ? lane_engine() : (int)ui.engine;
-    ui.learn = 0;
-    if (e < 0) return;
-    struct dx_cfg *c = cfg_begin();
-    unsigned lo = ui.learn_lo < l->d1 ? ui.learn_lo : l->d1, hi = ui.learn_lo < l->d1 ? l->d1 : ui.learn_lo;
-    c->e[e].lo = (uint8_t)lo; c->e[e].hi = (uint8_t)hi;
-    cfg_commit();
-    notice("RANGE LEARNED");
+    learn_note(l->d1);
 }
 
+/* The mixer decides what is muted (soloing an engine clears its own mute); the router's flag follows it, or an engine could
+ * be soloed and never receive a note. */
+static void sync_mute(unsigned e)
+{
+    struct groove_view v;
+    groove_get_view(e, 0, &v);
+    if (!!dx_route_cfg()->e[e].mute == !!v.muted) return;
+    struct dx_cfg *c = cfg_begin();
+    c->e[e].mute = (uint8_t)!!v.muted;
+    cfg_commit();
+}
 static void set_mute(unsigned e, unsigned mute)
 {
-    struct dx_cfg *c = cfg_begin();
-    c->e[e].mute = (uint8_t)mute;
-    cfg_commit();
     struct groove_view v;
     groove_get_view(e, 0, &v);
     if (!!v.muted != !!mute) groove_mix_toggle(e, 0);
+    sync_mute(e);
 }
 static void send_pan(unsigned e)
 {
@@ -173,7 +191,7 @@ static void on_white_key(unsigned n /* 0..15 */)
     case S_EPLAYS: { struct dx_cfg *c = cfg_begin(); c->e[ui.engine].rx ^= (uint16_t)(1U << n); cfg_commit(); break; }
     case S_MIX:
         if (n < 8) set_mute(n, !fr.cfg.e[n].mute);
-        else groove_mix_toggle(n - 8U, 1);
+        else { groove_mix_toggle(n - 8U, 1); sync_mute(n - 8U); }
         break;
     case S_SCENES: {
         unsigned idx = (ui.scene / 16U) * 16U + n;
@@ -189,11 +207,13 @@ static void on_white_key(unsigned n /* 0..15 */)
 static void on_key(unsigned key, unsigned down)
 {
     if (ui.screen == S_BOOT) { if (down) go(S_SETUP); return; }
+    /* While LEARN waits for notes, the built-in keys are the notes (they otherwise select channels and engines here). */
+    if (ui.learn && ui.mode == M_BROWSE && (ui.screen == S_CHANNEL || ui.screen == S_EPLAYS)) { if (down) learn_note(key_note(key)); return; }
     int w = wkey_index(key);
     if (screen_plays()) {
         if (screen_audition()) {
-            if (down) { audition_note[key] = (uint8_t)key_note(key); audition(ui.engine, audition_note[key], 1); }
-            else if (audition_note[key] != 255) { audition(ui.engine, audition_note[key], 0); audition_note[key] = 255; }
+            if (down) { audition_note[key] = (uint8_t)key_note(key); audition_eng[key] = ui.engine; audition(ui.engine, audition_note[key], 1); }
+            else if (audition_note[key] != 255) { audition(audition_eng[key], audition_note[key], 0); audition_note[key] = 255; }
         } else {
             dx_route_key(key_note(key), down);
             if (down) keys_playing |= 1U << key; else keys_playing &= ~(1U << key);
@@ -287,12 +307,12 @@ static void on_encoders(void)
         if (e[0]) ui.sys_row = (uint8_t)wrap((int)ui.sys_row + e[0], 7);
         int d = e[2] + e[6];
         if (!d) break;
+        if (ui.sys_row == 3) { dx_keyboard_channel_step(d); break; }   /* the active channel, which a scene may have set */
         struct dx_settings s;
         dx_settings_get(&s);
         switch (ui.sys_row) {
         case 1: s.radio_off ^= GROOVE_RADIO_AUDIO; break;
         case 2: s.backlight = (uint8_t)clampi(s.backlight + d, 0, 8); break;
-        case 3: s.kbd_ch = (uint8_t)wrap((int)s.kbd_ch + d, 16); break;
         case 4: s.master_ch = (uint8_t)wrap((int)s.master_ch + d, 17); break; /* 0 = off, 1..16 */
         default: break;
         }
@@ -334,7 +354,7 @@ static void update_leds(void)
     case S_ENGINES: lit = 0xffU; break;
     case S_CHANNEL: for (unsigned e = 0; e < 8; ++e) if ((fr.cfg.e[e].rx >> ui.channel) & 1U) lit |= 1U << e; break;
     case S_EPLAYS: lit = fr.cfg.e[ui.engine].rx; break;
-    case S_MIX: for (unsigned e = 0; e < 8; ++e) if (fr.cfg.e[e].mute) lit |= 1U << e; break;
+    case S_MIX: for (unsigned e = 0; e < 8; ++e) { if (fr.cfg.e[e].mute) lit |= 1U << e; if (fr.e[e].solo) lit |= 1U << (8 + e); } break;
     case S_SCENES: for (unsigned k = 0; k < 16; ++k) if (scene_exists((ui.scene / 16U) * 16U + k)) lit |= 1U << k; break;
     default: break;
     }

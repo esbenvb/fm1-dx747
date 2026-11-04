@@ -51,6 +51,8 @@ void dx_route_panic(void)
     ++panic_epoch;
     const uint8_t reset = 0xff;
     (void)fm1_midi_post(&reset, 1);
+    /* the control task posts the refresh once the reset is in the engine's ring, so it arrives behind it */
+    dx_mail_put(&mailbox, DX_MAIL_PANIC, 0);
 }
 int dx_route_active(unsigned channel)
 {

@@ -1,0 +1,39 @@
+# Recipe 11: a voice with amplitude-modulation sensitivity is audible after it is loaded and after the engine was
+# panicked. Without the controller refresh the engine keeps such a voice silent until some controller message arrives.
+# The voice (sent as a DX7 single-voice dump to engine 1): algorithm 32, every operator a carrier with sensitivity 3.
+boot
+wipe
+run 400
+midi 1 f0 43 00 00 01 1b 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 32 32 32 32 1f 00 01 23 00 00 00 01 00 03 18 41 4d 53 20 54 45 53 54 20 20 10 f7
+run 300
+midi 1 90 3c 64
+expect_peak 400 0.1
+midi 1 80 3c 00
+# all sound off, which a sequencer sends when it stops
+midi 1 b0 78 00
+run 300
+midi 1 90 3c 64
+expect_peak 400 0.1
+midi 1 80 3c 00
+# HOME + PLAY stops every note, and the voice still plays afterwards
+press btn 8
+tap btn 12
+release btn 8
+run 300
+midi 1 90 3c 64
+expect_peak 400 0.1
+midi 1 80 3c 00
+# a MIDI System Reset stops every engine too
+midi 1 ff
+run 300
+midi 1 90 3c 64
+expect_peak 400 0.1
+midi 1 80 3c 00
+# a program change to the library's first patch plays too
+midi 1 f0 43 00 00 01 1b 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 32 32 32 32 1f 00 01 23 00 00 00 01 00 03 18 41 4d 53 20 54 45 53 54 20 20 10 f7
+run 300
+midi 1 c0 00
+run 300
+midi 1 90 3c 64
+expect_peak 400 0.1
+midi 1 80 3c 00

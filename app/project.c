@@ -26,7 +26,14 @@ static void ep_edit(unsigned e, unsigned parameter, int delta) { groove_fm_edit(
 static void ep_name(unsigned e, unsigned index, char c) { groove_fm_name_edit(e, index, c); }
 static void ep_toggle(unsigned e, unsigned op) { groove_operator_toggle(e, op); }
 static int ep_import(unsigned e, const uint8_t v[156]) { return groove_fm_import(e, v); }
-static const struct dx_edit_port edit_port = {ep_copy, ep_edit, ep_name, ep_toggle, ep_import};
+/* Breath fully open, the engine's own default: it makes the engine apply its controller state again. */
+static int ep_refresh(unsigned e)
+{
+    const struct dx_cfg *c = dx_route_cfg();
+    uint8_t m[3] = {(uint8_t)(0xb0U | c->priv[e]), 2, 127};
+    return fm1_midi_post(m, 3);
+}
+static const struct dx_edit_port edit_port = {ep_copy, ep_edit, ep_name, ep_toggle, ep_import, ep_refresh};
 static struct dx_ctl ctl;
 #include "dx747/scene_port.inc"
 
@@ -101,11 +108,21 @@ void dx_settings_update(const struct dx_settings *s)
     }
     settings_mark();
 }
+/* One step of the built-in keyboard's channel from the channel that is active now (a scene may have set it); the setting
+ * that comes back at power-on follows. */
+void dx_keyboard_channel_step(int delta)
+{
+    struct dx_cfg c = *dx_route_cfg();
+    int ch = ((int)c.kbd_ch + delta) % 16;
+    c.kbd_ch = (uint8_t)(ch < 0 ? ch + 16 : ch);
+    dx_route_publish(&c);
+    if (settings.kbd_ch != c.kbd_ch) { settings.kbd_ch = c.kbd_ch; settings_mark(); }
+}
 int dx_storage_state(void) { return storage_state = dx_scene_store_state(); }
 int dx_storage_state_cached(void) { return storage_state; }
 void dx_apply_filter(void) { port_filter(live.filter_type, live.filter_hz, live.filter_res); }
 void dx_bright_changed(unsigned engine) { dx_bright_changed_ctl(&ctl, engine); }
-void dx_bright_force_voice(unsigned engine) { dx_bright_force(&ctl, engine); }
+void dx_bright_force_voice(unsigned engine) { dx_voice_loaded(&ctl, engine); }
 int dx_sysex_in(const uint8_t *message, size_t bytes) { return dx_ctl_sysex_in(&ctl, message, bytes); }
 unsigned dx_sysex_dropped(void) { return ctl.sx_dropped; }
 void dx_bright_unbias(unsigned engine, uint8_t voice[156]) { dx_bright_export_fix(&ctl, engine, voice); }
@@ -175,6 +192,7 @@ void groove_project_poll(void)
         struct dx_cfg c = *dx_route_cfg();
         c.up = booted.up;
         dx_route_publish(&c);
+        ctl.refresh |= (uint8_t)booted.up; /* creating the engines panicked them */
         stage = 1;
         return;
     }

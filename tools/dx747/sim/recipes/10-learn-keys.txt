@@ -1,0 +1,50 @@
+# Recipe 10: LEARN with the built-in keys. Normally they select engines on this screen; while LEARN waits they are notes.
+boot
+wipe
+run 400
+tap btn 11
+white 2
+expect_screen 3
+tap btn 10
+# key 5 is note 58, key 12 is note 65 (the keyboard starts at note 53); either order
+tap key 12
+tap key 5
+run 100
+expect_engine 1 58 65
+# LEARN is over: a white key edits the routing again
+white 3
+run 100
+expect_screen 3
+# that white key added engine 3 and made it the selected lane; with an octave shift the keys are other notes
+tap btn 1
+tap btn 10
+tap key 0
+tap key 7
+run 100
+expect_engine 2 65 72
+expect_engine 1 58 65
+# the same on Plays from, for the selected engine
+tap btn 8
+tap btn 8
+expect_screen 2
+white 1
+expect_screen 4
+tap btn 6
+expect_screen 5
+tap btn 0
+tap btn 10
+tap key 2
+tap key 9
+run 100
+expect_engine 0 55 62
+shot 10a-plays-from
+tap btn 10
+shot 10b-plays-from-learn-armed
+tap btn 10
+# LEARN does not arm on a channel with no engine, and the keys keep selecting
+tap btn 11
+enc 0 9
+tap btn 10
+tap key 0
+run 100
+expect_rx 0 201

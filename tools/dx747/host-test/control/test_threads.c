@@ -25,7 +25,8 @@ static void f_edit(unsigned e, unsigned p, int d)
 static void f_name(unsigned e, unsigned i, char c) { (void)e; (void)i; (void)c; }
 static void f_toggle(unsigned e, unsigned op) { (void)e; (void)op; }
 static int f_import(unsigned e, const uint8_t v[156]) { (void)e; memcpy(voice, v, 155); return 0; }
-static const struct dx_edit_port port = {f_copy, f_edit, f_name, f_toggle, f_import};
+static int f_refresh(unsigned e) { (void)e; return 0; }
+static const struct dx_edit_port port = {f_copy, f_edit, f_name, f_toggle, f_import, f_refresh};
 
 static struct dx_ctl ctl;
 static struct dx_cfg cfg;

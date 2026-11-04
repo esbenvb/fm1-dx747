@@ -182,3 +182,14 @@ enc 2 3
 run 100
 expect_cfg master_ch 13
 expect_cfg kbd_ch 4
+# the keyboard channel row shows and edits the active channel (4 from the scene, so one step is 5, not 1)
+enc 0 -1
+enc 2 1
+run 100
+expect_cfg kbd_ch 5
+enc 2 -5
+run 100
+expect_cfg kbd_ch 0
+enc 2 -1
+run 100
+expect_cfg kbd_ch 15

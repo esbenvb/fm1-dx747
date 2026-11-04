@@ -79,10 +79,11 @@ typedef int (*dx_post_fn)(const uint8_t *message, unsigned bytes);
 /* Controller values the app turns into engine or master edits. The routing
  * task may not edit the engine, so it leaves the latest value of each kind here
  * and the control task takes it: one writer, one reader, latest value wins.
- * Per engine: BRIGHT (CC74/CC71), pan and expression (CC10/CC11, mirrored for
- * the screens and scenes) and "program changed". Master: cutoff, resonance, type. */
+ * Per engine: BRIGHT (CC74/CC71), pan and expression (CC10/CC11, and CC121 which puts
+ * them back to centre and 127, mirrored for the screens and scenes) and "program changed". One slot
+ * says that every engine was stopped (System Reset, the stop buttons, a scene recall). Master: cutoff, resonance, type. */
 enum { DX_MAIL_BRIGHT = 0, DX_MAIL_PAN = 8, DX_MAIL_EXPR = 16, DX_MAIL_PC = 24,
-       DX_MAIL_CUTOFF = 32, DX_MAIL_RES = 33, DX_MAIL_TYPE = 34, DX_MAIL_SLOTS = 35 };
+       DX_MAIL_CUTOFF = 32, DX_MAIL_RES = 33, DX_MAIL_TYPE = 34, DX_MAIL_PANIC = 35, DX_MAIL_SLOTS = 36 };
 struct dx_ctl_mail {
     DX_A(uint8_t) dirty[DX_MAIL_SLOTS];
     DX_A(uint8_t) value[DX_MAIL_SLOTS];
