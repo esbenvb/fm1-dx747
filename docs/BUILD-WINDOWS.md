@@ -436,8 +436,31 @@ python3 tools/dx747/compare/make_fwsc.py /tmp/dx747-out/sdk.elf /tmp/dx747.fwsc
 shasum -a 256 /tmp/dx747.fwsc
 ```
 
-What is still Windows-only is the flashing **page** (`build.bat --package`): it is built by PowerShell
-scripts (`tools/Build-Web.ps1`) and is what actually installs the package on a unit
-([Step 5](#step-5-the-flashing-page)). The page embeds the same `.fwsc`. Earlier, for commit `e59e3e7`, the sizes and
-the build identity already matched; that commit was not compared byte by byte.
+The flashing **page** (`build.bat --package`, [Step 5](#step-5-the-flashing-page)) is assembled by
+PowerShell (`tools/Build-Web.ps1`). `tools/dx747/compare/make_page.py` is a port of it, so the page can be
+made on the Mac too (next section). Earlier, for commit `e59e3e7`, the sizes and the build identity
+already matched; that commit was not compared byte by byte.
+
+## Building everything on a Mac, without Windows
+
+From the repository root, with Docker running, after the one-time
+`tools/dx747/docker/fetch-toolchain.sh --download` and `tools/dx747/sim/fetch-wasi-sdk.sh --download`:
+
+```bash
+tools/dx747/mac-build.sh
+```
+
+It builds a clean export of `HEAD` in about 15 seconds: the firmware and the SDK's checks in Docker, the
+`.fwsc` with `make_fwsc.py`, the browser core with the macOS WASI SDK, and the flashing page with
+`make_page.py`. Results are in `build/dx747/mac/` (`FM1_OFFICIAL_OPEN.fwsc` and
+`official-web/FM1-Official-Open-Source.html` with its `SHA256SUMS.txt`). The page's source address is the
+GitHub archive of the commit, made from the `origin` remote, so push the commit first or pass
+`--source-url`. `-o DIR` changes the output folder and `--worktree` builds uncommitted changes.
+
+How far to trust it: the firmware package it makes is byte for byte the Windows one (above). The page was
+checked with the page's own code (`FM1Web.prepare` accepts the embedded firmware and the V15 recovery
+image, and every placeholder is filled), but **not compared byte for byte with a Windows-built page**, because
+the browser core (`simulator.wasm`) comes from the macOS WASI SDK and the page text from a port of the script.
+To compare, build the page on Windows (Step 5) at the same commit with the same source address and
+`shasum -a 256` both. Until that has been done, install from the Windows-built page.
 
