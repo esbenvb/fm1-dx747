@@ -92,9 +92,11 @@ fails before that point (the sealed engine's own start-up, or DX747's few
 initialisation calls before the chord is read).
 
 **ROM updater: hold OCT- and OCT+ only** (no other button, no note key), for about
-0.4 s. It calls the SDK's `fm1_device_recovery()`, which in the linked firmware
+0.4 s (a key matrix that ghosts a third key while the two buttons are held makes the
+unit refuse the chord, which is the safe direction). It calls the SDK's `fm1_device_recovery()`, which in the linked firmware
 disables interrupts, copies the text "usb_update_mode" into the RAM block the boot
-loader reads, sets a chip register bit and waits for the reset that follows. (The
+loader reads, sets a chip register bit and then waits (as far as the disassembly of the
+linked firmware shows) for a reset to follow. (The
 same routine is behind the SysEx `F0 22 24 35 7D F7` over DIN or Bluetooth MIDI in
 the sealed engine.) DX747's own code writes no flash before calling it. **What the
 boot loader does after that reset, and whether the workbench page can talk to it,

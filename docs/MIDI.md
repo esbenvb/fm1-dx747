@@ -155,4 +155,5 @@ over MIDI, because the FM-1's MIDI input throws away SysEx over 1,024 bytes. Loa
 banks with the M-VAVE workbench (see `DX747.md`). The unit does not send voice dumps.
 
 The M-VAVE workbench also reaches the unit with its own SysEx (`F0 7D 46 4D 02 ...`)
-and with MMC; DX747 leaves those as they were.
+and with MMC. DX747 answers that file protocol for voices and the four voice banks, and
+refuses projects, samples and timbres of any source but DX7 (see `DX747.md`).

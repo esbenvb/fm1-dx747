@@ -29,7 +29,6 @@ serial or label.
 | The update page still works in safe boot | with the unit in safe boot, open the flashing page and connect | the page connects as it does on a normal start; do **not** start an install just for this |
 | Back to normal | switch off, release, switch on | the normal logo, then Setup |
 | No false trigger | switch on five times with nothing held | never SAFE BOOT |
-| The ROM updater chord | **only with the programmer round trip proven:** hold OCT- and OCT+ (nothing else) for a second at power-on | write down exactly what happens: what the unit enumerates as, whether the page sees it, and how to get back. Not known |
 
 ## 1. Start-up
 
@@ -41,7 +40,7 @@ serial or label.
 | All eight engines up | look at every screen's header | no amber "ENGINES n/8 UP" note anywhere; write down n if it shows |
 
 All eight engines at once is the biggest unknown: the firmware link leaves about
-231,800 bytes of heap, but eight real engine instances were never created together
+231,000 bytes of heap, but eight real engine instances were never created together
 on hardware.
 
 ## 2. Load and voices
@@ -129,7 +128,7 @@ Do these last, and only with the programmer round trip proven.
 
 | Check | How | Pass |
 |---|---|---|
-| Recovery chord | power on holding OCT- and OCT+ | write down what happens. Not known |
+| The ROM updater chord | power on holding OCT- and OCT+ (nothing else, no key) for a second | write down exactly what happens: what the unit enumerates as, whether the page sees it, and how to get back. Not known |
 | Return to stock | the page's **Restore original V15** | the unit runs the original firmware with the factory voice banks; restore voices, samples and projects from backups |
 
 ## What to report

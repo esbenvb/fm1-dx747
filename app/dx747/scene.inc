@@ -149,6 +149,7 @@ static int dx_sec_valid_at(uint32_t addr, unsigned sector, struct dx_sec *h)
 }
 
 static int dx_sector_is_sample_bank(unsigned sector);
+static int dx_store_foreign_besides(unsigned except);
 
 /* Newest valid copy of a sector: the destination, or staging if it is newer. A staged copy of a sector
  * that now holds the stock sample bank is stale (stock firmware ran in between) and does not count. */
@@ -165,6 +166,10 @@ static int dx_locate(unsigned sector, uint32_t *addr, struct dx_sec *h)
         int bank = dx_sector_is_sample_bank(sector);
         if (bank < 0) return bank;
         if (bank) return DX_SCENE_EMPTY;
+        /* The same test recovery applies before it finishes a staged image, so that reads and recovery agree: with
+         * foreign data in another store sector the staged copy is stale, not a save waiting to be finished. */
+        int foreign = dx_store_foreign_besides(sector);
+        if (foreign) return foreign < 0 ? foreign : DX_SCENE_EMPTY;
         *addr = DX_STAGE; *h = s; return 0;
     }
     return DX_SCENE_EMPTY;
@@ -459,11 +464,15 @@ int dx_scene_read(unsigned index, struct dx_scene *out)
 }
 
 /* Catalogue: names and which engines each scene uses, for the Scenes screen. */
-static struct { uint64_t used; char name[DX_SCENES][12]; uint8_t engines[DX_SCENES]; } dx_catalog;
+typedef struct { uint64_t used; char name[DX_SCENES][12]; uint8_t engines[DX_SCENES]; } dx_catalog_t;
+static dx_catalog_t dx_catalog;
 
 int dx_scene_scan(void)
 {
-    memset(&dx_catalog, 0, sizeof dx_catalog);
+    /* Built aside and published only when every sector was read: a flash error half way must not leave a catalogue
+     * that shows real scenes as free slots. */
+    static dx_catalog_t fresh; /* control task only */
+    memset(&fresh, 0, sizeof fresh);
     for (unsigned sector = 0; sector < DX_SCENE_SECTORS; ++sector) {
         uint32_t addr;
         struct dx_sec h;
@@ -476,11 +485,12 @@ int dx_scene_scan(void)
             if (r) return r;
             if (head[SO_MAGIC] != 'S' || head[SO_MAGIC + 1] != 'C' || head[SO_VERSION] != 1 || head[SO_USED] != 1) continue;
             unsigned index = sector * 2 + slot;
-            dx_catalog.used |= (uint64_t)1 << index;
-            memcpy(dx_catalog.name[index], head + SO_NAME, 12);
-            dx_catalog.engines[index] = head[SO_ENGINES];
+            fresh.used |= (uint64_t)1 << index;
+            memcpy(fresh.name[index], head + SO_NAME, 12);
+            fresh.engines[index] = head[SO_ENGINES];
         }
     }
+    dx_catalog = fresh;
     return 0;
 }
 

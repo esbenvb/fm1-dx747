@@ -66,7 +66,7 @@ uint32_t groove_crc32(uint32_t crc, const void *data, unsigned bytes) { return d
 static struct dx_settings settings = {0, 0, 3, 0, 0, 0, 0};
 static struct dx_live live;
 static struct dx_boot booted;
-static unsigned stage, radio_pending, settings_dirty, settings_failures, current_scene = DX_NO_SCENE, safe_boot;
+static unsigned stage, stage2_busy, radio_pending, settings_dirty, settings_failures, current_scene = DX_NO_SCENE, safe_boot;
 static uint32_t settings_changed;
 static int settings_result, storage_state;
 static char project_name[12] = {'D', 'X', '7', '4', '7', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
@@ -182,7 +182,7 @@ void groove_project_init(void)
     live.filter_hz = 1000;
     memset(&booted, 0, sizeof booted);
     settings = (struct dx_settings){0, 0, 3, 0, 0, 0, 0};
-    stage = 0; radio_pending = 0; settings_dirty = 0; settings_failures = 0; settings_result = 0; storage_state = 0; safe_boot = 0;
+    stage = 0; stage2_busy = 0; radio_pending = 0; settings_dirty = 0; settings_failures = 0; settings_result = 0; storage_state = 0; safe_boot = 0;
     current_scene = DX_NO_SCENE; project_revision = 0;
 }
 
@@ -220,8 +220,9 @@ void groove_project_poll(void)
         /* Reading is CRC-gated and writes nothing, so scenes that are already there show up and recall even
          * while the store still has foreign data in it (state 1): the claim only matters for writing. */
         if (storage_state >= 0) {
-            (void)dx_scene_scan();
-            if ((settings.flags & 1) && settings.last_scene < DX_SCENES) (void)dx_scene_recall(settings.last_scene);
+            int scanned = dx_scene_scan();
+            if (scanned == FM1_FLASH_BUSY && ++stage2_busy < 100) return; /* the whole stage again: nothing was published */
+            if (!scanned && (settings.flags & 1) && settings.last_scene < DX_SCENES) (void)dx_scene_recall(settings.last_scene);
             settings_dirty = 0; /* recalling at boot is not a change worth a flash write */
         }
         stage = 3;
@@ -242,7 +243,9 @@ void groove_project_poll(void)
         else {
             settings_result = r;
             /* A failing write erased the shared staging sector on the way: three tries, then wait for the next change. */
-            if (!r || ++settings_failures >= 3) settings_dirty = 0; else settings_changed = fm1_millis();
+            if (!r) settings_dirty = 0;
+            else if (++settings_failures >= 3) { settings_dirty = 0; storage_state = r; } /* the System screen then says ERROR */
+            else settings_changed = fm1_millis();
         }
     }
 }

@@ -506,6 +506,21 @@ static void test_torn_sector_reads_as_empty(void)
 
 /* A power cut in the middle of our own write leaves the destination torn while the committed copy
  * waits in staging. That is not someone else's data: no claim prompt, nothing refused, nothing lost. */
+/* A flash error in the middle of a scan must not publish a catalogue that shows real scenes as free slots. */
+static void test_scan_error_keeps_catalogue(void)
+{
+    fresh_flash();
+    struct dx_scene a, b; make_scene(&a, 61, "FIRST"); make_scene(&b, 62, "SECOND");
+    CHECK(dx_scene_write(0, &a) == 0 && dx_scene_write(40, &b) == 0 && dx_scene_scan() == 0);
+    char name[13];
+    CHECK(dx_scene_info(0, name, NULL) == 0 && dx_scene_info(40, name, NULL) == 0);
+    dead = 1;
+    CHECK(dx_scene_scan() != 0);                                                   /* the flash fails mid-scan */
+    dead = 0;
+    CHECK(dx_scene_info(0, name, NULL) == 0 && !strncmp(name, "FIRST", 5));       /* the catalogue is what it was */
+    CHECK(dx_scene_info(40, name, NULL) == 0 && !strncmp(name, "SECOND", 6));
+}
+
 static void test_torn_destination_is_ours(void)
 {
     static const unsigned indexes[3] = {0, 62, 31}; /* sector 0, sector 31, and (via settings) sector 32 below */
@@ -718,12 +733,32 @@ static void test_stale_image_never_overwrites_foreign_data(void)
         static uint8_t bank[33U * SECTOR]; memcpy(bank, flash + DX_STORE_BASE, sizeof bank);
         struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 2;
         CHECK(dx_scene_store_state() == 1);
+        CHECK(dx_scene_scan() == 0 && dx_scene_read(index, &x) == DX_SCENE_EMPTY);   /* a stale staged copy is not served either */
         CHECK(dx_settings_write(&st) == DX_SCENE_NEEDS_CLAIM);       /* even a settings write runs recovery */
         CHECK(!memcmp(bank, flash + DX_STORE_BASE, sizeof bank));    /* the samples were not touched */
         CHECK(staging_blank());                                       /* the stale image was discarded */
         CHECK(dx_scene_claim() == 0 && dx_scene_store_state() == 0);
         CHECK(dx_scene_read(index, &x) == DX_SCENE_EMPTY);
         CHECK(tail_intact() && violations == 0);
+    }
+    /* the same for the settings sector, which is read at stage 1 of the boot */
+    {
+        fresh_flash();
+        struct dx_settings sa, sb, g; memset(&sa, 0, sizeof sa); sa.backlight = 3; sb = sa; sb.backlight = 7;
+        CHECK(dx_settings_write(&sa) == 0);
+        memcpy(snapshot, flash, sizeof flash);
+        int found = 0;
+        for (unsigned cut = 3; cut <= 5 && !found; ++cut) {
+            memcpy(flash, snapshot, sizeof flash);
+            op_count = 0; dead = 0; cut_at = cut; tear_mode = 0;
+            CHECK(dx_settings_write(&sb) != 0);
+            dead = 0; op_count = 0; cut_at = 0;
+            uint32_t m, c; memcpy(&m, flash + DX_STAGE, 4); memcpy(&c, flash + DX_STAGE + DX_SEC_COMMIT, 4);
+            found = m == DX_SEC_MAGIC && c == 0;
+        }
+        CHECK(found);
+        for (unsigned i = 0; i < 40U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
+        CHECK(dx_settings_read(&g) == DX_SCENE_EMPTY);                             /* the staged settings are stale, not served */
     }
     /* a stale image is also thrown away by the claim itself, when no write ran recovery first */
     fresh_flash();
@@ -840,6 +875,7 @@ int main(void)
     test_recover_power_cuts();
     test_memory_failure();
     test_torn_sector_reads_as_empty();
+    test_scan_error_keeps_catalogue();
     test_torn_destination_is_ours();
     test_stranded_stock_save();
     test_stale_image_never_overwrites_foreign_data();

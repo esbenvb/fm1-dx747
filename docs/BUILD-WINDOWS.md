@@ -161,7 +161,7 @@ limit is 453,921), the same section sizes (`.text` 346,048, allocated image 427,
 and the same build identity (`b6715d53...`), so the Docker numbers are a good
 stand-in for the Windows ones. The two `sdk.elf` files are not byte-identical (the
 cause was not examined). Later commits add code (safe boot, the scene-store rules, the
-workbench compatibility fixes): the current tree is 429,320 bytes with the Linux
+workbench compatibility fixes): the current tree is 429,512 bytes with the Linux
 toolchain, and has not been built on Windows yet, so expect about that number and
 compare. On the unmodified upstream the Linux toolchain gave 453,576 bytes, about 160 bytes under
 what the official build is recorded at, so the two toolchains have not been shown to
@@ -358,7 +358,7 @@ It prints the app image size, the headroom under the 453,921 byte limit, the hea
 and whether every gate passed. This tree:
 
 ```
-FM1: 429320 bytes app image (cap 453921, headroom 24601); heap 231884 bytes (min 49152); SRAM/BLE/USB checks passed
+FM1: 429512 bytes app image (cap 453921, headroom 24409); heap 231052 bytes (min 49152); SRAM/BLE/USB checks passed
 ```
 
 and the unmodified upstream (commit `4c7496d`), for comparison:
