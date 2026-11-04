@@ -17,6 +17,8 @@ get it. You never see the engines' own internal channels.
   velocity 100, ignoring channel, window, shift, mute and the voice limits. On the
   other screens they select things and play nothing (see `DX747.md`).
 - The MIDI in screen (**REC**) shows the latest messages with their port and channel.
+- In SAFE BOOT (ENV + LFO held at power-on, see `DX747.md`) all MIDI is ignored; only the
+  sealed engine's own firmware-update messages work.
 
 ## Notes
 

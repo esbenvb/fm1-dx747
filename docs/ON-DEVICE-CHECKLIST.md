@@ -21,6 +21,16 @@ serial or label.
 | Installing | Step 6 of the same guide | the unit restarts into DX747 (logo, then Setup). The page ends with "sample initialization is incomplete" and an "Invalid file or parameters" error, which is expected; write down the exact texts. Write down the Build ID (Firmware details) |
 | Going back | **Recovery & force update**, **Restore original V15** | the unit runs the original firmware again; the four voice banks are the factory voices; restore your own from the backup |
 
+## 0b. Safe boot (do this before anything else is trusted)
+
+| Check | How | Pass |
+|---|---|---|
+| Safe boot | hold ENV and LFO, switch on, release after the screen appears | the SAFE BOOT screen shows, the ENV and LFO lights are on, nothing responds to buttons, keys or MIDI |
+| The update page still works in safe boot | with the unit in safe boot, open the flashing page and connect | the page connects as it does on a normal start; do **not** start an install just for this |
+| Back to normal | switch off, release, switch on | the normal logo, then Setup |
+| No false trigger | switch on five times with nothing held | never SAFE BOOT |
+| The ROM updater chord | **only with the programmer round trip proven:** hold OCT- and OCT+ (nothing else) for a second at power-on | write down exactly what happens: what the unit enumerates as, whether the page sees it, and how to get back. Not known |
+
 ## 1. Start-up
 
 | Check | How | Pass |
@@ -28,9 +38,10 @@ serial or label.
 | Boots to the DX747 logo, then Setup | power on | the screen shows the aircraft and "DX747", then the Setup screen |
 | All eight engines exist | an external keyboard on channel 1, then 2, up to 8 (engine n plays on channel n by default) | every engine sounds; none says it is out of memory |
 | Memory | System screen | CPU reading is steady at idle |
+| All eight engines up | look at every screen's header | no amber "ENGINES n/8 UP" note anywhere; write down n if it shows |
 
 All eight engines at once is the biggest unknown: the firmware link leaves about
-237,000 bytes of heap, but eight real engine instances were never created together
+231,800 bytes of heap, but eight real engine instances were never created together
 on hardware.
 
 ## 2. Load and voices
@@ -86,7 +97,9 @@ Do not cut power during a save to test it.
 
 | Check | How | Pass |
 |---|---|---|
+| The tab unlocks | the page's **Projects and voices** tab, Connect | the bank, voice and project controls become usable (the page reads an empty working project first; this passed against the simulator only) |
 | Import | workbench, import a 32-voice `.syx` ROM into bank D | the workbench's read-back check passes |
+| Timbre import is DX7 only | the page's "import track timbre" with a file from a stock FM-1 | refused; every engine stays a DX7 |
 | Names and sound | select patches 97 to 128 | the names match the ROM; every voice sounds, including the "BC" voices (113 and 120), because DX747 sends CC2 = 127 after each load; write down any voice that stays silent |
 | Scenes survive | recall a scene saved earlier | still correct |
 

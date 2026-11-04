@@ -37,7 +37,13 @@ The unit's flash holds the firmware and a user area. DX747 treats the user area 
 - **Samples are erased** on the first scene save, after a prompt. The 64 scenes and
   the device settings take over the flash that holds the stock sample bank.
   Going back to stock firmware does not bring the samples back: restore them from
-  your workbench backup.
+  your workbench backup. Until you agree to that prompt DX747 writes nothing to
+  that flash (settings changes are not saved either). The prompt also covers an
+  unfinished stock save that a power cut left in the shared staging area; that is
+  the only complete copy of it and the agreement discards it. The agreement erases
+  only what stands in the way: scenes that are already stored are kept. (A
+  stranded stock *tuning* journal is not recognised and is overwritten by the next
+  write; stock projects themselves are never touched.)
 - The **128 DX7 voices** (four banks A to D) are not touched by DX747's own code, which
   reads and writes them exactly as the stock firmware does. The installer is another
   matter: it is M-VAVE's binary loader, and its page says that a successful transfer
@@ -72,14 +78,32 @@ the browser tab open until the page says it is done. Whether a unit interrupted 
 the middle of a write always comes back in update mode, so that you can run the page
 again, is not verified.
 
-## The power-on recovery chord (unverified)
+## Power-on chords: safe boot, and the ROM updater (unverified)
 
-Holding **OCT-** and **OCT+** while switching the unit on calls `fm1_device_recovery()`,
-a routine inside the chip's ROM that the SDK does not document. It is meant to put
-the unit into its USB updater. It has **not been tested on hardware**: whether it
-works, and what state the unit is in afterwards, are unknown. DX747's own code writes
-no flash before calling it; what the ROM routine does is not known.
-Do not count on it. Test it only after the programmer round trip above works.
+Both are read once, at power-on, before the screen starts ([DX747.md](../DX747.md)).
+
+**Safe boot: hold ENV and LFO.** DX747 then starts none of its own parts (engines,
+scenes, settings, flash access, Bluetooth, MIDI routing, workbench file protocol,
+panel) and says SAFE BOOT. USB MIDI and the firmware update page are the sealed
+engine's, so they still work: this is the way to get at a unit whose own start-up
+misbehaves. It is simulated and unit-tested only; **check it on the unit before you
+need it** ([ON-DEVICE-CHECKLIST.md](ON-DEVICE-CHECKLIST.md)). It cannot help if the unit
+fails before that point (the sealed engine's own start-up, or DX747's few
+initialisation calls before the chord is read).
+
+**ROM updater: hold OCT- and OCT+ only** (no other button, no note key), for about
+0.4 s. It calls the SDK's `fm1_device_recovery()`, which in the linked firmware
+disables interrupts, copies the text "usb_update_mode" into the RAM block the boot
+loader reads, sets a chip register bit and waits for the reset that follows. (The
+same routine is behind the SysEx `F0 22 24 35 7D F7` over DIN or Bluetooth MIDI in
+the sealed engine.) DX747's own code writes no flash before calling it. **What the
+boot loader does after that reset, and whether the workbench page can talk to it,
+are not known:** it has not been tried on hardware. Do not count on it. Test it only
+after the programmer round trip above works.
+
+**If the voice-library write of a ROM import is refused** with a device error while
+you have not saved a scene yet, an unfinished stock save may be waiting in the
+staging area; saving a scene on the unit and agreeing to the flash setup clears it.
 
 ## What the build is, and who it says it is
 
