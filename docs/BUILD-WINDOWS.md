@@ -147,7 +147,7 @@ script ("running scripts is disabled on this system").
 Expected last lines (the numbers vary a little between toolchain builds):
 
 ```
-Build FM1 Official Open V14
+Build FM1 Official Open V01
 ...
 Link dx7 using prebuilt FM1 SDK
 FM1: 427880 bytes app image; SRAM/BLE/USB checks passed
@@ -259,9 +259,10 @@ sends identity queries to every MIDI port it finds), and no other MIDI program o
      flash**, and accept the warning that it may prevent startup and need a recovery
      tool. That warning is meant seriously.
    - **From a unit that runs an Open build** (the official one or DX747): the page says
-     "FM1 connected. Ready to update" and the button reads "Start update". It treats
-     DX747 as the same product and version as the official Open V14 (see below). It
-     does compare the build identity: if the unit already runs this exact build it says
+     "FM1 connected. Ready to update" and the button reads "Start update". The page
+     treats any identity of the shape `FM-1_8` plus six digits as an Open-compatible
+     build, so DX747 (`FM-1_8747747`) and M-VAVE's Open V14 (`FM-1_8000014`) update each
+     other as normal (see below). If the unit already runs this exact build it says
      "This version is already installed. No update is needed." and installs nothing.
 3. **While it writes:** keep USB and power connected, keep the PC awake, keep the tab
    open, touch nothing. Closing the tab only brings up a warning.
@@ -286,12 +287,15 @@ will be replaced and that Open projects and samples may be erased. **Back up voi
 projects and samples before you do this.** (On a unit that already runs V15 the same
 button only restores the four voice banks.)
 
-The page labels DX747 "Official Open firmware", with version V14, because DX747
-reports the same product and version as the official Open V14. To tell builds apart,
-open **Firmware details** on the page: **Build ID** shows the first 16 characters of
-the build identity (hover for all 64). Note them; they are also in
-`build\dx7\build-identity.json` after a build. The page is M-VAVE's, with their name and
-logo in it; the SDK checks its files by hash, so it cannot be changed.
+DX747 has its own identity, release **V01** and update identity **`FM-1_8747747`**
+(`app/version.h`). The page still labels any such build "Official Open firmware" (M-VAVE's
+wording; its files are hash-checked, so it cannot be changed), but its Version row shows
+V01, **Firmware details** shows the **Build ID** (the first 16 characters of the build
+identity; hover for all 64; also in `build\dx7\build-identity.json` after a build), and
+at the end of an install the page shows the identity `FM-1_8747747`. After the
+reboot the page waits for the unit to answer with that same identity; a unit that answers
+with another one makes it report that the version check failed. The page is M-VAVE's, with
+their name and logo in it.
 
 ## When it fails
 

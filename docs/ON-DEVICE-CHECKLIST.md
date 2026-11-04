@@ -18,7 +18,7 @@ serial or label.
 |---|---|---|
 | Samples, voices and projects saved first | with the original firmware still on the unit, save them with the workbench; keep the `.syx` files of voices you care about (reading voices from V15 is not verified) | you have the files |
 | The flashing page | open `FM1-Official-Open-Source.html` ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 5) in Chrome or Edge with the unit connected over USB and nothing else MIDI plugged in | the page sees the unit; from the original V15 it says "Different firmware detected" and offers **Enable force flash and reconnect**; write down anything that is not as described |
-| Installing | Step 6 of the same guide | the unit restarts into DX747 (logo, then Setup). The page ends with "sample initialization is incomplete" and an "Invalid file or parameters" error, which is expected; write down the exact texts. Write down the Build ID (Firmware details) |
+| Installing | Step 6 of the same guide | the unit restarts into DX747 (logo, then Setup). The page ends with "sample initialization is incomplete" and an "Invalid file or parameters" error, which is expected; write down the exact texts. Write down the Version row (V01), the Build ID (Firmware details) and the identity shown at the end (`FM-1_8747747`); the boot screen says "DX747 V01 PREVIEW" |
 | Going back | **Recovery & force update**, **Restore original V15** | the unit runs the original firmware again; the four voice banks are the factory voices; restore your own from the backup |
 
 ## 0b. Safe boot (do this before anything else is trusted)

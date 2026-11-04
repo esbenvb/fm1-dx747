@@ -107,7 +107,7 @@ static void draw_boot(void)
     px_text(47, 148, "DX", 5, C_TX);
     px_text(107, 148, "747", 5, C_AC);
     px_text_c(120, 194, "8-PART MULTITIMBRAL DX7 MODULE", 1, C_DIM);
-    px_text_c(120, 218, "DX747 PREVIEW", 1, C_LN);
+    px_text_c(120, 218, "DX747 " FM1_RELEASE_VERSION " PREVIEW", 1, C_LN);
 }
 
 /* ---- safe boot: the only screen while dx_safe_boot() is on ----------------- */

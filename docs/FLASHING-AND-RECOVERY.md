@@ -128,12 +128,19 @@ staging area; saving a scene on the unit and agreeing to the flash setup clears 
   which carries the firmware inside it ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 5).
   The same page also carries the original V15 firmware, for going back. The
   official hosted workbench has no way to take a local file.
-- The firmware still reports the SDK's identity, `FM-1_8000014` and release `V14`,
-  so the page shows it as the "Official Open firmware", version V14, and cannot tell
-  it from M-VAVE's own Open V14. Tell builds apart by the **Build ID** under "Firmware
-  details" on the page (its first 16 characters; also in `build\dx7\build-identity.json`),
-  and by the file's SHA-256. Giving DX747 an identity of its own is an open decision (the
-  workbench pages would then recognise it as a different product).
+- DX747 has its own identity: release label **V01** and update identity
+  **`FM-1_8747747`** (`app/version.h`), not M-VAVE's Open V14 (`FM-1_8000014`). The page
+  still calls any such build "Official Open firmware" (that wording is in M-VAVE's page,
+  which cannot be changed), but its Version row shows V01, and when an install
+  finishes it shows the identity `FM-1_8747747`. The page treats every identity of the
+  shape `FM-1_8` plus six digits as an Open-compatible build and arms the update with
+  the firmware family and the build hash, so an update from or to M-VAVE's Open V14 is a
+  normal "Start update". The same constant is the product code inside the update package;
+  that the unit's update loader accepts a package with a product code other than the
+  running firmware's is **not verified** (the SDK's `app/version.h` is the designed place
+  to set it, and a stock V15 accepts Open packages, but nobody has tried this one).
+  Tell builds apart by the **Build ID** under "Firmware details" on the page (its first 16
+  characters; also in `build\dx7\build-identity.json`) and by the file's SHA-256.
 - The page is M-VAVE's, with their name and logo in it, and the SDK checks its files
   by hash, so it cannot be rebranded.
 - At the end of an install the page's status says that sample initialization is

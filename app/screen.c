@@ -10,6 +10,7 @@
 #include "fm1_engine_control.h"
 #include <string.h>
 #include "dx747/dx747.h"
+#include "version.h"
 #include "dx747/ui_core.inc"
 #include "dx747/ui_data.inc"
 #include "dx747/ui_screens.inc"
