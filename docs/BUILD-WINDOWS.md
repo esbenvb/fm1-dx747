@@ -23,9 +23,10 @@ Building is not flashing. Nothing here touches a device. Read
 What was checked and what was not: every check and error message below is read
 from `sdk/Build.ps1` and `tools/Build-Web.ps1`, and the Mac route at the end was
 run. The firmware's browser build was run too, with the same compiler version and
-flags the Windows build uses. The Windows steps themselves could not be run where
-this was written, so if a step does not match what you see, trust what you see and
-send it to me (see the end).
+flags the Windows build uses. Steps 1 to 4 have since been run on the project's
+Windows PC and the check build passed (below). Steps 5 and 6 have not been run on
+Windows, so if a step does not match what you see, trust what you see and send it to
+me (see the end).
 
 ## What you need
 
@@ -145,19 +146,18 @@ Expected last lines (the numbers vary a little between toolchain builds):
 Build FM1 Official Open V14
 ...
 Link dx7 using prebuilt FM1 SDK
-FM1: 427xxx bytes app image; SRAM/BLE/USB checks passed
-Offline package fits 1 MiB: image ..., VM ..., user 536576 bytes
-Firmware: C:\fm1\build/dx7\sdk.elf
+FM1: 427880 bytes app image; SRAM/BLE/USB checks passed
+Offline package fits 1 MiB: image 446464, VM 57344, user 536576 bytes
+Firmware: C:\fm1\build\dx7\sdk.elf
 ```
 
-(The mixed slashes in the last line are how the script prints it.)
-
-The app image of this DX747 tree is about 427,900 bytes with JieLi's Linux
-toolchain (the limit is 453,921). **No Windows build of this tree has been made**, so
-the Windows number is not known; on the unmodified upstream the Linux toolchain gave
-453,576 bytes, about 160 bytes under what the official build is recorded at, and
-whether the two toolchains agree beyond that is not proven. A result far from these
-numbers (say more than a few thousand bytes) means something is off.
+This is what the project's Windows PC printed for commit `e59e3e7`. JieLi's Linux
+toolchain, run in Docker on the Mac, gave the same 427,880 bytes for this tree (the
+limit is 453,921), so the Docker numbers are a good stand-in for the Windows ones. On
+the unmodified upstream the Linux toolchain gave 453,576 bytes, about 160 bytes under
+what the official build is recorded at, so the two toolchains have not been shown to
+agree on every tree. A result far from these numbers (say more than a few thousand
+bytes) means something is off.
 
 Results are in `C:\fm1\build\dx7\`:
 
