@@ -217,6 +217,22 @@ DX747 firmware, and the original V15 firmware for going back. The firmware trave
 inside the page, so installing it downloads nothing. **Copy the page and its
 `SHA256SUMS.txt` somewhere safe now** (see the warning above), then go to Step 6.
 
+The last lines of a good run (this is what the project's Windows PC printed, after
+the Visual C++ runtime was updated, for commit `e59e3e7`):
+
+```
+Compile the browser application
+Integrated FM1 workbench: C:\fm1\build\official-web\FM1-Official-Open-Source.html
+Firmware: C:\fm1\build\dx7\sdk.elf
+```
+
+**You can try the page with no unit connected.** Open it in Chrome or Edge: it says
+"Browser preview · no device", and the **Play & edit** tab shows a 240 by 240 screen
+that runs this firmware's own screens and logic (the browser build compiles the
+`app\` sources), with on-screen controls. It is the SDK's open stand-in for the sound
+engine, so it shows screens and behaviour, not the unit's CPU load or timing. Nothing
+is sent to the unit while none is connected.
+
 ## Step 6: install from the page
 
 Only after the way back is in place: read [FLASHING-AND-RECOVERY.md](FLASHING-AND-RECOVERY.md)
