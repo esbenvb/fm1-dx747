@@ -14,6 +14,19 @@ Do not flash DX747 to a unit you cannot afford to lose until all of this is done
    firmware does not start (the project plan calls it the Transporter). If you do not
    have one, stop here. The recovery the firmware offers itself (below) is
    unverified, and the workbench can only update a unit that still starts.
+   The community tools, as their own pages describe them (read on 2026-11-04, not
+   tried by this project): **kurogedelic/FM-1-transporter** puts a small RP2040 board
+   between the computer and the unit's USB lines (D+, D- and ground only, **no VBUS**;
+   Seeed XIAO RP2040 recommended, Raspberry Pi Pico untested) and uses the chip's ROM
+   USB loader to dump and write flash, writing only between 0x4000 and 0x93000 and only
+   with an explicit write flag; it needs the `wl82loader.bin` loader, which is not
+   included (it comes from jl-uboot-tool). **Quixotic7/MvaveFM1Unbricker** then
+   restores the official V15 into that firmware region (hash-checked, with a
+   double-read backup first, never writing below 0x4000, so the boot head is never
+   touched; it does not run on macOS; its settings repair is untested on a real
+   unit). Neither can repair a damaged boot head, and the pages report very few
+   recoveries (the unbricker's page names one, the author's own). None of this has
+   been shown with DX747 or with Open firmware on the unit.
 2. **A full backup** of the unit's flash with that programmer, stored somewhere safe.
 3. **A practice run with something known good:** build the flashing page for the
    unmodified upstream firmware (commit `4c7496d`, in its own folder, with the same
