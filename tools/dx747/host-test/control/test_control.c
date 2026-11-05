@@ -44,7 +44,9 @@ static int f_import(unsigned e, const uint8_t v[156])
     memcpy(eng[e].voice, v, 156); ++eng[e].imports; return 0;
 }
 static int f_refresh(unsigned e) { if (eng[e].refresh_fails) { --eng[e].refresh_fails; return -1; } ++eng[e].refreshes; return 0; }
-static const struct dx_edit_port port = {f_copy, f_edit, f_name, f_toggle, f_import, f_refresh};
+static unsigned level_sent[DX_ENGINES], level_calls[DX_ENGINES], level_fail;
+static int f_level(unsigned e, unsigned v) { if (level_fail) { --level_fail; return -1; } level_sent[e] = v; ++level_calls[e]; return 0; }
+static const struct dx_edit_port port = {f_copy, f_edit, f_name, f_toggle, f_import, f_refresh, f_level};
 
 static struct dx_ctl ctl;
 static struct dx_cfg cfg;
@@ -66,7 +68,9 @@ static void reset(void)
     memset(eng, 0, sizeof eng);
     memset(&live, 0, sizeof live);
     memset(&mail, 0, sizeof mail);
+    memset(level_sent, 0, sizeof level_sent); memset(level_calls, 0, sizeof level_calls); level_fail = 0;
     dx_cfg_default(&cfg);
+    dx_parts_default(&live.parts);
 }
 static unsigned lvl(unsigned e, unsigned k) { return eng[e].voice[DX_LEVEL(k)]; }
 
@@ -718,6 +722,54 @@ static void test_bright_race_with_program_change(void)
     CHECK(lvl(0, 0) == 10 && lvl(0, 1) == 20 && lvl(0, 2) == 30 && lvl(0, 4) == 55);
 }
 
+/* Parts: the part level (CC7) scales every layer, a layered part's program change and a scene request are handed on. */
+static void test_parts_control(void)
+{
+    reset();
+    /* parts: part 0 on channel 1 with layers on engines 0 and 1 (lvl 127 and 64), part 1 on channel 2 with engine 2 */
+    memset(&live.parts, 0, sizeof live.parts);
+    for (unsigned i = 0; i < DX_PARTS; ++i) { memset(live.parts.part[i].name, ' ', 12); live.parts.layer[i].owner = DX_NO_PART; live.parts.layer[i].lvl = 127; }
+    live.parts.part[0].channel = 1; live.parts.part[0].level = 127;
+    live.parts.part[1].channel = 2; live.parts.part[1].level = 127;
+    live.parts.layer[0].owner = 0; live.parts.layer[1].owner = 0; live.parts.layer[1].lvl = 64; live.parts.layer[2].owner = 1;
+    CHECK(dx_parts_valid(&live.parts));
+    dx_parts_derive(&live.parts, &cfg);
+    dx_mail_put(&mail, DX_MAIL_LEVEL + 0, 100);                    /* CC7 = 100 on channel 1, as the router mails it */
+    dx_mail_put(&mail, DX_MAIL_LEVEL + 1, 100);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1000);
+    CHECK(live.parts.part[0].level == 100 && live.parts.part[1].level == 127);
+    CHECK(level_sent[0] == dx_layer_volume(127, 100) && level_sent[1] == dx_layer_volume(64, 100) && level_calls[2] == 0);
+    CHECK(level_sent[0] == 100 && level_sent[1] == 50);            /* 64 * 100 / 127, rounded */
+    unsigned calls = level_calls[0];
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1010);
+    CHECK(level_calls[0] == calls);                                /* sent once, not at every poll */
+    /* an engine ring that is full: the level is retried until it is posted */
+    level_fail = 3;
+    dx_level_changed_ctl(&ctl, 2);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1020);
+    CHECK(level_calls[2] == 0 && ctl.lvl_dirty == 1U << 2);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1030); dx_ctl_poll(&ctl, &mail, &cfg, &live, 1040); dx_ctl_poll(&ctl, &mail, &cfg, &live, 1050);
+    CHECK(level_calls[2] == 1 && level_sent[2] == 127 && !ctl.lvl_dirty);
+    /* a level for an engine that is no part's layer is dropped rather than sent */
+    dx_level_changed_ctl(&ctl, 5);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1060);
+    CHECK(level_calls[5] == 0 && !ctl.lvl_dirty);
+    /* a program change on a layered part and a scene request are recorded for the glue code */
+    dx_mail_put(&mail, DX_MAIL_PCX + 0, 17);
+    dx_mail_put(&mail, DX_MAIL_SCENE, 0);
+    dx_ctl_poll(&ctl, &mail, &cfg, &live, 1070);
+    CHECK(ctl.pcx == 1 && ctl.pcx_prog[0] == 17);
+    CHECK(ctl.scene_req == 1);                                     /* scene 0 is requested as 1: 0 means none */
+    /* DX7 SysEx goes to the selected layer of the part on that channel only */
+    live.parts.part[0].sel = 1;
+    dx_parts_derive(&live.parts, &cfg);
+    CHECK(dx_sysex_targets(&cfg, 0) == 1U << 1);
+    live.parts.part[0].sel = 0;
+    dx_parts_derive(&live.parts, &cfg);
+    CHECK(dx_sysex_targets(&cfg, 0) == 1U << 0 && dx_sysex_targets(&cfg, 1) == 1U << 2);
+    CHECK(dx_sysex_targets(&cfg, 7) == 0);                         /* no part on channel 8 */
+}
+
 int main(void)
 {
     test_carrier_table();
@@ -739,6 +791,7 @@ int main(void)
     test_controller_reset();
     test_bright_race_with_program_change();
     test_refresh();
+    test_parts_control();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

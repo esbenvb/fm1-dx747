@@ -1,0 +1,76 @@
+# Recipe 16: cases that an independent review of the parts firmware found, kept as regression tests.
+boot
+wipe
+run 400
+# detents in quick succession are all counted (the screen's snapshot is up to 33 ms old; edits start from the live state)
+expect_sel 0
+encq 0 1
+encq 0 1
+encq 0 1
+run 200
+expect_sel 3
+encq 0 -1
+encq 0 -1
+encq 0 -1
+run 200
+expect_sel 0
+# K1 moves the part to another channel while a key is held: the note must still end
+tap btn 11
+press key 10
+run 100
+expect_voices 1
+enc 2 1
+release key 10
+run 300
+expect_voices 0
+# LEARN armed while a key is down: the key coming up still ends its note
+press key 10
+run 100
+expect_voices 1
+tap btn 10
+release key 10
+run 300
+expect_voices 0
+tap btn 10
+# solo follows the layers: part 1 soloed with two layers, the second layer removed, the solo switched off: everything plays
+boot
+wipe
+run 400
+enc 0 -1
+tap btn 5
+expect_part 7 0 0
+tap btn 4
+expect_part 0 1 2
+tap btn 3
+tap btn 5
+run 100
+tap btn 11
+tap btn 5
+expect_part 0 1 1
+tap btn 3
+tap btn 5
+run 100
+midi 1 91 3c 64
+expect_peak 400 0.005
+midi 1 81 3c 00
+# a layer added to a soloed part joins the solo: layer 1 only plays notes up to 10, so the new layer must be heard
+boot
+wipe
+run 400
+enc 0 -1
+tap btn 5
+tap btn 3
+tap btn 5
+run 100
+tap btn 11
+tap btn 4
+expect_part 0 1 2
+enc 1 -1
+tap btn 6
+tap btn 6
+expect_screen 4
+enc 3 -117
+expect_engine 0 0 10
+midi 1 90 3c 64
+expect_peak 400 0.005
+midi 1 80 3c 00

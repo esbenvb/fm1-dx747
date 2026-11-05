@@ -1,15 +1,17 @@
 /* SPDX-License-Identifier: GPL-3.0-only WITH GPL-3.0-linking-exception */
 /* DX747 user interface for the 240x240 LCD, the panel buttons, encoders and
- * keys. It replaces the stock sequencer UI. The structure follows the approved
- * sketches in docs/sketches/dx747-screens-v2.html: Setup and Engines as the
- * brief overviews, Channel and the Engine pages for editing, MIDI in, Mix, FX,
- * Master, Scenes and System. Drawing lives in dx747/ui_*.inc; this file holds
- * the two entry points the engine calls on its control task and the hooks the
- * browser simulator links against. */
+ * keys. It replaces the stock sequencer UI. The screens work on parts (one MIDI
+ * channel with one, possibly layered, sound; docs/design/PARTS-MODEL.md): Parts
+ * as the home overview, the Part page for its layers, the layer pages Sound,
+ * Range, Velocity and Sends, MIDI in, Mix, FX, Master, Scenes and System.
+ * Drawing lives in dx747/ui_*.inc; this file holds the two entry points the
+ * engine calls on its control task and the hooks the browser simulator links
+ * against. */
 #include "instrument.h"
 #include "fm1_engine_control.h"
 #include <string.h>
 #include "dx747/dx747.h"
+#include "dx747/parts.inc"
 #include "version.h"
 #include "dx747/ui_core.inc"
 #include "dx747/ui_data.inc"
@@ -38,7 +40,6 @@ void groove_screen_init(void)
 {
     memset(&ui, 0, sizeof ui);
     memset(&fr, 0, sizeof fr);
-    memset(audition_note, 0xff, sizeof audition_note);
     ui.screen = S_BOOT;
     ui.boot_until = fm1_millis() + 1200U;
     ui.octave = 0;
@@ -70,7 +71,7 @@ void groove_screen_control(void)
     }
     on_encoders();
     prev_ctl = ctl;
-    if (ui.screen == S_BOOT && (int32_t)(now - ui.boot_until) >= 0) go(S_SETUP);
+    if (ui.screen == S_BOOT && (int32_t)(now - ui.boot_until) >= 0) go(S_PARTS);
     if (now - last_frame < 33U && !frame_forced) return;
     last_frame = now;
     frame_collect(now & ~255U);
@@ -95,8 +96,8 @@ void groove_screen_mmc(unsigned command) { (void)command; }
 /* The browser simulator drives and inspects the screen through these. DX747's
  * own screens are exercised through the panel (buttons, keys, encoders), so the
  * stock page-specific hooks are inert. */
-void groove_screen_snapshot(uint8_t state[8]) { memset(state, 0, 8); state[0] = ui.engine; state[1] = ui.screen; state[3] = ui.channel; }
-int groove_screen_open(unsigned target) { (void)target; if (ui.screen == S_BOOT) go(S_SETUP); return 0; }
+void groove_screen_snapshot(uint8_t state[8]) { memset(state, 0, 8); state[0] = fr.live.parts.selected; state[1] = ui.screen; state[3] = fr.live.parts.part[fr.live.parts.selected].sel; }
+int groove_screen_open(unsigned target) { (void)target; if (ui.screen == S_BOOT) go(S_PARTS); return 0; }
 int groove_screen_preset(unsigned slot) { (void)slot; return 0; }
 unsigned groove_screen_preset_position(void) { return 0; }
 void groove_screen_tap(uint32_t now) { (void)now; }

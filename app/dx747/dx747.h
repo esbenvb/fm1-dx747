@@ -24,7 +24,16 @@ int dx_scene_save(unsigned index, const char name[12]);/* capture the live state
 unsigned dx_scene_current(void);                       /* last recalled or saved, DX_NO_SCENE if none */
 void dx_settings_get(struct dx_settings *out);
 void dx_settings_update(const struct dx_settings *s);  /* applied now, saved after 1.5 s of quiet */
-void dx_keyboard_channel_step(int delta);              /* the built-in keys' channel, one step from the active one */
+/* Parts (dx747/parts.h): the screens edit live.parts (dx_live_edit) through these, which also publish the routing. */
+#define DX_PART_ERR(r) ((r) < 0)                       /* the DX_PART_* codes of parts.inc: no slot, no engine, no channel, refused */
+int dx_part_add(unsigned slot);                       /* a new part with one layer on the lowest free channel, in slot if that is empty; its index or a negative code */
+int dx_part_add_layer(unsigned part);                  /* the new layer's engine or a negative code */
+int dx_part_remove_layer(unsigned part, unsigned layer); /* the freed engine; the last layer removes the part */
+int dx_part_set_channel(unsigned part, unsigned channel); /* 0 when another part or the scene channel has it */
+void dx_part_select(unsigned part);                    /* the part the keyboard plays; release held keys first */
+void dx_part_select_layer(unsigned part, unsigned layer); /* the layer that takes DX7 SysEx */
+void dx_level_changed(unsigned engine);                /* live.parts layer or part level changed: tell the engine */
+void dx_part_level_changed(unsigned part);             /* the same for every layer of a part */
 int dx_storage_state(void);                            /* 0 usable, 1 needs dx_storage_claim, <0 error */
 int dx_storage_state_cached(void);                     /* the same, from the last check; no flash access */
 int dx_storage_claim(void);                            /* erases the stock sample bank: ask the user first */

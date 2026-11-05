@@ -6,39 +6,45 @@ DIN (the TRS socket), USB and Bluetooth LE all feed one router, and so does the
 built-in keyboard. The router sends every message to the engines that should
 get it. You never see the engines' own internal channels.
 
+Everything below speaks of **parts**: a part is one MIDI channel with one sound, and a
+sound is one to eight **layers**, each a DX7 voice on its own engine (see `DX747.md`
+and `docs/design/PARTS-MODEL.md`). A part's channel is the channel of every one of its
+layers.
+
 - Bluetooth MIDI is a **peripheral**: the phone or computer connects to the FM-1.
 - The built-in keyboard has 27 keys and plays notes 53 and up (F3 in the standard
   naming, where 60 is C4). **OCT-** and **OCT+** move it by up to two octaves.
-  Its velocity is fixed at 100. Its channel is set on the System screen (default 1);
-  a scene stores a keyboard channel too and sets it when recalled, and the System
-  row shows the one that is active.
-- The built-in keys go through the router only on the MIDI in, Effects, Master and
-  System screens. On Sound and Sends they play the selected engine directly, at
-  velocity 100, ignoring channel, window, shift, mute and the voice limits. On the
-  other screens they select things and play nothing (see `DX747.md`).
+  Its velocity is fixed at 100. It plays the **selected part**, on that part's channel,
+  so its channel follows the selection (nothing plays while the selected part is an
+  empty slot); a scene stores which part is selected.
+- The built-in keys go through the router on every screen, with the part's windows,
+  shifts, mute and voice limits like any keyboard. On the Scenes screen the white keys
+  recall scenes instead (see `DX747.md`).
 - The MIDI in screen (**REC**) shows the latest messages with their port and channel.
 - In SAFE BOOT (ENV + LFO held at power-on, see `DX747.md`) all MIDI is ignored; only the
   sealed engine's own firmware-update messages work.
 
 ## Notes
 
-A note on channel c is played by every engine that listens on c and whose note
-window contains it. For each such engine the note is moved by that engine's shift.
-A note that the shift pushes outside 0 to 127 is dropped (DROP), moved to the
-nearest end (CLIP), or moved by whole octaves back into range (WRAP).
+A note on channel c is played by every layer of the part on c whose note window and
+velocity window contain it. For each such layer the note is moved by that layer's
+shift. A note that the shift pushes outside 0 to 127 is dropped (DROP), moved to the
+nearest end (CLIP), or moved by whole octaves back into range (WRAP). A velocity
+window of 1 to 127 (the default) accepts every note.
 
 A note off always reaches the engines that got the note on, even if the settings
 were changed while the key was down. The sustain pedal (CC64) is followed per
 channel and source the same way.
 
 Sixteen voices are shared by all engines. If they are all in use, the oldest note
-is taken. Each engine also has its own limit, 1 to 8 voices (default 4). One note
-on a channel with two layered engines uses two voices.
+is taken. Each layer also has its own limit, 1 to 8 voices (default 4). One note
+on a part with two layers uses two voices.
 
 ## What each engine understands
 
-Controllers reach an engine when it plays on the message's channel or has it as its
-control channel. These are what the sound engine does with them:
+Controllers reach every layer of the part on the message's channel. These are what the
+sound engine does with them (the rows for CC7 and the program change are changed by
+DX747, see below):
 
 | Message | Effect |
 |---|---|
@@ -47,11 +53,11 @@ control channel. These are what the sound engine does with them:
 | CC2 (breath), CC4 (foot) | lower the level of operators that have amplitude-modulation sensitivity; the response is mild in this engine, so do not rely on them to fade a voice |
 | CC64 (sustain) | sustain pedal |
 | Pitch bend | plus or minus 2 semitones, fixed |
-| CC7 | the engine's volume |
+| CC7 | **the part level** (below), not the engine's volume directly |
 | CC10 | pan |
 | CC11 | expression |
 | CC91 | reverb send (0 to 127 becomes 0 to 15) |
-| Program change 0 to 127 | cuts the engine's notes and loads that patch (1 to 128 on the screen); it also puts back the operator mask, the envelope override, the mono or poly mode and the LFO. Level, pan, expression, the controller values and BRIGHT stay |
+| Program change 0 to 127 | on a one-layer part: cuts the engine's notes and loads that patch (1 to 128 on the screen); it also puts back the operator mask, the envelope override, the mono or poly mode and the LFO. Level, pan, expression, the controller values and BRIGHT stay. On a layered part, see below |
 | CC120 | all sound off |
 | CC121 | reset controllers |
 | CC123 | all notes off |
@@ -68,7 +74,13 @@ The screens' stop (hold HOME, press PLAY) does the same.
 
 | Message | Effect |
 |---|---|
-| CC74 or CC71 on a channel an engine plays on or controls | the engine's **BRIGHT**: 64 is centre (0), 127 is +50, 0 is -50 |
+| CC74 or CC71 on a part's channel | the **BRIGHT** of every layer of the part: 64 is centre (0), 127 is +50, 0 is -50. Each layer keeps its own offset on the screens; the controller sets them all to the same value |
+| CC7 on a part's channel | the **part level**, 0 to 127. Every layer plays at its own level times the part level / 127, so the balance between the layers stays. It is not passed on to the engines as it arrived |
+| Bank select (CC0), then program change, on a part's channel | picks the part's **sound** from the bank. Bank 0 is the 128 DX7 patches. Other banks do not exist yet: after a bank select of 1 or more the program change is ignored. The bank is remembered per channel, 0 until a bank select arrives. CC32 is not used |
+| Program change on a **layered** part | the part becomes that one patch: its first layer stays (at its own level) and plays the patch over the whole keyboard with no shift and the full velocity window; the other layers go and their engines are free. The notes of the freed layers are cut |
+| Program change on the **scene channel** | recalls scene n + 1 (0 to 63); never reaches a part. An empty slot does nothing |
+| Song Select (`F3 nn`) | recalls scene nn + 1, the same way, if the sealed engine hands the message to the firmware. The simulator does; **the unit has not been tried** |
+| Program change on a channel no part uses | ignored (the MIDI in screen still shows it) |
 | CC10, CC11, CC121 | still go to the engine, and are also followed by the screens and scenes: pan is shown on the Mix and Sound screens, expression has no display but is saved in scenes, and CC121 puts both back (pan centre, expression 127). If a reset and a new value arrive within one control period, the new value wins |
 | CC74, CC71, CC70 on the **master control channel** | the master filter: cutoff, resonance, type (below) |
 
@@ -88,10 +100,20 @@ levels, not the brightened ones.
 Not yet checked on the real engine: whether BRIGHT also changes notes that are
 already sounding.
 
+### Scene channel
+
+Set on the System screen: **SCENE CHANNEL**, Off or 1 to 16. It is Off by default and
+the setting is remembered across power cycles. Use a channel no part uses (the System
+screen warns when one does): on that channel a program change recalls a scene, so a
+part there would never get its program changes. Notes and controllers on it still
+reach the part. A sequencer or DAW that sends a program change on that channel at the
+start of a song or pattern switches scenes; MIDI Song Select works the same where the
+engine passes it on.
+
 ### Master filter
 
 Set on the System screen: **MASTER CONTROL CHANNEL**, Off or 1 to 16. Use a channel
-no engine plays on. On that channel:
+no part plays on. On that channel:
 
 | Controller | Meaning |
 |---|---|
@@ -133,11 +155,11 @@ back to the voice's own. A value above a parameter's limit is limited, not refus
 so a dump with one slightly out of range byte still loads. A frame with a bad
 checksum or a byte of 128 or more is ignored without any notice.
 
-**Which engine gets it.** The engines whose control channel is n + 1. If none has
-that control channel, the one engine that plays on channel n + 1, provided it has no
-control channel of its own and no other engine plays there. Otherwise nothing
-happens, and the screen says nothing, so a layered channel is never overwritten by accident: give one of its
-engines a control channel to edit it.
+**Which layer gets it.** The **framed layer** of the part on channel n + 1: on the Part
+screen, **ALGO** frames a layer (layer 1 until you do), and a scene keeps which one is
+framed. If no part is on that channel, nothing happens, and the screen says nothing.
+A layered part is therefore never overwritten by accident, and an editor can work one
+layer at a time.
 
 **Order.** Parameter changes and dumps are applied in the order they arrive. An
 engine that has just received a program change is left alone for 20 ms so that an

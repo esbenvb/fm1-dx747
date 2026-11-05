@@ -1,5 +1,5 @@
-# Recipe 9: the velocity of a note from outside reaches the engine (the built-in keys are fixed at 100).
-# The default patch is the same engine each time; only the velocity differs.
+# Recipe 9: the velocity of a note from outside reaches the engine (the built-in keys are fixed at 100), and a layer's
+# velocity window chooses which layers play it. The default patch is the same engine each time; only the velocity differs.
 boot
 wipe
 run 400
@@ -16,10 +16,44 @@ midi 1 80 3c 00
 midi 1 b0 78 00
 run 400
 # a layer plays every engine at the sender's velocity
-tap btn 11
-white 2
+enc 0 -1
+tap btn 5
+tap btn 4
 midi 1 90 3c 0a
 run 100
 expect_voices 2
 expect_below 300 0.30
 midi 1 80 3c 00
+run 100
+expect_voices 0
+# velocity windows split the layers by touch: the framed layer 2 gets 64..127, then layer 1 gets 1..63
+tap btn 11
+tap btn 6
+tap btn 6
+tap btn 6
+expect_screen 5
+enc 2 63
+expect_vel 7 64 127
+enc 1 -1
+enc 3 -64
+expect_vel 0 1 63
+shot 9a-velocity-windows
+# soft keys (below 64) reach layer 1 only, hard keys layer 2 only; the window edges are inclusive
+midi 1 90 30 20
+run 80
+expect_voices 1
+midi 1 80 30 00
+run 80
+midi 1 90 31 64
+run 80
+expect_voices 1
+midi 1 80 31 00
+run 80
+midi 1 90 32 3f
+midi 1 90 33 40
+run 80
+expect_voices 2
+midi 1 80 32 00
+midi 1 80 33 00
+run 80
+expect_voices 0

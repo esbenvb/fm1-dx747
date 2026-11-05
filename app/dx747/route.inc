@@ -15,6 +15,12 @@ DX_FN void dx_cfg_default(struct dx_cfg *c)
     c->up = 0xff; c->kbd_ch = 0; c->pool = 16;
 }
 
+/* Whether a velocity is inside an engine's window (0 on a side means no limit there). */
+DX_FN int dx_vel_ok(const struct dx_engine_cfg *e, unsigned vel)
+{
+    return vel >= (e->vlo ? e->vlo : 1U) && vel <= (e->vhi ? e->vhi : 127U);
+}
+
 /* Where a played note sounds on one engine. Returns 0 when it is not played. */
 DX_FN int dx_map_note(const struct dx_engine_cfg *e, unsigned note, unsigned *out)
 {
@@ -172,7 +178,7 @@ DX_FN void dx_note_on(struct dx_router *r, const struct dx_cfg *c, unsigned src,
     for (unsigned e = 0; e < DX_ENGINES; ++e) {
         const struct dx_engine_cfg *ec = &c->e[e];
         unsigned out;
-        if (!(c->up & (1U << e)) || ec->mute || !((ec->rx >> ch) & 1U) || !dx_map_note(ec, note, &out)) continue;
+        if (!(c->up & (1U << e)) || ec->mute || !((ec->rx >> ch) & 1U) || !dx_vel_ok(ec, vel) || !dx_map_note(ec, note, &out)) continue;
         if (!dx_can_accept(r)) { ++r->dropped; continue; } /* never start a note that cannot be queued */
         for (unsigned i = 0; i < r->nheld; ++i)
             if (r->held[i].key == key && r->held[i].note == note && r->held[i].eng == e) {
@@ -301,12 +307,34 @@ DX_FN void dx_router_event(struct dx_router *r, unsigned src, const uint8_t *m, 
         }
         return;
     }
+    if (r->mail && type == 0xc0 && c->scene_ch == ch + 1U) {
+        /* a program change on the scene channel recalls a scene; it never reaches an engine */
+        dx_mail_put(r->mail, DX_MAIL_SCENE, m[1]);
+        return;
+    }
     unsigned targets = rx | ctl;
     if (r->mail && (type == 0xb0 || type == 0xc0)) {
         unsigned cc = m[1], v = n > 2 ? m[2] : 0;
         if (type == 0xc0) {
+            /* A program change picks the part's sound from the bank the last bank select named (bank 0, the DX7
+             * voices, until one arrives). Other banks do not exist yet, so it is ignored there. */
+            if (r->bank[ch]) return;
+            unsigned layers = 0, first = DX_ENGINES;
+            for (unsigned e = 0; e < DX_ENGINES; ++e) if (targets & (1U << e)) { if (!layers) first = e; ++layers; }
+            if (layers > 1) {
+                /* a layered part becomes one voice: the control task takes the layers apart, then loads it */
+                dx_mail_put(r->mail, DX_MAIL_PCX + first, m[1]);
+                return;
+            }
             /* the engine loads a new voice: the BRIGHT macro has to start from it */
             for (unsigned e = 0; e < DX_ENGINES; ++e) if (targets & (1U << e)) dx_mail_put(r->mail, DX_MAIL_PC + e, 0);
+        } else if (cc == 0) {
+            r->bank[ch] = (uint8_t)v; /* bank select: remembered for the next program change on this channel */
+            return;
+        } else if (cc == 7) {
+            /* volume on a part's channel is the part level: the control task scales every layer by it */
+            for (unsigned e = 0; e < DX_ENGINES; ++e) if (targets & (1U << e)) dx_mail_put(r->mail, DX_MAIL_LEVEL + e, v);
+            return;
         } else if (c->master_ch == ch + 1U && (cc == 70 || cc == 71 || cc == 74)) {
             /* master filter controls: consumed here, they never reach an engine */
             dx_mail_put(r->mail, cc == 74 ? DX_MAIL_CUTOFF : cc == 71 ? DX_MAIL_RES : DX_MAIL_TYPE, v);
@@ -348,9 +376,20 @@ DX_FN void dx_router_event(struct dx_router *r, unsigned src, const uint8_t *m, 
 DX_FN void dx_router_key(struct dx_router *r, unsigned note, unsigned on, uint32_t now)
 {
     const struct dx_cfg *c = *r->cfg;
-    if (!c || note > 127) return;
+    if (!c || note > 127 || c->kbd_ch > 15) return;
     uint8_t m[3] = {(uint8_t)((on ? 0x90U : 0x80U) | (c->kbd_ch & 15U)), (uint8_t)note, (uint8_t)(on ? 100 : 0)};
     dx_router_event(r, DX_SRC_KEYS, m, 3, now);
+}
+
+/* Song Select (F3 nn) from source src: logged, and a scene request for the control task, like a program change on the
+ * scene channel. It only happens when the engine hands the message to the app. */
+DX_FN void dx_router_song_select(struct dx_router *r, unsigned src, unsigned song, uint32_t now)
+{
+    if (!r->mail || src >= DX_SRC_COUNT || song >= 128) return;
+    struct dx_log *l = &r->log[r->log_n % DX_LOG_MAX];
+    l->ms = now; l->src = (uint8_t)src; l->ch = 0; l->status = 0xf3; l->d1 = (uint8_t)song; l->d2 = 0;
+    ++r->log_n;
+    dx_mail_put(r->mail, DX_MAIL_SCENE, song);
 }
 
 /* Send a note-off for everything this router holds, then forget it. Producer

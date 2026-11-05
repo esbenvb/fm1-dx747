@@ -1,17 +1,28 @@
-# Recipe 3: save a scene, change the setup, recall the scene.
+# Recipe 3: save a scene, change the setup, recall the scene. A scene keeps the parts, the layers, their ranges and levels,
+# which part is selected, and the sounds themselves.
 boot
 wipe
 run 400
-# the layered setup of recipe 2, shifted
+# the layered part of recipe 2, shifted; part 3 is the selected one
+enc 0 -1
+tap btn 5
+tap btn 4
 tap btn 11
-white 2
 tap btn 10
 midi 1 90 3c 64
+run 60
 midi 1 80 3c 00
+run 60
 midi 1 90 53 64
+run 60
 midi 1 80 53 00
 run 120
-enc 5 2
+tap btn 6
+tap btn 6
+enc 4 2
+tap btn 8
+enc 0 2
+expect_sel 2
 # SAVE opens the name editor on the scenes screen
 tap btn 9
 expect_screen 11
@@ -22,22 +33,34 @@ shot 3b-name-edited
 tap btn 9
 run 200
 shot 3c-saved
-# change the setup: remove engine 2 from channel 1 again
-tap btn 11
-white 2
+# change the setup: part 3 goes, part 1 loses its second layer, part 8 comes back (on channel 3, which came free)
+tap btn 8
+tap btn 5
+expect_part 2 0 0
+expect_sel 3
+enc 0 -3
+tap btn 5
+expect_part 0 1 1
+enc 0 7
+tap btn 4
+expect_part 7 3 1
 midi 1 90 3c 64
 run 80
 expect_voices 1
 midi 1 80 3c 00
 run 80
 shot 3d-changed
-# recall scene 1 with the white key: the layer and the shift come back
+# recall scene 1 with the white key: the layers, the shift, part 3 and the selection come back; part 8 goes again
 tap btn 12
 white 1
 run 200
+expect_part 0 1 2
+expect_part 2 3 1
+expect_part 7 0 0
+expect_sel 2
+expect_engine 7 60 83
 shot 3e-recalled
 tap btn 11
-shot 3f-channel-1-restored
 midi 1 90 40 64
 run 80
 expect_voices 2

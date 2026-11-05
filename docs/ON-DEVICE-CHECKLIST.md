@@ -18,7 +18,7 @@ serial or label.
 |---|---|---|
 | Samples, voices and projects saved first | with the original firmware still on the unit, save them with the workbench; keep the `.syx` files of voices you care about (reading voices from V15 is not verified) | you have the files |
 | The flashing page | open `FM1-Official-Open-Source.html` ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 5) in Chrome or Edge with the unit connected over USB and nothing else MIDI plugged in | the page sees the unit; from the original V15 it says "Different firmware detected" and offers **Enable force flash and reconnect**; write down anything that is not as described |
-| Installing | Step 6 of the same guide | the unit restarts into DX747 (logo, then Setup). The page ends with "sample initialization is incomplete" and an "Invalid file or parameters" error, which is expected; write down the exact texts. Write down the Version row (V01), the Build ID (Firmware details) and the identity shown at the end (`FM-1_8747747`); the boot screen says "DX747 V01 PREVIEW" |
+| Installing | Step 6 of the same guide | the unit restarts into DX747 (logo, then Parts). The page ends with "sample initialization is incomplete" and an "Invalid file or parameters" error, which is expected; write down the exact texts. Write down the Version row (V01), the Build ID (Firmware details) and the identity shown at the end (`FM-1_8747747`); the boot screen says "DX747 V01 PREVIEW" |
 | Going back | **Recovery & force update**, **Restore original V15** | the unit runs the original firmware again; the four voice banks are the factory voices; restore your own from the backup |
 
 ## 0b. Safe boot (do this before anything else is trusted)
@@ -27,17 +27,17 @@ serial or label.
 |---|---|---|
 | Safe boot | hold ENV and LFO, switch on, release after the screen appears | the SAFE BOOT screen shows, the ENV and LFO lights are on, nothing responds to buttons, keys or MIDI |
 | The update page still works in safe boot | with the unit in safe boot, open the flashing page and connect | the page connects as it does on a normal start; do **not** start an install just for this |
-| Back to normal | switch off, release, switch on | the normal logo, then Setup |
+| Back to normal | switch off, release, switch on | the normal logo, then Parts |
 | No false trigger | switch on five times with nothing held | never SAFE BOOT |
 
 ## 1. Start-up
 
 | Check | How | Pass |
 |---|---|---|
-| Boots to the DX747 logo, then Setup | power on | the screen shows the aircraft and "DX747", then the Setup screen |
-| All eight engines exist | an external keyboard on channel 1, then 2, up to 8 (engine n plays on channel n by default) | every engine sounds; none says it is out of memory |
+| Boots to the DX747 logo, then Parts | power on | the screen shows the aircraft and "DX747", then the Parts screen with eight parts on channels 1 to 8 |
+| All eight engines exist | an external keyboard on channel 1, then 2, up to 8 (part n is on channel n by default) | every part sounds; none says it is out of memory |
 | Memory | System screen | CPU reading is steady at idle |
-| All eight engines up | look at every screen's header | no amber "ENGINES n/8 UP" note anywhere; write down n if it shows |
+| All eight engines up | look at every screen's header | the `ENGINES` count reads 8/8 and is not amber; write down the second number if it is lower |
 
 All eight engines at once is the biggest unknown: the firmware link leaves about
 231,000 bytes of heap, but eight real engine instances were never created together
@@ -47,37 +47,46 @@ on hardware.
 
 | Check | How | Pass |
 |---|---|---|
-| CPU under load | layer two engines on one channel, play dense chords with the pedal down, watch System CPU and the header voice meter | no crackles or dropouts; note the highest CPU % |
+| CPU under load | add a second layer to a part, play dense chords with the pedal down, watch System CPU and the header voice meter | no crackles or dropouts; note the highest CPU % |
 | The 16-voice pool | hold more than 16 voices | the oldest notes are taken, no glitch, no reset |
 | MIDI flood | send 100 or more notes in a few milliseconds from a computer (USB), then release | no sudden silence of every engine (that is the engine's input overflow reset), no stuck notes |
-| Config change while holding | hold notes, change channels, window or shift, release | no stuck notes |
+| Config change while holding | hold notes, change the part's channel, a layer's window or shift, or remove a layer, release | no stuck notes |
+| Selection change while holding | hold built-in keys, turn SELECT to another part, release | the notes stop; none hangs |
 
 ## 3. MIDI
 
 | Check | How | Pass |
 |---|---|---|
-| Each port | DIN, USB, Bluetooth MIDI each send notes on a new channel | Setup shows the channel as "ACTIVE, NOT ROUTED YET"; MIDI in shows the right port name |
-| Assign by white key | Setup, key n, then white keys 1 to 8 | the engines sound from that keyboard |
-| Split and layer | two engines, one window each, then the same window | the split and the layer sound as drawn on the Channel screen |
-| LEARN | **ARP** on Channel, play low then high | the window becomes those notes |
+| Each port | DIN, USB, Bluetooth MIDI each send notes on a new channel | MIDI in shows the right port name and the channel (a channel with no part makes no sound) |
+| Make a part for it | remove a part (LFO), ENV in an empty slot, K1 on the Part screen to the channel | the part sounds from that keyboard |
+| Split and layer | two layers in a part, one window each, then the same window | the split and the layer sound as drawn on the Parts and Part screens |
+| LEARN | **ARP** on Part, play low then high | the framed layer's window becomes those notes |
 | Shift and fold | shift +2 octaves with a window near the top | notes move; DROP, CLIP and WRAP behave as described in `docs/MIDI.md` |
 | Sustain, bend, mod | CC64, pitch bend, CC1 | as on a DX7 |
-| Program change | MIDI program change 0 to 127 on a play channel | the patch changes on that engine |
+| Program change | MIDI program change 0 to 127 on a part's channel | the patch changes |
+| Program change on a layered part | the same on a part with two layers | one patch plays over the whole keyboard, the second layer is gone, its sound cut |
+| Bank select | CC0 = 1, then a program change, then CC0 = 0 and a program change | the first is ignored, the second loads |
+| Part level | CC7 from 127 to 0 on a part's channel, with two layers at different levels | the part fades with the balance between the layers kept; the Mix fader follows |
+| Velocity windows | two layers at 1-63 and 64-127 on the Velocity page, one note at velocity 30 and 100 | the soft note sounds one layer, the hard note the other |
 | Velocity | the same note at velocity 20, 64 and 127 from an external keyboard | clearly louder and brighter as velocity rises (the built-in keys are fixed at 100) |
-| LEARN with the keys | **ARP** on Channel, then two built-in keys | the window becomes those two notes |
-| Solo and mute marks | Mix screen, white keys 1 to 8 and 9 to 16 | a filled red M and a filled amber S; the other engines are dimmed while one is soloed |
+| LEARN with the keys | **ARP** on Part, then two built-in keys | the window becomes those two notes |
+| Keys play the selected part | on every screen, play the built-in keys | they sound the selected part with its windows and shifts; on the Scenes screen the white keys recall scenes instead |
+| Solo and mute marks | Mix screen, ENV (mute) and LFO (solo) on a part | a filled red M and a filled amber S; the other parts are dimmed while one is soloed |
 
 ## 4. Control from outside
 
 | Check | How | Pass |
 |---|---|---|
-| Parameter change | an editor or a SysEx tool sends `F0 43 10 01 06 00 F7` (algorithm 1) on device 0 | engine 1's algorithm changes; the Sound screen follows |
+| Parameter change | an editor or a SysEx tool sends `F0 43 10 01 06 00 F7` (algorithm 1) on device 0 | part 1's framed layer changes its algorithm; the Sound screen follows |
 | Voice dump | send a 163-byte single voice dump | the voice loads, with the dump's name |
-| Layered channel is safe | layer two engines on channel 1 and send a parameter change for device 0 | nothing changes until one engine has control channel 1 |
-| BRIGHT | CC74 from 0 to 127 on a play channel while holding a note, then while playing new notes | the tone brightens and dulls with no volume change; **write down whether a held note follows** (not yet known) |
+| Layered part edits one layer | two layers in part 1, frame layer 2 with ALGO, send a parameter change for device 0 | only layer 2 changes; frame layer 1 and the same message changes layer 1 |
+| BRIGHT | CC74 from 0 to 127 on a part's channel while holding a note, then while playing new notes | the tone brightens and dulls with no volume change; **write down whether a held note follows** (not yet known) |
 | BRIGHT is not permanent | set CC74 to 64 | the voice is back to its own sound; save a scene with BRIGHT on and recall it: not brighter than before |
 | Master filter | set a master control channel; CC74, CC71, CC70 on it | cutoff, resonance and type move; the Master screen follows |
 | Program change then edits | program change then a parameter change straight after | the edit lands on the new voice |
+| Scene channel | System, SCENE CHANNEL = 16, save scenes, then a program change on channel 16 | the scene with that number (program change 0 = scene 1) is recalled; an empty slot does nothing; the setting is still there after a power cycle |
+| Song Select | `F3 nn` from a sequencer with the scene channel off | **write down whether the scene changes and whether MIDI in shows SONG n**: the simulator does, the sealed engine may drop the message |
+| Circuit Tracks or another sequencer | what it sends when a pattern or project changes | **write down the message type, bank select and channel**, so the scene channel can be set to match |
 | Voices that need a controller | load a voice with amplitude-modulation sensitivity (the "BC" voices of ROM 3A, patches 113 and 120 when it is in bank D), then send CC120, then a program change | the voice sounds at once each time; **write down whether any voice stays silent until you move a controller**: the fix sends CC2 = 127 and was only tested in the simulator |
 
 ## 5. Scenes and the first save
@@ -87,7 +96,8 @@ on hardware.
 | The prompt | **SAVE** on a unit with a sample bank | "FIRST SAVE: FLASH SETUP" appears; HOME cancels and nothing is erased |
 | Save and recall | agree, save, change things, recall | everything comes back, including the shift, BRIGHT and the filter |
 | Power cycle | switch off and on | the last scene is back |
-| 64 scenes | save into the last slot of bank D, recall | works |
+| 64 scenes | save into the last slot of bank D, recall | works (each scene has its own flash sector) |
+| Layers and parts survive | save a scene with a layered part and a part moved to another channel, recall after a power cycle | channels, layers, windows, levels and the selected part are as saved |
 | Backup was taken | before this section | you have your samples saved with the workbench |
 
 Do not cut power during a save to test it.

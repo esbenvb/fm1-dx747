@@ -6,19 +6,20 @@
  *   boot [clear] [logo|safe] restart the instrument; "clear" also restores the factory sample bank,
  *                       "logo" starts on the boot screen instead of skipping it, "safe" starts as if the
  *                       safe-boot chord (ENV + LFO) were held at power-on
- *   wipe                erase the scene store and staging sectors (flash offsets 65536..204800)
+ *   wipe                erase the scene store and staging sectors (flash offsets 65536..335872)
  *   run MS              let MS milliseconds of simulated time pass
  *   press|release btn N / tap btn N     panel button 0..13 (OCT- OCT+ FX SEL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAY REC)
  *   press|release key N / tap key N     physical key 0..26 (F3..G5)
  *   white N             tap white key 1..16
- *   enc N DELTA         encoder 0..6 (SELECT ALGO K1 K2 K3 K4 PRESETS)
+ *   enc N DELTA         encoder 0..6 (SELECT ALGO K1 K2 K3 K4 PRESETS); 60 ms pass afterwards
+ *   encq N DELTA        the same, but no time passes: detents in quick succession
  *   knob V              master potentiometer 0..1023
  *   midi SRC HEX...     one message from source 0 DIN, 1 USB, 2 BLE, e.g. "midi 1 90 3c 64"
  *   shot NAME           write OUTDIR/NAME.png
  *   leds                print the LED states as a 41 character string
  *   echo TEXT           print TEXT
- *   expect_screen N     fail unless the DX747 screen id is N (0 boot, 1 setup, 2 engines, 3 channel,
- *                       4 engine sound, 5 plays, 6 sends, 7 midi in, 8 mix, 9 fx, 10 master, 11 scenes, 12 system,
+ *   expect_screen N     fail unless the DX747 screen id is N (0 boot, 1 parts, 2 part, 3 layer sound, 4 range,
+ *                       5 velocity, 6 sends, 7 midi in, 8 mix, 9 fx, 10 master, 11 scenes, 12 system,
  *                       13 safe boot)
  *   flash_mark          remember a checksum of the whole simulated flash
  *   expect_flash_same   fail unless the flash still has the checksum flash_mark took
@@ -42,7 +43,15 @@
  *   retouch_voice E I V download engine E's voice, set byte I to V and upload it back (workbench command sequence)
  *   expect_rx E HEXMASK fail unless engine E (0..7) plays on exactly the channels in HEXMASK (bit 0 = channel 1)
  *   expect_engine E LO HI  fail unless engine E (0..7) has the note window LO..HI
- *   expect_cfg NAME V   fail unless the active router configuration has kbd_ch or master_ch equal to V
+ *   expect_cfg NAME V   fail unless the active router configuration has kbd_ch, master_ch or scene_ch equal to V
+ *   expect_part P CH N  fail unless part P (0..7) is on channel CH (0 = the slot is unused) with N layers
+ *   expect_sel P        fail unless part P is the selected part (the keyboard plays it)
+ *   expect_layer E P L  fail unless engine E (0..7) is a layer of part P (-1 = free) at level L (0..127; -1 = any)
+ *   expect_level P V    fail unless part P has part level V (0..127)
+ *   expect_volume E V   fail unless the engine's own volume (what CC7 on its private channel set) is V (0..127)
+ *   expect_vel E LO HI  fail unless engine E (0..7) has the velocity window LO..HI
+ *   expect_ctl E CH     fail unless engine E (0..7) has control channel CH (0 = none): the DX7 SysEx target
+ *   expect_selayer P L  fail unless the selected layer of part P is L (0-based)
  *   expect_live NAME I V  fail unless the UI-owned live value matches: pan I, expr I, bright I (engine I),
  *                       filter_type, filter_res or filter_hz (I ignored)
  *   expect_project_export_valid  fail unless the project the workbench page asks for (sizes 4064 and 4264) is one the
@@ -60,13 +69,13 @@
 #include <string.h>
 #include <zlib.h>
 
+#include "instrument.h"
 #include "dx747/scene.h"
 extern unsigned dx_route_voices(void);
 extern unsigned dx_engines_up(void);
 extern void sim_safe_boot(unsigned);
 extern struct dx_live *dx_live_edit(void);
 extern const struct dx_cfg *dx_route_cfg(void);
-extern int groove_fm_copy(unsigned track, uint8_t patch[156], void *controls);
 extern void sim_boot(unsigned);
 extern void sim_control(unsigned, unsigned, int);
 extern const float *sim_render(void);
@@ -79,7 +88,6 @@ extern void sim_midi_capture(unsigned);
 extern unsigned sim_midi_output(void);
 extern int groove_fm_library_read(unsigned bank, uint8_t vmem[4096]);
 extern int groove_project_export(uint8_t *bytes, unsigned capacity);
-extern int groove_project_valid(const void *project);
 extern void groove_fm_program(uint8_t patch[156], unsigned program);
 extern uint32_t groove_crc32(uint32_t crc, const void *data, unsigned bytes);
 
@@ -378,7 +386,7 @@ int main(int argc, char **argv)
             for (unsigned i = 0; !bad && i < 8; ++i) bad |= wb_data[7 + i] != 0;
             if (bad || dx_engines_up() != 0xffU) { fprintf(stderr, "expect_timbre_refused: a track no longer reports the DX7 source (or an engine went down)\n"); ++errors; }
         }
-        else if (!strcmp(p, "wipe")) { memset(sim_flash() + 65536, 0xff, 4096U * 34U); }
+        else if (!strcmp(p, "wipe")) { memset(sim_flash() + 65536, 0xff, 4096U * 66U); }
         else if (!strcmp(p, "run") && a) run_ms((unsigned)atoi(a));
         else if ((!strcmp(p, "tap") || !strcmp(p, "press") || !strcmp(p, "release")) && a && b) {
             unsigned kind = !strcmp(a, "btn") ? 0U : 1U;
@@ -388,6 +396,7 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(p, "white") && a) { int n = atoi(a); if (n >= 1 && n <= 16) tap(1, white[n - 1]); else ++errors; }
         else if (!strcmp(p, "enc") && a && b) { sim_control(2, (unsigned)atoi(a), atoi(b)); run_ms(60); }
+        else if (!strcmp(p, "encq") && a && b) { sim_control(2, (unsigned)atoi(a), atoi(b)); }
         else if (!strcmp(p, "knob") && a) { sim_control(3, 0, atoi(a)); run_ms(60); }
         else if (!strcmp(p, "midi") && a) {
             unsigned n = 0;
@@ -495,8 +504,64 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(p, "expect_cfg") && a && b) {
             const struct dx_cfg *cf = dx_route_cfg();
-            int got = !strcmp(a, "kbd_ch") ? cf->kbd_ch : !strcmp(a, "master_ch") ? cf->master_ch : -9999;
+            int got = !strcmp(a, "kbd_ch") ? cf->kbd_ch : !strcmp(a, "master_ch") ? cf->master_ch : !strcmp(a, "scene_ch") ? cf->scene_ch : -9999;
             if (got != atoi(b)) { fprintf(stderr, "expect_cfg %s: wanted %d, got %d\n", a, atoi(b), got); ++errors; }
+        }
+        else if (!strcmp(p, "expect_part") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned part = (unsigned)atoi(a);
+            const struct dx_parts *pp = &dx_live_edit()->parts;
+            unsigned layers = 0;
+            if (part < DX_PARTS) for (unsigned e = 0; e < DX_ENGINES; ++e) layers += pp->layer[e].owner == part;
+            if (part >= DX_PARTS || !c3 || pp->part[part].channel != (unsigned)atoi(b) || layers != (unsigned)atoi(c3)) {
+                fprintf(stderr, "expect_part %s: wanted channel %s with %s layers, got channel %d with %u\n", a, b, c3 ? c3 : "?", part < DX_PARTS ? pp->part[part].channel : -1, layers);
+                ++errors;
+            }
+        }
+        else if (!strcmp(p, "expect_sel") && a) {
+            const struct dx_parts *pp = &dx_live_edit()->parts;
+            if (pp->selected != (unsigned)atoi(a)) { fprintf(stderr, "expect_sel: wanted %s, got %u\n", a, pp->selected); ++errors; }
+        }
+        else if (!strcmp(p, "expect_layer") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned e = (unsigned)atoi(a);
+            const struct dx_parts *pp = &dx_live_edit()->parts;
+            int owner = e < 8 ? (pp->layer[e].owner == DX_NO_PART ? -1 : pp->layer[e].owner) : -2, lvl = e < 8 ? pp->layer[e].lvl : -2;
+            if (e >= 8 || !c3 || owner != atoi(b) || (atoi(c3) >= 0 && lvl != atoi(c3))) {
+                fprintf(stderr, "expect_layer %s: wanted part %s level %s, got part %d level %d\n", a, b, c3 ? c3 : "?", owner, lvl);
+                ++errors;
+            }
+        }
+        else if (!strcmp(p, "expect_level") && a && b) {
+            unsigned part = (unsigned)atoi(a);
+            const struct dx_parts *pp = &dx_live_edit()->parts;
+            if (part >= DX_PARTS || pp->part[part].level != (unsigned)atoi(b)) { fprintf(stderr, "expect_level %s: wanted %s, got %d\n", a, b, part < DX_PARTS ? pp->part[part].level : -1); ++errors; }
+        }
+        else if (!strcmp(p, "expect_volume") && a && b) {
+            unsigned e = (unsigned)atoi(a);
+            struct groove_view v;
+            memset(&v, 0, sizeof v);
+            if (e < 8) groove_get_view(e, 0, &v);
+            if (e >= 8 || v.volume != (unsigned)atoi(b)) { fprintf(stderr, "expect_volume %s: wanted %s, got %u\n", a, b, e < 8 ? (unsigned)v.volume : 0U); ++errors; }
+        }
+        else if (!strcmp(p, "expect_vel") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned e = (unsigned)atoi(a);
+            const struct dx_cfg *cf = dx_route_cfg();
+            if (e >= 8 || !c3 || cf->e[e].vlo != (unsigned)atoi(b) || cf->e[e].vhi != (unsigned)atoi(c3)) {
+                fprintf(stderr, "expect_vel %s: wanted %s..%s, got %d..%d\n", a, b, c3 ? c3 : "?", e < 8 ? cf->e[e].vlo : -1, e < 8 ? cf->e[e].vhi : -1);
+                ++errors;
+            }
+        }
+        else if (!strcmp(p, "expect_ctl") && a && b) {
+            unsigned e = (unsigned)atoi(a);
+            const struct dx_cfg *cf = dx_route_cfg();
+            if (e >= 8 || cf->e[e].ctl != (unsigned)atoi(b)) { fprintf(stderr, "expect_ctl %s: wanted %s, got %d\n", a, b, e < 8 ? cf->e[e].ctl : -1); ++errors; }
+        }
+        else if (!strcmp(p, "expect_selayer") && a && b) {
+            unsigned part = (unsigned)atoi(a);
+            const struct dx_parts *pp = &dx_live_edit()->parts;
+            if (part >= DX_PARTS || pp->part[part].sel != (unsigned)atoi(b)) { fprintf(stderr, "expect_selayer %s: wanted %s, got %d\n", a, b, part < DX_PARTS ? pp->part[part].sel : -1); ++errors; }
         }
         else if (!strcmp(p, "echo")) { printf("%s%s%s\n", a ? a : "", b ? " " : "", b ? b : ""); }
         else { fprintf(stderr, "unknown or incomplete command: %s\n", p); ++errors; }

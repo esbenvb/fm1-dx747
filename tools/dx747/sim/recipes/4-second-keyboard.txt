@@ -1,23 +1,31 @@
-# Recipe 4: a second keyboard appears on an unused channel and is routed.
+# Recipe 4: a second keyboard appears on an unused channel; a part is made for it.
 boot
 wipe
 run 400
-shot 4a-setup-before
-# notes on channel 10 (status 0x99), which no engine listens to
+shot 4a-parts-before
+# notes on channel 10 (status 0x99), which no part uses
 midi 1 99 3c 64
 run 100
 expect_voices 0
 shot 4b-not-routed-yet
 tap btn 13
 shot 4c-midi-in-monitor
+# make room: part 8 goes (LFO), then ENV in its empty slot makes a part on the channel that came free, 8
 tap btn 8
-white 10
-expect_screen 3
-shot 4d-channel-10-empty
-white 4
+enc 0 -1
+tap btn 5
+enc 0 -1
+expect_sel 7
+tap btn 4
+expect_part 7 8 1
+# the part page: K1 moves it two channels up, to 10
+tap btn 11
+enc 2 2
+expect_part 7 10 1
+shot 4d-part-on-channel-10
 midi 1 99 40 64
 run 80
 expect_voices 1
-shot 4e-engine-4-added
+midi 1 89 40 00
 tap btn 8
-shot 4f-setup-after
+shot 4e-parts-after

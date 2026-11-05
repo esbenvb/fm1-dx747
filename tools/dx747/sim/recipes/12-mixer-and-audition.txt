@@ -1,33 +1,32 @@
-# Recipe 12: the Mix screen's mute and solo, and the keys that audition an engine.
-# Pixels (RGB565, screen coordinates 0..239) come from the drawing code of draw_mix: engine e is drawn at x = 4 + 29e; its
+# Recipe 12: the Mix screen's mute and solo for a part, and the keys that always play the selected part.
+# Pixels (RGB565, screen coordinates 0..239) come from the drawing code of draw_mix: part p is drawn at x = 4 + 29p; its
 # M box starts at x + 2 and its S box at x + 14, both 11 wide at y 176; the fader is the 10 pixel wide bar at x + 4.
 boot
 wipe
 run 400
 tap btn 3
 expect_screen 8
-# mute engine 1: a filled red M, and no note reaches it
-white 1
+# ENV mutes part 1: a filled red M, and no note reaches it
+tap btn 4
 run 100
 expect_px 7 177 FA69
-expect_leds ??????????????#??????????????????????????
+expect_leds ...#?????????????????????????????????????
 midi 1 90 3c 64
 run 100
 expect_voices 0
 midi 1 80 3c 00
-# solo engine 1 while it is muted: the solo clears the mute, so the engine must play
-white 9
+# LFO solos part 1 while it is muted: the solo clears the mute, so the part must play
+tap btn 5
 run 100
 expect_px 7 177 0000
 expect_px 19 177 FD80
-expect_leds ??????????????.?????????????#????????????
 midi 1 90 3c 64
 run 100
 expect_voices 1
 midi 1 80 3c 00
-# the engines that the solo silences are drawn dimmed (the fader of engine 2), and come back with the solo
+# the parts that the solo silences are drawn dimmed (the fader of part 2), and come back with the solo
 expect_px 40 150 5ACB
-white 9
+tap btn 5
 run 100
 expect_px 19 177 0000
 expect_px 40 150 FD07
@@ -35,17 +34,21 @@ midi 1 90 3d 64
 run 100
 expect_voices 1
 midi 1 80 3d 00
-# audition: hold a key on the Sound page, move SELECT to another engine, let go: the note must stop on the engine it started on
+# hold a key, move SELECT to another part, let go: the note must stop on the part it started on, not hang
 midi 1 f0 43 00 00 01 1b 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 63 63 63 00 27 00 00 00 00 00 03 00 63 00 01 00 07 63 63 63 63 32 32 32 32 1f 00 01 23 00 00 00 01 00 03 18 41 4d 53 20 54 45 53 54 20 20 10 f7
 run 400
 tap btn 8
-tap btn 8
-expect_screen 2
-white 1
-expect_screen 4
 press key 7
 run 300
 enc 0 1
+expect_sel 1
 release key 7
 run 1000
 expect_below 400 0.02
+# the keys now play part 2: key 7 is note 60 on channel 2
+press key 7
+run 100
+expect_voices 1
+release key 7
+run 100
+expect_voices 0

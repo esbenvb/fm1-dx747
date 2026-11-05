@@ -3,18 +3,18 @@
 boot
 wipe
 run 400
-# a scene first, so the scene store has used the shared staging sector
-tap btn 11
-white 2
+# a scene first, so the scene store has used the shared staging sector (a layered part, as in recipe 2)
+enc 0 -1
+tap btn 5
+tap btn 4
 tap btn 9
 tap btn 9
 run 200
-# engine 1, Sound page, patch 97 = voice 1 of bank D as shipped
+# layer 1 of part 1 (ALGO frames it), Sound page, patch 97 = voice 1 of bank D as shipped
 tap btn 8
-tap btn 8
-expect_screen 2
-white 1
-expect_screen 4
+enc 1 -1
+tap btn 6
+expect_screen 3
 enc 2 96
 run 100
 shot 7a-bank-d-as-shipped
@@ -33,4 +33,5 @@ tap btn 12
 expect_screen 11
 white 1
 run 200
+expect_part 0 1 2
 shot 7c-scene-recalled-after-import

@@ -59,13 +59,15 @@ struct dx_engine_cfg {
     uint8_t ctl;      /* control channel 1..16 for CC/PC/bend, 0 = none */
     uint8_t poly;     /* voice limit for this engine, 1..8 */
     uint8_t mute;     /* muted engines are not sent notes */
+    uint8_t vlo, vhi; /* velocity window that is played, inclusive; 0 means no limit on that side */
 };
 struct dx_cfg {
     struct dx_engine_cfg e[DX_ENGINES];
     uint8_t priv[DX_ENGINES]; /* the engine's own input channel 0..15 */
     uint8_t up;               /* bit e: engine e exists (memory permitting) */
-    uint8_t kbd_ch;           /* channel the built-in keys play on, 0..15 */
+    uint8_t kbd_ch;           /* channel the built-in keys play on, 0..15; 16 = none (the selected part is an empty slot) */
     uint8_t master_ch;        /* master control channel 1..16 (CC74 cutoff, CC71 resonance, CC70 type), 0 = none */
+    uint8_t scene_ch;         /* scene channel 1..16: a program change there recalls a scene, 0 = off */
     uint8_t pool;             /* voices in use across all engines before stealing */
 };
 #ifdef FM1_HOST_TEST
@@ -81,9 +83,13 @@ typedef int (*dx_post_fn)(const uint8_t *message, unsigned bytes);
  * and the control task takes it: one writer, one reader, latest value wins.
  * Per engine: BRIGHT (CC74/CC71), pan and expression (CC10/CC11, and CC121 which puts
  * them back to centre and 127, mirrored for the screens and scenes) and "program changed". One slot
- * says that every engine was stopped (System Reset, the stop buttons, a scene recall). Master: cutoff, resonance, type. */
+ * says that every engine was stopped (System Reset, the stop buttons, a scene recall). Master: cutoff, resonance, type.
+ * Parts: CC7 on a part's channel (the part level; LEVEL, per engine of the part), a program change on a part with
+ * several layers (PCX, at the part's first engine: the control task replaces the layers with that one voice), and a
+ * scene request (program change on the scene channel, or Song Select: the scene index 0..127). */
 enum { DX_MAIL_BRIGHT = 0, DX_MAIL_PAN = 8, DX_MAIL_EXPR = 16, DX_MAIL_PC = 24,
-       DX_MAIL_CUTOFF = 32, DX_MAIL_RES = 33, DX_MAIL_TYPE = 34, DX_MAIL_PANIC = 35, DX_MAIL_SLOTS = 36 };
+       DX_MAIL_CUTOFF = 32, DX_MAIL_RES = 33, DX_MAIL_TYPE = 34, DX_MAIL_PANIC = 35,
+       DX_MAIL_LEVEL = 36, DX_MAIL_PCX = 44, DX_MAIL_SCENE = 52, DX_MAIL_SLOTS = 53 };
 struct dx_ctl_mail {
     DX_A(uint8_t) dirty[DX_MAIL_SLOTS];
     DX_A(uint8_t) value[DX_MAIL_SLOTS];
@@ -129,6 +135,7 @@ struct dx_router {
     uint32_t seq;
     uint16_t pedal[DX_SRC_COUNT];
     uint8_t pedal_eng[DX_SRC_COUNT][16]; /* engines that were sent this pedal-down */
+    uint8_t bank[16];                    /* last bank select (CC0) per channel, for the next program change */
     unsigned tokens, started;
     uint32_t last_ms;
     uint32_t panic_seen_p, drop_seen;

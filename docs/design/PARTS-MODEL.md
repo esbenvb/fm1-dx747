@@ -1,9 +1,25 @@
 # DX747 "Parts" model: design note
 
-**Status: draft for review. Nothing in this note is implemented.** It describes a way to
-restructure what the user sees and what a scene stores. The firmware today is
-engine-centric and works as described in [DX747.md](../../DX747.md) and
-[docs/MIDI.md](../MIDI.md).
+**Status: first build implemented in the simulator and host tests; not yet run on a unit.**
+This note is the design. [DX747.md](../../DX747.md) and [MIDI.md](../MIDI.md) describe
+the firmware as built. Differences from the design as first written:
+
+- **Not built yet:** the user sound library (banks 1 and up, SAVE SOUND, scrolling a
+  sound's library) and part names (the field is in the scene format, no editor). A
+  program change after a bank select of 1 or more is ignored for now. Scenes already
+  carry layered sounds.
+- **Engines are not renumbered.** A layer keeps its engine until it is removed and a new
+  layer takes the lowest free engine; a part's layer 1 is its lowest engine. Nothing is
+  ever moved from one engine to another (that would mean exporting and importing a voice).
+- **The router did change a little** (a velocity window, CC7 as the part level, bank
+  select, program change per part, the scene channel, Song Select), but not its note
+  logic or its pacing. The parts are mapped onto the router's own configuration.
+- **Part level and layer level** are kept next to the engine configuration, in the
+  control task's state (`struct dx_parts`, `app/dx747/parts.h`), not in the router.
+- **A fresh unit has eight single-layer parts** on channels 1 to 8, as the engines were
+  before, so a sequencer can use them at once. Layering needs a free engine.
+- **Extra controls:** ENV and LFO add and remove layers (and mute and solo on Mix, and
+  step scenes on Scenes); PLAY held with OCT- or OCT+ steps scenes anywhere.
 
 ## Why
 

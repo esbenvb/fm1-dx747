@@ -2,14 +2,16 @@
 /* DX747 screen state, text formatting and the per-frame snapshot. Included by
  * app/screen.c only, after ui_core.inc. */
 
-enum { S_BOOT, S_SETUP, S_ENGINES, S_CHANNEL, S_ESOUND, S_EPLAYS, S_ESENDS, S_MON, S_MIX, S_FX, S_MASTER, S_SCENES, S_SYS, S_SAFE, S_COUNT };
+enum { S_BOOT, S_PARTS, S_PART, S_ESOUND, S_EPLAYS, S_EVEL, S_ESENDS, S_MON, S_MIX, S_FX, S_MASTER, S_SCENES, S_SYS, S_SAFE, S_COUNT };
 enum { M_BROWSE, M_NAME, M_CLAIM };                      /* scene screen modes */
 enum { BTN_OCT_DOWN, BTN_OCT_UP, BTN_FX, BTN_SEL, BTN_ENV, BTN_LFO, BTN_EDIT, BTN_GLO, BTN_HOME, BTN_SAVE, BTN_ARP, BTN_SEQ, BTN_PLAY, BTN_REC };
 #define BTN_BIT(b) (1U << (b))
 static const uint8_t white_key[16] = {0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26};
 
+/* The part being edited is the selected part (live.parts.selected, the one the keyboard plays); the layer is its
+ * selected layer. Neither is kept here: they belong to the scene. */
 static struct ui {
-    uint8_t screen, engine, channel, lane, scene, mode, sys_row, learn, learn_lo, name_pos;
+    uint8_t screen, scene, mode, sys_row, learn, learn_lo, name_pos;
     int8_t octave;
     char name[12];
     uint32_t notice_until, boot_until, learn_sig;
@@ -90,7 +92,7 @@ static struct frame {
     uint32_t now;
     uint8_t scene_used[DX_SCENES / 8];
     char scene_name[DX_SCENES][12];
-    uint8_t scene_engines[DX_SCENES];
+    uint8_t scene_parts[DX_SCENES];
     uint8_t scenes_known;
 } fr;
 
@@ -132,7 +134,7 @@ static void frame_collect(uint32_t now)
         for (unsigned i = 0; i < DX_SCENES; ++i) {
             char name[13]; uint8_t used = 0;
             if (!dx_scene_info(i, name, &used)) {
-                fr.scene_used[i / 8] |= (uint8_t)(1U << (i % 8)); memcpy(fr.scene_name[i], name, 12); fr.scene_engines[i] = used;
+                fr.scene_used[i / 8] |= (uint8_t)(1U << (i % 8)); memcpy(fr.scene_name[i], name, 12); fr.scene_parts[i] = used;
             }
         }
         fr.scenes_known = 1;
@@ -145,32 +147,60 @@ static void trim_name(char *out, const char *name, unsigned n)
     while (len && name[len - 1] == ' ') --len;
     memcpy(out, name, len); out[len] = 0;
 }
-/* Engines that listen to channel k, lowest first. */
-static unsigned engines_on(unsigned k, uint8_t list[DX_ENGINES])
+/* ---- parts as the screens see them -------------------------------------------- */
+
+static unsigned sel_part(void) { return fr.live.parts.selected; }
+static unsigned part_used(unsigned p) { return dx_part_used(&fr.live.parts, p); }
+static unsigned part_layers(unsigned p, uint8_t list[DX_ENGINES]) { return dx_part_layers(&fr.live.parts, p, list); }
+/* The engine of the selected layer of the selected part, -1 when the selected part is empty. */
+static int sel_engine(void) { return dx_part_sel_engine(&fr.live.parts, sel_part()); }
+static unsigned engines_in_use(void)
 {
     unsigned n = 0;
-    for (unsigned e = 0; e < DX_ENGINES; ++e) if ((fr.cfg.e[e].rx >> k) & 1U) list[n++] = (uint8_t)e;
+    for (unsigned e = 0; e < DX_ENGINES; ++e) n += fr.live.parts.layer[e].owner != DX_NO_PART;
     return n;
 }
-/* A channel that carries control messages: an engine's control channel or the master control channel. */
-static unsigned is_control_ch(unsigned k)
+static unsigned engines_up(void)
 {
-    if (fr.cfg.master_ch == k + 1U) return 1;
-    for (unsigned e = 0; e < DX_ENGINES; ++e) if (((fr.cfg.up >> e) & 1U) && fr.cfg.e[e].ctl == k + 1U) return 1;
-    return 0;
+    unsigned n = 0;
+    for (unsigned e = 0; e < DX_ENGINES; ++e) n += (fr.cfg.up >> e) & 1U;
+    return n;
 }
-static uint16_t engine_color(unsigned e) { return fr.cfg.e[e].mute ? C_MU : EC[e]; }
-static unsigned max_layers(unsigned k)
+static unsigned part_muted(unsigned p)
 {
     uint8_t list[DX_ENGINES];
-    unsigned n = engines_on(k, list), best = 0;
-    for (unsigned note = 0; note < 128; ++note) {
-        unsigned c = 0;
-        for (unsigned i = 0; i < n; ++i) {
-            const struct dx_engine_cfg *e = &fr.cfg.e[list[i]];
-            c += !e->mute && note >= e->lo && note <= e->hi;
-        }
-        if (c > best) best = c;
+    unsigned n = part_layers(p, list), muted = n != 0;
+    for (unsigned i = 0; i < n; ++i) muted &= fr.cfg.e[list[i]].mute != 0;
+    return muted;
+}
+static unsigned part_solo(unsigned p)
+{
+    uint8_t list[DX_ENGINES];
+    return part_layers(p, list) && fr.e[list[0]].solo;
+}
+/* The layer that names a part on the overview: the one that plays the most keys, the first of equals. */
+static int part_main(unsigned p)
+{
+    uint8_t list[DX_ENGINES];
+    unsigned n = part_layers(p, list), best = 0;
+    for (unsigned i = 1; i < n; ++i) {
+        const struct dx_engine_cfg *a = &fr.cfg.e[list[i]], *b = &fr.cfg.e[list[best]];
+        if (a->hi - a->lo > b->hi - b->lo) best = i;
     }
-    return best;
+    return n ? list[best] : -1;
+}
+static uint16_t part_color(unsigned p) { return part_muted(p) ? C_MU : EC[p & 7U]; }
+/* The colour of an engine: its part's, or dim when the engine is free. */
+static uint16_t engine_color(unsigned e)
+{
+    unsigned owner = fr.live.parts.layer[e].owner;
+    return owner < DX_PARTS ? part_color(owner) : C_MU;
+}
+/* Position of an engine among its part's layers (0-based), 0 for a free engine. */
+static unsigned layer_index(unsigned e)
+{
+    uint8_t list[DX_ENGINES];
+    unsigned owner = fr.live.parts.layer[e].owner, n = owner < DX_PARTS ? part_layers(owner, list) : 0;
+    for (unsigned i = 0; i < n; ++i) if (list[i] == e) return i;
+    return 0;
 }

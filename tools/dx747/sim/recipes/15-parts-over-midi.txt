@@ -1,0 +1,78 @@
+# Recipe 15: a part is a channel. Program change picks its sound, bank select chooses the bank, CC7 is the part level,
+# a program change on a layered part makes it one voice, and the scene channel recalls scenes.
+# (the first voices of the factory bank begin with these letters: patch 6 'O', patch 33 'G', patch 65 'B')
+boot
+wipe
+run 400
+# one layer: the program change goes to the engine
+expect_patch 0 145 80
+midi 1 c0 05
+run 200
+expect_patch 0 145 79
+# only bank 0 exists so far: after a bank select of 1 the program change is ignored, after bank 0 it works again
+midi 1 b0 00 01
+midi 1 c0 20
+run 200
+expect_patch 0 145 79
+midi 1 b0 00 00
+midi 1 c0 20
+run 200
+expect_patch 0 145 71
+# CC7 on the part's channel is the part level; the layer's own level stays, the engine plays the product
+expect_layer 0 0 100
+expect_volume 0 100
+midi 1 b0 07 40
+run 100
+expect_level 0 64
+expect_layer 0 0 100
+expect_volume 0 50
+midi 1 b0 07 7f
+run 100
+expect_level 0 127
+expect_volume 0 100
+# a layered part: part 8 makes room, part 1 gets a second layer, 'B' (patch 65) arrives as a program change on channel 1
+enc 0 -1
+tap btn 5
+tap btn 4
+expect_part 0 1 2
+midi 1 c0 40
+run 300
+expect_part 0 1 1
+expect_layer 7 -1 -1
+expect_patch 0 145 66
+expect_engine 0 0 127
+expect_ctl 0 1
+# the scene channel: scene 1 is saved, the setup changes, a program change on channel 16 brings the scene back
+tap btn 9
+tap btn 9
+run 300
+tap btn 8
+tap btn 4
+tap btn 7
+enc 0 3
+enc 2 16
+expect_cfg scene_ch 16
+tap btn 8
+expect_part 0 1 2
+midi 1 cf 00
+run 400
+expect_part 0 1 1
+expect_part 7 0 0
+expect_cfg scene_ch 16
+# nothing was sent to an engine, and a program change on channel 15 (a free channel) is ignored
+midi 1 ce 05
+run 200
+expect_patch 0 145 66
+# an empty scene slot does nothing
+midi 1 cf 07
+run 300
+expect_part 0 1 1
+# Song Select recalls a scene too, where the engine hands it on (the simulator does; the real unit is not checked yet)
+tap btn 8
+tap btn 4
+expect_part 0 1 2
+midi 1 f3 00
+run 400
+expect_part 0 1 1
+tap btn 13
+shot 15a-midi-in-song-select

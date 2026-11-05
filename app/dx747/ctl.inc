@@ -22,6 +22,7 @@
 #include <string.h>
 #include "route.h"
 #include "scene.h"
+#include "parts.inc"
 
 struct dx_edit_port {
     int (*copy)(unsigned engine, uint8_t voice[156]);
@@ -33,6 +34,7 @@ struct dx_edit_port {
      * message arrives: a voice with amplitude-modulation sensitivity stays silent. The engine's own default (breath
      * open, CC2 = 127) is applied by sending exactly that. */
     int (*refresh)(unsigned engine);                                 /* 0 when posted; non-zero is retried at the next poll */
+    int (*level)(unsigned engine, unsigned value);                   /* CC7 on the engine's own channel; 0 when posted, else retried */
 };
 
 enum { DX_SX_RING = 64, DX_SX_BATCH = 6, DX_DUMPS = 8, DX_DUMP_COST = 3, DX_BRIGHT_SCAN_MS = 100, DX_PC_SETTLE_MS = 20 };
@@ -53,6 +55,10 @@ struct dx_ctl {
     uint8_t force;            /* engines whose voice was replaced by an import: start from the voice as it is */
     uint8_t refresh;          /* engines that need their controller state applied again (see struct dx_edit_port) */
     uint8_t pc_wait;          /* program change seen, waiting for the engine to load the voice */
+    uint8_t lvl_dirty;        /* engines whose level (layer level x part level) must be sent to the engine */
+    uint8_t pcx;              /* first engines of layered parts that a program change asked to turn into one voice */
+    uint8_t pcx_prog[DX_ENGINES];
+    uint8_t scene_req;        /* scene asked for over MIDI (program change on the scene channel, Song Select) plus 1, 0 = none */
     uint32_t pc_at[DX_ENGINES], scan_ms;
     DX_A(uint32_t) sx[DX_SX_RING]; /* DX7 parameter changes: dev | param << 4 | value << 12 */
     DX_A(unsigned) sx_w, sx_r;
@@ -158,6 +164,13 @@ DX_FN void dx_bright_export_fix(const struct dx_ctl *c, unsigned e, uint8_t voic
         if (((mods >> k) & 1U) && voice[DX_LEVEL(k)] == b->applied[k]) voice[DX_LEVEL(k)] = b->base[k];
 }
 DX_FN void dx_bright_changed_ctl(struct dx_ctl *c, unsigned e) { if (e < DX_ENGINES) c->dirty |= (uint8_t)(1U << e); }
+/* A layer level or a part level changed on the screen: the engine is told the product, retried until it is posted. */
+DX_FN void dx_level_changed_ctl(struct dx_ctl *c, unsigned e) { if (e < DX_ENGINES) c->lvl_dirty |= (uint8_t)(1U << e); }
+/* The app itself sent a program change to engine e (a layered part became one voice): treat it like one that arrived over MIDI. */
+DX_FN void dx_ctl_program_sent(struct dx_ctl *c, unsigned e, uint32_t now)
+{
+    if (e < DX_ENGINES) { c->pc_wait |= (uint8_t)(1U << e); c->pc_at[e] = now; c->refresh |= (uint8_t)(1U << e); }
+}
 /* The voice was replaced (a program change that has settled): start BRIGHT from the voice as it is. The refresh of a
  * program change is sent by the router, in order, right behind the message. */
 DX_FN void dx_bright_force(struct dx_ctl *c, unsigned e)
@@ -302,7 +315,17 @@ DX_FN unsigned dx_ctl_poll(struct dx_ctl *c, struct dx_ctl_mail *mail, const str
             if (dx_mail_take(mail, DX_MAIL_PAN + e, &v)) live->pan[e] = (int8_t)dx_cc_to_offset(v);
             if (dx_mail_take(mail, DX_MAIL_EXPR + e, &v)) live->expr[e] = (uint8_t)v;
             if (dx_mail_take(mail, DX_MAIL_PC + e, &v)) { c->pc_wait |= (uint8_t)(1U << e); c->pc_at[e] = now; }
+            if (dx_mail_take(mail, DX_MAIL_PCX + e, &v)) { c->pcx |= (uint8_t)(1U << e); c->pcx_prog[e] = (uint8_t)v; }
+            if (dx_mail_take(mail, DX_MAIL_LEVEL + e, &v)) {
+                /* CC7 on a part's channel is the part level: every layer of the part follows */
+                unsigned part = live->parts.layer[e].owner;
+                if (part < DX_PARTS) {
+                    live->parts.part[part].level = (uint8_t)v;
+                    for (unsigned k = 0; k < DX_ENGINES; ++k) if (live->parts.layer[k].owner == part) c->lvl_dirty |= (uint8_t)(1U << k);
+                }
+            }
         }
+        if (dx_mail_take(mail, DX_MAIL_SCENE, &v)) c->scene_req = (uint8_t)(v + 1U);
         if (dx_mail_take(mail, DX_MAIL_PANIC, &v)) c->refresh |= cfg->up;   /* every engine was stopped */
         /* A cutoff or resonance move is meant to be heard: an off filter becomes a low-pass. */
         if (dx_mail_take(mail, DX_MAIL_CUTOFF, &v)) {
@@ -361,6 +384,11 @@ DX_FN unsigned dx_ctl_poll(struct dx_ctl *c, struct dx_ctl_mail *mail, const str
     unsigned hold = c->pc_wait, dirty = c->dirty, force = c->force;
     for (unsigned e = 0; e < DX_ENGINES; ++e)
         if ((((c->refresh & ~hold) >> e) & 1U) && c->port->refresh(e) == 0) c->refresh &= (uint8_t)~(1U << e);
+    for (unsigned e = 0; e < DX_ENGINES; ++e)
+        if (((c->lvl_dirty >> e) & 1U) && live->parts.layer[e].owner < DX_PARTS) {
+            const struct dx_parts *p = &live->parts;
+            if (c->port->level(e, dx_layer_volume(p->layer[e].lvl, p->part[p->layer[e].owner].level)) == 0) c->lvl_dirty &= (uint8_t)~(1U << e);
+        } else c->lvl_dirty &= (uint8_t)~(1U << e);
     c->dirty = (uint8_t)(dirty & hold); c->force = (uint8_t)(force & hold);
     for (unsigned e = 0; e < DX_ENGINES; ++e)
         if (((dirty & ~hold) >> e) & 1U) dx_bright_apply(c, e, live->bright[e], (force >> e) & 1U);

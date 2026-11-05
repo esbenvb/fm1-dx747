@@ -33,7 +33,14 @@ static int ep_refresh(unsigned e)
     uint8_t m[3] = {(uint8_t)(0xb0U | c->priv[e]), 2, 127};
     return fm1_midi_post(m, 3);
 }
-static const struct dx_edit_port edit_port = {ep_copy, ep_edit, ep_name, ep_toggle, ep_import, ep_refresh};
+/* CC7 on the engine's own channel: layer level x part level. A full ring is reported and retried by the caller. */
+static int ep_level(unsigned e, unsigned value)
+{
+    const struct dx_cfg *c = dx_route_cfg();
+    uint8_t m[3] = {(uint8_t)(0xb0U | c->priv[e]), 7, (uint8_t)value};
+    return fm1_midi_post(m, 3);
+}
+static const struct dx_edit_port edit_port = {ep_copy, ep_edit, ep_name, ep_toggle, ep_import, ep_refresh, ep_level};
 static struct dx_ctl ctl;
 #include "dx747/scene_port.inc"
 
@@ -99,27 +106,16 @@ void dx_settings_update(const struct dx_settings *s)
 {
     if (!dx_settings_valid(s) || !memcmp(s, &settings, sizeof settings)) return;
     unsigned radio = s->radio_off != settings.radio_off || s->role != settings.role;
-    unsigned light = s->backlight != settings.backlight, kbd = s->kbd_ch != settings.kbd_ch, master = s->master_ch != settings.master_ch;
+    unsigned light = s->backlight != settings.backlight, scene = s->scene_ch != settings.scene_ch, master = s->master_ch != settings.master_ch;
     settings = *s;
     if (radio) radio_pending = 2;
     if (light) fm1_led_idle_level(settings.backlight);
-    if (kbd || master) { /* only the field that changed: a recalled scene may have set the other one */
+    if (scene || master) { /* the routing follows both control channels */
         struct dx_cfg c = *dx_route_cfg();
-        if (kbd) c.kbd_ch = settings.kbd_ch;
-        if (master) c.master_ch = settings.master_ch;
+        c.scene_ch = settings.scene_ch; c.master_ch = settings.master_ch;
         dx_route_publish(&c);
     }
     settings_mark();
-}
-/* One step of the built-in keyboard's channel from the channel that is active now (a scene may have set it); the setting
- * that comes back at power-on follows. */
-void dx_keyboard_channel_step(int delta)
-{
-    struct dx_cfg c = *dx_route_cfg();
-    int ch = ((int)c.kbd_ch + delta) % 16;
-    c.kbd_ch = (uint8_t)(ch < 0 ? ch + 16 : ch);
-    dx_route_publish(&c);
-    if (settings.kbd_ch != c.kbd_ch) { settings.kbd_ch = c.kbd_ch; settings_mark(); }
 }
 int dx_storage_state(void) { return storage_state = dx_scene_store_state(); }
 int dx_storage_state_cached(void) { return storage_state; }
@@ -163,6 +159,128 @@ int dx_scene_save(unsigned index, const char name[12])
     return r;
 }
 
+/* ---- parts: what the screens edit ------------------------------------------- */
+
+/* A layer that was just given an engine starts clean: centred, full expression, BRIGHT 0, unmuted, and at a level the
+ * engine is told. The voice it holds is whatever the engine last had; the screens then offer the voice to change. */
+/* Solo is the mixer's flag on the engine, so it has to follow the layers: an engine that is free is never left soloed (it
+ * would silence every part once the part's own solo is switched off), and a layer added to a soloed part joins the solo. */
+static unsigned engine_solo(unsigned e)
+{
+    struct groove_view v;
+    groove_get_view(e, 0, &v);
+    return v.solo;
+}
+static void layer_begin(unsigned e, unsigned part)
+{
+    live.pan[e] = 0; live.bright[e] = 0; live.expr[e] = 127;
+    live.parts.layer[e].lvl = 100;
+    port_cc(e, 10, 64); port_cc(e, 11, 127);
+    if (engine_solo(e)) groove_mix_toggle(e, 1);
+    if (port_muted(e)) port_toggle(e);
+    uint8_t list[DX_ENGINES];
+    unsigned n = dx_part_layers(&live.parts, part, list), soloed = 0;
+    for (unsigned i = 0; i < n; ++i) soloed |= list[i] != e && engine_solo(list[i]);
+    if (soloed) groove_mix_toggle(e, 1);          /* soloing it also clears its own mute */
+    dx_bright_changed_ctl(&ctl, e);
+    dx_level_changed_ctl(&ctl, e);
+}
+/* A layer that lost its engine stops sounding, and stops being soloed. */
+static void layer_end(unsigned e)
+{
+    port_cc(e, 123, 0); port_cc(e, 120, 0);
+    if (engine_solo(e)) groove_mix_toggle(e, 1);
+}
+static void parts_publish(const struct dx_cfg *c) { dx_route_publish(c); }
+
+int dx_part_add(unsigned slot)
+{
+    struct dx_cfg c = *dx_route_cfg();
+    int part = dx_parts_add_part(&live.parts, &c, slot);
+    if (part < 0) return part;
+    uint8_t list[DX_ENGINES];
+    if (dx_part_layers(&live.parts, (unsigned)part, list)) layer_begin(list[0], (unsigned)part);
+    parts_publish(&c);
+    return part;
+}
+int dx_part_add_layer(unsigned part)
+{
+    struct dx_cfg c = *dx_route_cfg();
+    int e = dx_parts_add_layer(&live.parts, &c, part);
+    if (e < 0) return e;
+    layer_begin((unsigned)e, part);
+    parts_publish(&c);
+    return e;
+}
+int dx_part_remove_layer(unsigned part, unsigned layer)
+{
+    struct dx_cfg c = *dx_route_cfg();
+    int e = dx_parts_remove_layer(&live.parts, &c, part, layer);
+    if (e < 0) return e;
+    parts_publish(&c);
+    layer_end((unsigned)e);
+    return e;
+}
+int dx_part_set_channel(unsigned part, unsigned channel)
+{
+    struct dx_cfg c = *dx_route_cfg();
+    if (!dx_parts_set_channel(&live.parts, &c, part, channel)) return 0;
+    parts_publish(&c);
+    return 1;
+}
+void dx_part_select(unsigned part)
+{
+    if (part >= DX_PARTS || live.parts.selected == part) return;
+    struct dx_cfg c = *dx_route_cfg();
+    dx_parts_select(&live.parts, part);
+    dx_parts_derive(&live.parts, &c);
+    parts_publish(&c);
+}
+void dx_part_select_layer(unsigned part, unsigned layer)
+{
+    uint8_t list[DX_ENGINES];
+    unsigned n = dx_part_layers(&live.parts, part, list);
+    if (!n || layer >= n || live.parts.part[part].sel == layer) return;
+    struct dx_cfg c = *dx_route_cfg();
+    live.parts.part[part].sel = (uint8_t)layer;
+    dx_parts_derive(&live.parts, &c);
+    parts_publish(&c);
+}
+void dx_level_changed(unsigned engine) { dx_level_changed_ctl(&ctl, engine); }
+void dx_part_level_changed(unsigned part)
+{
+    for (unsigned e = 0; e < DX_ENGINES; ++e) if (live.parts.layer[e].owner == part) dx_level_changed_ctl(&ctl, e);
+}
+
+/* A program change on a layered part: the part becomes the one voice, on its first engine, over the whole keyboard. */
+static void part_program(unsigned first_engine, unsigned program)
+{
+    unsigned part = live.parts.layer[first_engine].owner;
+    uint8_t list[DX_ENGINES];
+    if (part >= DX_PARTS || !dx_part_layers(&live.parts, part, list)) return;
+    unsigned e0 = list[0];
+    struct dx_cfg c = *dx_route_cfg();
+    unsigned freed = dx_parts_collapse(&live.parts, &c, part);
+    parts_publish(&c);
+    for (unsigned e = 0; e < DX_ENGINES; ++e) if ((freed >> e) & 1U) layer_end(e);
+    const uint8_t pc[2] = {(uint8_t)(0xc0U | c.priv[e0]), (uint8_t)program};
+    (void)fm1_midi_post(pc, 2);
+    dx_ctl_program_sent(&ctl, e0, fm1_millis());   /* BRIGHT starts from the new voice once the engine has loaded it */
+    dx_level_changed_ctl(&ctl, e0);
+}
+/* Work the router could only record: layered program changes and scene requests from MIDI. */
+static void service_midi_requests(void)
+{
+    unsigned pcx = ctl.pcx;
+    ctl.pcx = 0;
+    for (unsigned e = 0; e < DX_ENGINES; ++e) if ((pcx >> e) & 1U) part_program(e, ctl.pcx_prog[e]);
+    if (ctl.scene_req) {
+        unsigned index = ctl.scene_req - 1U;
+        ctl.scene_req = 0;
+        if (index < DX_SCENES) (void)dx_scene_recall(index); /* an empty slot does nothing */
+    }
+}
+
 /* ---- project hooks the engine links against ----------------------------- */
 
 void groove_project_name(char name[13]) { memcpy(name, project_name, 12); name[12] = 0; }
@@ -180,6 +298,7 @@ void groove_project_init(void)
     ctl.port = &edit_port;
     for (unsigned e = 0; e < DX_ENGINES; ++e) live.expr[e] = 127;
     live.filter_hz = 1000;
+    dx_parts_default(&live.parts);
     memset(&booted, 0, sizeof booted);
     settings = (struct dx_settings){0, 0, 3, 0, 0, 0, 0};
     stage = 0; stage2_busy = 0; radio_pending = 0; settings_dirty = 0; settings_failures = 0; settings_result = 0; storage_state = 0; safe_boot = 0;
@@ -190,13 +309,22 @@ void groove_project_poll(void)
 {
     keep_references();
     if (safe_boot) return; /* the engine calls this every tick and ignores what it does; stage stays 0 */
-    if (stage >= 3 && (dx_ctl_poll(&ctl, dx_route_mailbox(), dx_route_cfg(), &live, fm1_millis()) & DX_CTL_FILTER)) dx_apply_filter();
+    if (stage >= 3) {
+        if (dx_ctl_poll(&ctl, dx_route_mailbox(), dx_route_cfg(), &live, fm1_millis()) & DX_CTL_FILTER) dx_apply_filter();
+        service_midi_requests();
+    }
     if (stage == 0) {
         dx_boot_engines(&booted);
         struct dx_cfg c = *dx_route_cfg();
         c.up = booted.up;
         dx_route_publish(&c);
         ctl.refresh |= (uint8_t)booted.up; /* creating the engines panicked them */
+        for (unsigned e = 0; e < DX_ENGINES; ++e) { /* a layer starts at the level its engine has: part level 127 changes nothing */
+            struct groove_view v;
+            if (!((booted.up >> e) & 1U)) continue;
+            groove_get_view(e, 0, &v);
+            live.parts.layer[e].lvl = (uint8_t)(v.volume > 127 ? 127 : v.volume);
+        }
         stage = 1;
         return;
     }
@@ -208,7 +336,7 @@ void groove_project_poll(void)
         settings.role = FM1_BLE_PERIPHERAL; /* Central needs a scan page, which DX747 does not have yet */
         fm1_led_idle_level(settings.backlight);
         struct dx_cfg c = *dx_route_cfg();
-        c.kbd_ch = settings.kbd_ch; c.master_ch = settings.master_ch;
+        c.scene_ch = settings.scene_ch; c.master_ch = settings.master_ch;
         dx_route_publish(&c);
         radio_pending = 2;
         stage = 2;

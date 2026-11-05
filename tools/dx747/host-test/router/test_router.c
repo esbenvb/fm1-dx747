@@ -140,7 +140,7 @@ static void test_note_off_survives_config_change(void)
 
 static void test_fold(void)
 {
-    struct dx_engine_cfg e = {1, 0, 127, 24, DX_FOLD_DROP, 0, 4, 0};
+    struct dx_engine_cfg e = {1, 0, 127, 24, DX_FOLD_DROP, 0, 4, 0, 0, 0};
     unsigned out = 99;
     CHECK(dx_map_note(&e, 60, &out) && out == 84);
     CHECK(!dx_map_note(&e, 110, &out));
@@ -685,7 +685,7 @@ static void test_controller_mail(void)
     CHECK(dx_mail_take(&mail, DX_MAIL_RES, &v) && v == 101);
     CHECK(dx_mail_take(&mail, DX_MAIL_TYPE, &v) && v == 102);
     CHECK(!dx_mail_take(&mail, DX_MAIL_BRIGHT + 2, &v));
-    ev3(&ext, DX_SRC_USB, 0xb9, 7, 90, 1011);                     /* other controllers on that channel still reach the engine */
+    ev3(&ext, DX_SRC_USB, 0xb9, 1, 90, 1011);                     /* other controllers on that channel still reach the engine */
     CHECK(nposted == before + 1);
     /* no master channel: CC74 on channel 10 is an ordinary controller for the engine listening there */
     cfg.master_ch = 0;
@@ -698,6 +698,113 @@ static void test_controller_mail(void)
     ev3(&ext, DX_SRC_USB, 0xb0, 74, 1, 1013);
 }
 
+/* A keyboard channel of 16 means the selected part is an empty slot: the keys play nothing. */
+static void test_keys_without_part(void)
+{
+    reset();
+    cfg.e[0].rx = 1U; cfg.kbd_ch = 16;
+    dx_router_key(&loc, 60, 1, 1000);
+    CHECK(nposted == 0 && loc.nheld == 0);
+    cfg.kbd_ch = 0;
+    dx_router_key(&loc, 60, 1, 1001);
+    CHECK(count_on(cfg.priv[0], 60) == 1);
+}
+
+/* Parts: velocity windows, part level, program change per part, bank select, the scene channel, Song Select. */
+static unsigned posted_status(unsigned status)
+{
+    unsigned c = 0;
+    for (unsigned i = 0; i < nposted; ++i) c += posted[i].m[0] == status;
+    return c;
+}
+static void test_parts_rules(void)
+{
+    static struct dx_ctl_mail mail;
+    unsigned v;
+    /* a velocity window picks the layer: soft notes one engine, hard notes the other */
+    reset();
+    cfg.e[0].rx = 1U; cfg.e[0].vlo = 1; cfg.e[0].vhi = 63;
+    cfg.e[1].rx = 1U; cfg.e[1].vlo = 64; cfg.e[1].vhi = 127;
+    cfg.e[2].rx = 1U;                                              /* vlo = vhi = 0: no limit */
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 60, 30, 1000);
+    CHECK(count_on(cfg.priv[0], 60) == 1 && count_on(cfg.priv[1], 60) == 0 && count_on(cfg.priv[2], 60) == 1);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 61, 100, 1001);
+    CHECK(count_on(cfg.priv[0], 61) == 0 && count_on(cfg.priv[1], 61) == 1 && count_on(cfg.priv[2], 61) == 1);
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0x90, 62, 63, 1002); ev3(&ext, DX_SRC_USB, 0x90, 63, 64, 1002);
+    CHECK(count_on(cfg.priv[0], 62) == 1 && count_on(cfg.priv[1], 62) == 0);   /* the window is inclusive */
+    CHECK(count_on(cfg.priv[0], 63) == 0 && count_on(cfg.priv[1], 63) == 1);
+    ev3(&ext, DX_SRC_USB, 0x80, 62, 0, 1003); ev3(&ext, DX_SRC_USB, 0x80, 63, 0, 1003);
+    CHECK(count_off(cfg.priv[0], 62) == 1 && count_off(cfg.priv[1], 63) == 1);  /* releases follow the engine that started the note */
+
+    /* CC7 on a part's channel is the part level: mailed for every engine of the part, not forwarded */
+    reset();
+    memset(&mail, 0, sizeof mail); ext.mail = &mail;
+    cfg.e[0].rx = 1U << 2; cfg.e[1].rx = 1U << 2; cfg.e[2].rx = 1U << 3;
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xb2, 7, 80, 1000);
+    CHECK(nposted == 0);
+    CHECK(dx_mail_take(&mail, DX_MAIL_LEVEL + 0, &v) && v == 80);
+    CHECK(dx_mail_take(&mail, DX_MAIL_LEVEL + 1, &v) && v == 80);
+    CHECK(!dx_mail_take(&mail, DX_MAIL_LEVEL + 2, &v));
+
+    /* program change: one layer goes straight to the engine, a layered part is handled by the control task */
+    reset();
+    memset(&mail, 0, sizeof mail); ext.mail = &mail;
+    cfg.e[0].rx = 1U << 0;                                         /* part on channel 1: one layer */
+    cfg.e[1].rx = 1U << 1; cfg.e[3].rx = 1U << 1; cfg.e[3].ctl = 2; /* part on channel 2: layers on engines 2 and 4 */
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xc0, 12, 0, 1000);
+    CHECK(posted_status(0xc0U | cfg.priv[0]) == 1 && dx_mail_take(&mail, DX_MAIL_PC + 0, &v));
+    CHECK(!dx_mail_take(&mail, DX_MAIL_PCX + 0, &v));
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xc1, 33, 0, 1001);
+    CHECK(nposted == 0);                                           /* nothing reaches an engine */
+    CHECK(dx_mail_take(&mail, DX_MAIL_PCX + 1, &v) && v == 33);    /* mailed at the part's first engine */
+    CHECK(!dx_mail_take(&mail, DX_MAIL_PCX + 3, &v) && !dx_mail_take(&mail, DX_MAIL_PC + 1, &v));
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xc5, 9, 0, 1002);                       /* nobody on channel 6: ignored */
+    CHECK(nposted == 0 && !dx_mail_take(&mail, DX_MAIL_PCX + 0, &v));
+
+    /* bank select is remembered per channel and not forwarded; only bank 0 exists so far */
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xb0, 0, 1, 1003);
+    CHECK(nposted == 0);
+    ev3(&ext, DX_SRC_USB, 0xc0, 5, 0, 1004);
+    CHECK(nposted == 0 && !dx_mail_take(&mail, DX_MAIL_PC + 0, &v));  /* bank 1 does not exist: ignored */
+    ev3(&ext, DX_SRC_USB, 0xc1, 5, 0, 1005);                       /* channel 2 never had a bank select */
+    CHECK(dx_mail_take(&mail, DX_MAIL_PCX + 1, &v) && v == 5);
+    ev3(&ext, DX_SRC_USB, 0xb0, 0, 0, 1006);
+    ev3(&ext, DX_SRC_USB, 0xc0, 6, 0, 1007);
+    CHECK(posted_status(0xc0U | cfg.priv[0]) == 1 && dx_mail_take(&mail, DX_MAIL_PC + 0, &v));
+
+    /* the scene channel: a program change there is a scene request and never reaches an engine */
+    reset();
+    memset(&mail, 0, sizeof mail); ext.mail = &mail;
+    cfg.e[0].rx = 1U << 0; cfg.e[1].rx = 1U << 15;               /* even a part on the scene channel loses the program change */
+    cfg.scene_ch = 16;
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xcf, 41, 0, 1000);
+    CHECK(nposted == 0 && dx_mail_take(&mail, DX_MAIL_SCENE, &v) && v == 41);
+    ev3(&ext, DX_SRC_USB, 0xc0, 41, 0, 1001);                      /* channel 1 is an ordinary part */
+    CHECK(!dx_mail_take(&mail, DX_MAIL_SCENE, &v) && dx_mail_take(&mail, DX_MAIL_PC + 0, &v));
+    cfg.scene_ch = 0;                                              /* off: a program change on 16 belongs to its part */
+    fresh();
+    ev3(&ext, DX_SRC_USB, 0xcf, 7, 0, 1002);
+    CHECK(!dx_mail_take(&mail, DX_MAIL_SCENE, &v) && dx_mail_take(&mail, DX_MAIL_PC + 1, &v));
+
+    /* Song Select is logged and becomes the same request; the keys router has no mailbox and ignores it */
+    dx_router_song_select(&ext, DX_SRC_USB, 3, 2000);
+    CHECK(dx_mail_take(&mail, DX_MAIL_SCENE, &v) && v == 3);
+    CHECK(ext.log[(ext.log_n - 1) % DX_LOG_MAX].status == 0xf3 && ext.log[(ext.log_n - 1) % DX_LOG_MAX].d1 == 3);
+    dx_router_song_select(&ext, DX_SRC_USB, 200, 2001);            /* out of range */
+    CHECK(!dx_mail_take(&mail, DX_MAIL_SCENE, &v));
+    dx_router_song_select(&loc, DX_SRC_KEYS, 4, 2002);
+    CHECK(loc.log_n == 0);
+}
+
 int main(void)
 {
     test_basic_and_mask();
@@ -705,6 +812,8 @@ int main(void)
     test_refresh_in_stream();
     test_recovery_refreshes();
     test_controller_mail();
+    test_parts_rules();
+    test_keys_without_part();
     test_coalesce_race();
     test_layering_and_split();
     test_note_off_survives_config_change();

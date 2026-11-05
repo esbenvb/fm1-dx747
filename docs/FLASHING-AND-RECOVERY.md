@@ -48,7 +48,8 @@ Do not flash DX747 to a unit you cannot afford to lose until all of this is done
 The unit's flash holds the firmware and a user area. DX747 treats the user area like this:
 
 - **Samples are erased** on the first scene save, after a prompt. The 64 scenes and
-  the device settings take over the flash that holds the stock sample bank.
+  the device settings (one 4 KB flash sector each: 65 sectors, 260 KB, from offset
+  69,632) take over the flash that holds the stock sample bank.
   Going back to stock firmware does not bring the samples back: restore them from
   your workbench backup. Until you agree to that prompt DX747 writes nothing to
   that flash (settings changes are not saved either). The prompt also covers an

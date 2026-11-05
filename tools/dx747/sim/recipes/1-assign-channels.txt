@@ -1,31 +1,59 @@
-# Recipe 1: assign MIDI channels with the white keys and layer engines.
+# Recipe 1: parts. Remove a part, add a layer, move a part to another channel, add a part again.
+# Buttons: ENV (4) adds a layer, or a part in an empty slot; LFO (5) removes the framed layer (the last one takes the part with it).
 boot
 wipe
 run 400
 expect_screen 1
-shot 1a-setup-default
+expect_part 0 1 1
+expect_part 7 8 1
+expect_sel 0
+shot 1a-parts-default
+# SELECT moves to part 4; LFO removes its only layer: the part goes, its engine is free, the selection moves on
+enc 0 3
+expect_sel 3
+tap btn 5
+expect_part 3 0 0
+expect_layer 3 -1 -1
+expect_sel 4
+shot 1b-part-removed
+# part 1: ENV adds a layer on the free engine 4; the part page lists both layers, the new one selected
+enc 0 -4
+expect_sel 0
+tap btn 4
+expect_part 0 1 2
+expect_layer 3 0 100
+expect_selayer 0 1
 tap btn 11
-expect_screen 3
-shot 1b-channel-1-one-engine
-# white key 2 adds engine 2 to channel 1: two lanes over the same keys, a layer
-white 2
-# SEQ button lit, keys for engines 1 and 2 lit, the rest of the keys dark
-expect_leds ???????????#??#.#........................
-shot 1c-channel-1-layered
-# SELECT moves to channel 3, where engine 3 already listens
-enc 0 2
-shot 1d-channel-3
-# one more engine on channel 3, then open the engine page that lists where it plays
-white 1
-tap btn 6
-expect_screen 4
-tap btn 6
-expect_screen 5
-shot 1e-engine-1-plays-from
-# white keys toggle channels for this engine: add 2, remove 1
-white 2
-white 1
-shot 1f-engine-1-channels-2-and-3
+expect_screen 2
+shot 1c-part-layered
+# DX7 SysEx goes to the framed layer: ALGO moves the frame to layer 1 and the target with it
+expect_ctl 3 1
+expect_ctl 0 0
+enc 1 -1
+expect_selayer 0 0
+expect_ctl 0 1
+expect_ctl 3 0
+# K1 moves the part to the next free channel: 2 and 3 belong to parts 2 and 3, 4 is free since part 4 left
+enc 2 1
+expect_part 0 4 2
+expect_rx 0 8
+expect_rx 3 8
+shot 1d-part-on-channel-4
+# every engine is a layer now: ENV in the empty slot is refused
 tap btn 8
-expect_screen 1
-shot 1g-setup-after
+enc 0 3
+expect_sel 3
+tap btn 4
+expect_part 3 0 0
+shot 1e-no-free-engine
+# take the framed layer (layer 1, engine 1) away: the slot then takes a part on the lowest free channel, on the freed engine
+enc 0 -3
+tap btn 5
+expect_part 0 4 1
+enc 0 3
+tap btn 4
+expect_part 3 1 1
+expect_sel 3
+expect_layer 0 3 -1
+expect_rx 0 1
+shot 1f-parts-after

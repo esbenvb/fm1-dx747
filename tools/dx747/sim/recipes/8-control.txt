@@ -148,48 +148,53 @@ expect_live filter_res 80
 midi 1 b9 46 40
 run 100
 expect_live filter_type 2
-# a control channel is not a keyboard waiting to be routed: Setup labels it as one when it is selected
+# a control channel is not a part: the parts screen simply has no row for it
 tap btn 8
 expect_screen 1
-enc 0 9
-run 100
-shot 8c-setup-with-control-channel
-enc 0 -9
+shot 8c-parts-with-control-channel
 tap btn 2
 tap btn 2
 expect_screen 10
 shot 8b-master-filter-from-midi
-# a recalled scene keeps its keyboard channel when the master control channel is edited afterwards
-tap btn 7
-enc 0 -1
-enc 2 4
-run 100
+# the keyboard plays the selected part, so its channel follows the selection; a scene stores which part is selected
+tap btn 8
+enc 0 4
+expect_sel 4
 expect_cfg kbd_ch 4
 tap btn 9
 tap btn 9
 run 300
-tap btn 7
-enc 2 -4
-run 100
+tap btn 8
+enc 0 -4
+expect_sel 0
 expect_cfg kbd_ch 0
 tap btn 12
 white 1
 run 300
+expect_sel 4
 expect_cfg kbd_ch 4
+# editing the master control channel afterwards leaves the keyboard alone (System row 4 is still the one open)
 tap btn 7
-enc 0 1
 enc 2 3
 run 100
 expect_cfg master_ch 13
 expect_cfg kbd_ch 4
-# the keyboard channel row shows and edits the active channel (4 from the scene, so one step is 5, not 1)
+# the scene channel is a device setting, not part of a scene: row 3 of the System screen, off by default
+expect_cfg scene_ch 0
 enc 0 -1
-enc 2 1
+enc 2 5
 run 100
-expect_cfg kbd_ch 5
+expect_cfg scene_ch 5
+shot 8d-scene-channel
+# a recalled scene leaves it alone
+tap btn 12
+white 1
+run 300
+expect_cfg scene_ch 5
+expect_cfg master_ch 13
+# the scene channel steps through Off and 1..16
+tap btn 7
 enc 2 -5
-run 100
-expect_cfg kbd_ch 0
+expect_cfg scene_ch 0
 enc 2 -1
-run 100
-expect_cfg kbd_ch 15
+expect_cfg scene_ch 16

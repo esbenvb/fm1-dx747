@@ -8,6 +8,7 @@
 #include <string.h>
 #include "fm1.h"
 #include "../../../../app/dx747/route.inc"
+#include "../../../../app/dx747/parts.inc"
 
 static int failures, checks;
 #define CHECK(c) do { ++checks; if (!(c)) { ++failures; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
@@ -25,7 +26,7 @@ static int allowed(uint32_t o, size_t n)
 {
     uint32_t end = o + (uint32_t)n;
     if (o >= 65536U && end <= 65536U + SECTOR) return 1;                       /* staging */
-    return o >= 69632U && end <= 69632U + 33U * SECTOR;                        /* scenes and settings */
+    return o >= 69632U && end <= 69632U + 65U * SECTOR;                        /* scenes and settings */
 }
 int fm1_flash_read(uint32_t o, void *d, size_t n)
 {
@@ -108,19 +109,31 @@ static int tail_intact(void)
     for (unsigned i = LIBRARY_OFFSET; i < FLASH_BYTES; ++i) if (flash[i] != (uint8_t)(i * 13U + 5U)) return 0;
     return 1;
 }
+/* A valid scene built from the seed. Odd seeds: eight one-layer parts. Even seeds: engines 0 and 1 are two layers of part 0,
+ * engines 2..7 are parts 1..6, part 7 is unused. */
 static void make_scene(struct dx_scene *s, unsigned seed, const char *name)
 {
     memset(s, 0, sizeof *s);
     memset(s->name, ' ', sizeof s->name);
     memcpy(s->name, name, strlen(name) < 12 ? strlen(name) : 12);
-    s->kbd_ch = (uint8_t)(seed % 16); s->pool = (uint8_t)(8 + seed % 20);
+    s->sel = (uint8_t)(seed % 4); s->pool = (uint8_t)(8 + seed % 20);
     for (unsigned i = 0; i < 4; ++i) s->effects[i] = (uint8_t)(seed * 7 + i * 31);
     s->filter_type = (uint8_t)(seed % 4); s->filter_res = (uint8_t)(seed % 100); s->filter_hz = (uint16_t)(100 + seed * 53 % 19000);
+    unsigned layered = seed % 2 == 0;
+    for (unsigned i = 0; i < DX_PARTS; ++i) {
+        struct dx_part *p = &s->part[i];
+        memset(p->name, ' ', sizeof p->name);
+        if (layered && i == 7) continue;                          /* unused part: channel 0 */
+        p->channel = (uint8_t)((seed + i) % 16 + 1);              /* eight distinct channels */
+        p->level = (uint8_t)(100 + i); p->sel = layered && i == 0 ? 1 : 0;
+        if (i < 4) { p->name[0] = (char)('A' + i); p->name[1] = (char)('0' + seed % 10); }
+    }
     for (unsigned e = 0; e < DX_ENGINES; ++e) {
         struct dx_scene_engine *x = &s->e[e];
         for (unsigned i = 0; i < DX_PRESET_BYTES; ++i) x->preset[i] = (uint8_t)(seed * 131 + e * 17 + i * 3);
-        x->rx = (uint16_t)(1U << ((seed + e) % 16)); x->lo = (uint8_t)(e * 3); x->hi = (uint8_t)(100 + e);
-        x->shift = (int8_t)(((int)((seed + e) % 7) - 3) * 12); x->fold = (uint8_t)(e % 3); x->ctl = (uint8_t)(e + 9 > 16 ? 0 : e + 9);
+        x->owner = (uint8_t)(layered ? (e == 0 ? 0 : e - 1) : e); x->lvl = (uint8_t)(90 + e);
+        x->lo = (uint8_t)(e * 3); x->hi = (uint8_t)(100 + e); x->vlo = (uint8_t)(1 + e * 2); x->vhi = (uint8_t)(127 - e);
+        x->shift = (int8_t)(((int)((seed + e) % 7) - 3) * 12); x->fold = (uint8_t)(e % 3);
         x->poly = (uint8_t)(1 + (seed + e) % 8); x->mute = (uint8_t)((seed + e) % 5 == 0);
         x->pan = (int8_t)(((int)((seed * 3 + e) % 101)) - 50); x->expr = (uint8_t)(100 + e); x->bright = (int8_t)(((int)((seed + e * 5) % 101)) - 50);
         x->flags = 1;
@@ -148,14 +161,17 @@ static void test_pack(void)
     CHECK(dx_scene_valid(&a));
     dx_scene_pack(&a, image);
     CHECK(dx_scene_unpack(image, &b) == 0 && same(&a, &b) && !memcmp(a.name, b.name, 12) && b.filter_hz == a.filter_hz);
-    CHECK(image[SO_ENGINES] != 0);
+    CHECK(image[SO_PARTS] == 0xff && image[SO_VERSION] == 2);
+    struct dx_scene lay; make_scene(&lay, 4, "LAYERED");
+    dx_scene_pack(&lay, image);
+    CHECK(image[SO_PARTS] == 0x7f && dx_scene_unpack(image, &b) == 0 && same(&lay, &b));   /* part 7 is unused */
     memset(image, 0xff, sizeof image);
     CHECK(dx_scene_unpack(image, &b) == DX_SCENE_EMPTY);
     dx_scene_pack(&a, image); image[SO_VERSION] = 9;
     CHECK(dx_scene_unpack(image, &b) == DX_SCENE_INVALID);
 
     struct dx_scene bad;
-    bad = a; bad.kbd_ch = 16; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.sel = 8; CHECK(!dx_scene_valid(&bad));
     bad = a; bad.pool = 0; CHECK(!dx_scene_valid(&bad));
     bad = a; bad.pool = 65; CHECK(!dx_scene_valid(&bad));
     bad = a; bad.name[2] = 7; CHECK(!dx_scene_valid(&bad));
@@ -169,7 +185,19 @@ static void test_pack(void)
     bad = a; bad.e[2].pan = -51; CHECK(!dx_scene_valid(&bad));
     bad = a; bad.e[2].expr = 128; CHECK(!dx_scene_valid(&bad));
     bad = a; bad.e[5].fold = 3; CHECK(!dx_scene_valid(&bad));
-    bad = a; bad.e[5].ctl = 17; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.part[2].channel = bad.part[3].channel; CHECK(!dx_scene_valid(&bad));      /* two parts on one channel */
+    bad = a; bad.part[2].channel = 17; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.part[2].level = 128; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.part[2].sel = 1; CHECK(!dx_scene_valid(&bad));                            /* a layer that does not exist */
+    bad = a; bad.e[2].owner = 8; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.e[2].owner = DX_NO_PART; CHECK(!dx_scene_valid(&bad));                    /* part 2 would have no layer */
+    bad = a; bad.part[7].channel = 0; CHECK(!dx_scene_valid(&bad));                        /* engine 7 would belong to an unused part */
+    bad = a; bad.e[2].lvl = 128; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.e[2].vlo = 0; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.e[2].vhi = 128; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.e[2].vlo = 100; bad.e[2].vhi = 99; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.part[2].name[3] = 3; CHECK(!dx_scene_valid(&bad));
+    bad = a; bad.e[7].owner = DX_NO_PART; bad.part[7].channel = 0; CHECK(dx_scene_valid(&bad)); /* a free engine and an unused part are fine */
     bad = a; bad.filter_res = 127; CHECK(dx_scene_valid(&bad));
     bad = a; bad.filter_res = 128; CHECK(!dx_scene_valid(&bad));
     CHECK(!dx_scene_valid(NULL));
@@ -187,7 +215,7 @@ static void test_write_read_and_layout(void)
     CHECK(dx_scene_read(64, &r) == DX_SCENE_INVALID && dx_scene_write(64, &s) == DX_SCENE_INVALID);
     CHECK(dx_scene_write(0, &s) == 0);
     CHECK(dx_scene_read(0, &r) == 0 && same(&s, &r));
-    CHECK(dx_scene_read(1, &r) == DX_SCENE_EMPTY); /* its sector mate is untouched */
+    CHECK(dx_scene_read(1, &r) == DX_SCENE_EMPTY);                       /* the next scene has a sector of its own */
     struct dx_scene t; make_scene(&t, 2, "TWO");
     CHECK(dx_scene_write(1, &t) == 0);
     CHECK(dx_scene_read(0, &r) == 0 && same(&s, &r) && dx_scene_read(1, &r) == 0 && same(&t, &r));
@@ -195,12 +223,16 @@ static void test_write_read_and_layout(void)
     CHECK(magic == DX_SEC_MAGIC);
     struct dx_scene u; make_scene(&u, 9, "SECTOR31");
     CHECK(dx_scene_write(63, &u) == 0 && dx_scene_read(63, &r) == 0 && same(&u, &r));
-    memcpy(&magic, flash + DX_STORE_BASE + 31 * SECTOR, 4);
-    CHECK(magic == DX_SEC_MAGIC); /* scene 63 lives in the last sector */
+    memcpy(&magic, flash + DX_STORE_BASE + 63 * SECTOR, 4);
+    CHECK(magic == DX_SEC_MAGIC); /* scene 63 lives in the last scene sector */
+    memcpy(&magic, flash + DX_STORE_BASE + 1 * SECTOR, 4);
+    CHECK(magic == DX_SEC_MAGIC); /* and scene 1 in sector 1, not in a half of sector 0 */
     struct dx_scene v; make_scene(&v, 4, "MIDDLE");
     CHECK(dx_scene_write(10, &v) == 0 && dx_scene_read(10, &r) == 0 && same(&v, &r));
-    memcpy(&magic, flash + DX_STORE_BASE + 5 * SECTOR, 4);
+    memcpy(&magic, flash + DX_STORE_BASE + 10 * SECTOR, 4);
     CHECK(magic == DX_SEC_MAGIC);
+    memcpy(&magic, flash + DX_STORE_BASE + 64 * SECTOR, 4);
+    CHECK(magic == 0xffffffffU); /* the settings sector is still erased */
     CHECK(violations == 0 && tail_intact());
     CHECK(pause_depth == 0 && pauses == resumes && pause_max == 1);
     CHECK(prepare_calls >= 4 && foreign_completed == 0);
@@ -226,13 +258,14 @@ static void test_catalog(void)
     fresh_flash();
     struct dx_scene s;
     make_scene(&s, 1, "ALPHA"); CHECK(dx_scene_write(3, &s) == 0);
-    make_scene(&s, 2, "BETA"); s.e[0].rx = 0; s.e[1].mute = 1; s.e[1].rx = 2; CHECK(dx_scene_write(4, &s) == 0);
+    make_scene(&s, 2, "BETA"); CHECK(dx_scene_write(4, &s) == 0);
     memset(&dx_catalog, 0, sizeof dx_catalog);
     CHECK(dx_scene_scan() == 0);
     char name[13]; uint8_t used = 0;
     CHECK(dx_scene_info(3, name, &used) == 0 && !strcmp(name, "ALPHA       "));
     CHECK(dx_scene_info(4, name, &used) == 0 && !strcmp(name, "BETA        "));
-    CHECK(!(used & 1) && !(used & 2)); /* engine 0 has no channel, engine 1 is muted */
+    CHECK(used == 0x7f); /* BETA has no part 7 */
+    CHECK(dx_scene_info(3, name, &used) == 0 && used == 0xff);
     CHECK(dx_scene_info(5, name, &used) == DX_SCENE_EMPTY && dx_scene_info(64, name, &used) == DX_SCENE_EMPTY);
     CHECK(dx_scene_info(3, name, NULL) == 0);
     CHECK(dx_scene_clear(3) == 0 && dx_scene_info(3, name, &used) == DX_SCENE_EMPTY);
@@ -241,11 +274,11 @@ static void test_catalog(void)
 static void test_claim_and_foreign_data(void)
 {
     fresh_flash();
-    /* A stock sample bank: magic "FM1S" then audio, 40 sectors long (past the store). */
+    /* A stock sample bank: magic "FM1S" then audio, 80 sectors long (past the store). */
     uint32_t sample_magic = 0x53314d46U;
     memcpy(flash + DX_STORE_BASE, &sample_magic, 4);
-    for (unsigned i = 16; i < 40U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
-    uint8_t beyond[SECTOR]; memcpy(beyond, flash + DX_STORE_BASE + 33U * SECTOR, SECTOR);
+    for (unsigned i = 16; i < 80U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
+    uint8_t beyond[SECTOR]; memcpy(beyond, flash + DX_STORE_BASE + 65U * SECTOR, SECTOR);
     struct dx_scene s, r;
     make_scene(&s, 1, "FIRST");
     CHECK(dx_scene_store_state() == 1);
@@ -255,7 +288,7 @@ static void test_claim_and_foreign_data(void)
     CHECK(dx_scene_store_state() == 0);
     CHECK(dx_scene_write(0, &s) == 0 && dx_scene_read(0, &r) == 0 && same(&s, &r));
     CHECK(dx_scene_write(63, &s) == 0);
-    CHECK(!memcmp(beyond, flash + DX_STORE_BASE + 33U * SECTOR, SECTOR)); /* sample sectors beyond the store survive */
+    CHECK(!memcmp(beyond, flash + DX_STORE_BASE + 65U * SECTOR, SECTOR)); /* sample sectors beyond the store survive */
     CHECK(tail_intact() && violations == 0 && pauses == resumes);
 
     /* Garbage in a single sector deeper in the store makes the whole store read as foreign: nothing
@@ -267,7 +300,7 @@ static void test_claim_and_foreign_data(void)
     CHECK(dx_scene_claim() == 0 && dx_scene_store_state() == 0 && dx_scene_write(14, &s) == 0);
     /* The settings sector at the far end counts too, even when sector 0 is clean. */
     fresh_flash();
-    flash[DX_STORE_BASE + 32U * SECTOR + 100] = 0x34;
+    flash[DX_STORE_BASE + 64U * SECTOR + 100] = 0x34;
     CHECK(dx_scene_store_state() == 1 && dx_scene_write(0, &s) == DX_SCENE_NEEDS_CLAIM);
     /* A sector whose first 16 bytes happen to be erased but whose data is not is not blank. */
     fresh_flash();
@@ -313,7 +346,7 @@ static void setup_scenario(unsigned kind)
     make_scene(&old4, 40, "NEIGHBOUR");
     make_scene(&old5, 50, "OLD");
     make_scene(&new5, 60, "NEW");
-    CHECK(dx_scene_write(8, &old4) == 0); /* scenes 8 and 9 share a sector */
+    CHECK(dx_scene_write(8, &old4) == 0); /* scene 9 is in the next sector: a cut in its write must never reach scene 8 */
     if (kind != SCENARIO_NEW) CHECK(dx_scene_write(9, &old5) == 0);
     memcpy(snapshot, flash, sizeof flash);
 }
@@ -374,12 +407,12 @@ static void test_claim_power_cuts(void)
     fresh_flash();
     uint32_t sample_magic = 0x53314d46U;
     memcpy(flash + DX_STORE_BASE, &sample_magic, 4);
-    for (unsigned i = 16; i < 40U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
+    for (unsigned i = 16; i < 80U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
     memcpy(snapshot, flash, sizeof flash);
     op_count = 0;
     CHECK(dx_scene_claim() == 0);
     unsigned total = op_count;
-    CHECK(total == 33); /* 32 scene sectors and the settings sector */
+    CHECK(total == DX_STORE_SECTORS && total == 65); /* 64 scene sectors and the settings sector */
     for (unsigned cut = 1; cut <= total; ++cut) for (unsigned mode = 0; mode < 4; ++mode) {
         memcpy(flash, snapshot, sizeof flash);
         op_count = 0; dead = 0; violations = 0; cut_at = cut; tear_mode = mode; pause_depth = 0;
@@ -401,14 +434,15 @@ static void test_settings(void)
     fresh_flash();
     struct dx_settings st, back;
     CHECK(dx_settings_read(&back) == DX_SCENE_EMPTY);
-    memset(&st, 0, sizeof st); st.radio_off = 2; st.role = 1; st.backlight = 3; st.last_scene = 12; st.kbd_ch = 4; st.flags = 1; st.master_ch = 10;
+    memset(&st, 0, sizeof st); st.radio_off = 2; st.role = 1; st.backlight = 3; st.last_scene = 12; st.scene_ch = 4; st.flags = 1; st.master_ch = 10;
     CHECK(dx_settings_valid(&st));
     st.master_ch = 16; CHECK(dx_settings_valid(&st));
     st.master_ch = 17; CHECK(!dx_settings_valid(&st));              /* 0 = off, 1..16 */
     st.master_ch = 10;
     CHECK(dx_settings_write(&st) == 0);
     memset(&back, 0, sizeof back);
-    CHECK(dx_settings_read(&back) == 0 && !memcmp(&st, &back, sizeof st) && back.master_ch == 10);
+    CHECK(dx_settings_read(&back) == 0 && !memcmp(&st, &back, sizeof st) && back.master_ch == 10 && back.scene_ch == 4);
+    st.scene_ch = 16; CHECK(dx_settings_valid(&st)); st.scene_ch = 0; CHECK(dx_settings_valid(&st)); st.scene_ch = 4;
     unsigned ops = op_count;
     CHECK(dx_settings_write(&st) == 0 && op_count == ops); /* unchanged settings never touch flash */
     struct dx_scene s, r; make_scene(&s, 1, "WITH SETTING");
@@ -420,7 +454,7 @@ static void test_settings(void)
     bad = st; bad.role = 2; CHECK(!dx_settings_valid(&bad));
     bad = st; bad.backlight = 9; CHECK(!dx_settings_valid(&bad));
     bad = st; bad.last_scene = 64; CHECK(!dx_settings_valid(&bad));
-    bad = st; bad.kbd_ch = 16; CHECK(!dx_settings_valid(&bad));
+    bad = st; bad.scene_ch = 17; CHECK(!dx_settings_valid(&bad));
     bad = st; bad.flags = 2; CHECK(!dx_settings_valid(&bad));
     CHECK(dx_settings_write(&bad) == DX_SCENE_INVALID);
     CHECK(tail_intact() && violations == 0);
@@ -523,12 +557,12 @@ static void test_scan_error_keeps_catalogue(void)
 
 static void test_torn_destination_is_ours(void)
 {
-    static const unsigned indexes[3] = {0, 62, 31}; /* sector 0, sector 31, and (via settings) sector 32 below */
+    static const unsigned indexes[3] = {0, 62, 31}; /* sectors 0, 62 and 31, and (via the settings) sector 64 below */
     for (unsigned v = 0; v < 4; ++v) {
         fresh_flash();
         struct dx_scene a, b, c, x; make_scene(&a, 11, "OLD"); make_scene(&b, 12, "NEW"); make_scene(&c, 13, "AFTER");
         struct dx_settings sa, sb;
-        memset(&sa, 0, sizeof sa); sa.backlight = 3; sa.kbd_ch = 1; sb = sa; sb.backlight = 6;
+        memset(&sa, 0, sizeof sa); sa.backlight = 3; sa.scene_ch = 1; sb = sa; sb.backlight = 6;
         unsigned index = v < 3 ? indexes[v] : 0;
         if (v < 3) CHECK(dx_scene_write(index, &a) == 0); else CHECK(dx_settings_write(&sa) == 0);
         memcpy(snapshot, flash, sizeof flash);
@@ -541,7 +575,7 @@ static void test_torn_destination_is_ours(void)
             CHECK((v < 3 ? dx_scene_write(index, &b) : dx_settings_write(&sb)) != 0);
             dead = 0; op_count = 0; cut_at = 0;
             memset(&dx_catalog, 0, sizeof dx_catalog);
-            uint32_t m; memcpy(&m, flash + dx_sector_addr(v < 3 ? index / 2 : DX_SETTINGS_SECTOR), 4);
+            uint32_t m; memcpy(&m, flash + dx_sector_addr(v < 3 ? index : DX_SETTINGS_SECTOR), 4);
             torn_cases += m != DX_SEC_MAGIC && m != 0xffffffffU;
             CHECK(dx_scene_store_state() == 0);            /* straight after the cut, before any recovery */
             if (v < 3) { CHECK(dx_scene_scan() == 0); CHECK(dx_scene_read(index, &x) == 0 && (same(&x, &a) || same(&x, &b))); }
@@ -617,11 +651,11 @@ static void test_stranded_stock_save(void)
     fresh_flash();
     put_stock_record(0x36504d46U, 5, 3, 0x1234abcdU, 0);
     { uint32_t sample_magic = 0x53314d46U; memcpy(flash + DX_STORE_BASE, &sample_magic, 4);
-      for (unsigned i = 16; i < 40U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U); } /* and a stock bank in the store */
+      for (unsigned i = 16; i < 80U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U); } /* and a stock bank in the store */
     memcpy(snapshot, flash, sizeof flash);
     op_count = 0; CHECK(dx_scene_claim() == 0);
     unsigned total = op_count;
-    CHECK(total == 34); /* staging, then the 33 foreign store sectors */
+    CHECK(total == 66); /* staging, then the 65 foreign store sectors */
     for (unsigned cut = 1; cut <= total; ++cut) for (unsigned mode = 0; mode < 4; ++mode) {
         memcpy(flash, snapshot, sizeof flash);
         op_count = 0; dead = 0; cut_at = cut; tear_mode = mode; pause_depth = 0;
@@ -637,7 +671,7 @@ static void test_stranded_stock_save(void)
 static void test_claim_is_surgical(void)
 {
     struct dx_scene s[3], r; make_scene(&s[0], 41, "ZERO"); make_scene(&s[1], 42, "TWO"); make_scene(&s[2], 43, "SIXTY");
-    struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 5; st.kbd_ch = 3;
+    struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 5; st.scene_ch = 3;
     static uint8_t before[FLASH_BYTES];
     /* an unfinished stock save in staging: the claim erases staging only */
     fresh_flash();
@@ -647,7 +681,7 @@ static void test_claim_is_surgical(void)
     CHECK(dx_scene_store_state() == 1);
     CHECK(dx_scene_scan() == 0 && dx_scene_read(5, &r) == 0 && same(&r, &s[1]));      /* what is there is still readable */
     op_count = 0; CHECK(dx_scene_claim() == 0 && op_count == 1 && staging_blank());
-    CHECK(!memcmp(before + DX_STORE_BASE, flash + DX_STORE_BASE, 33U * SECTOR));        /* the store was not touched */
+    CHECK(!memcmp(before + DX_STORE_BASE, flash + DX_STORE_BASE, 65U * SECTOR));        /* the store was not touched */
     CHECK(dx_scene_store_state() == 0 && dx_scene_read(0, &r) == 0 && same(&r, &s[0]) && dx_scene_read(60, &r) == 0 && same(&r, &s[2]));
     struct dx_settings g; CHECK(dx_settings_read(&g) == 0 && !memcmp(&g, &st, sizeof g));
     /* one foreign sector among our scenes: only that sector is erased */
@@ -657,7 +691,7 @@ static void test_claim_is_surgical(void)
     memcpy(before, flash, sizeof flash);
     CHECK(dx_scene_store_state() == 1);
     op_count = 0; CHECK(dx_scene_claim() == 0 && op_count == 1);
-    for (unsigned i = 0; i < 33; ++i)
+    for (unsigned i = 0; i < 65; ++i)
         CHECK(i == 20 ? flash[DX_STORE_BASE + i * SECTOR + 100] == 0xff
                       : !memcmp(before + DX_STORE_BASE + i * SECTOR, flash + DX_STORE_BASE + i * SECTOR, SECTOR));
     CHECK(dx_scene_store_state() == 0 && dx_scene_scan() == 0);
@@ -715,7 +749,7 @@ static void test_stale_image_never_overwrites_foreign_data(void)
     for (unsigned stale_sector = 0; stale_sector < 3; ++stale_sector) {
         fresh_flash();
         struct dx_scene a, b, x; make_scene(&a, 21, "KEPT"); make_scene(&b, 22, "STALE");
-        unsigned index = stale_sector == 0 ? 0 : stale_sector == 1 ? 22 : 62;  /* sectors 0, 11 and 31 */
+        unsigned index = stale_sector == 0 ? 0 : stale_sector == 1 ? 22 : 62;  /* sectors 0, 22 and 62 */
         CHECK(dx_scene_write(index, &a) == 0);
         memcpy(snapshot, flash, sizeof flash);
         int found = 0;
@@ -729,8 +763,8 @@ static void test_stale_image_never_overwrites_foreign_data(void)
         }
         CHECK(found);
         /* stock firmware ran: its sample bank now fills the store, the staged image was left alone */
-        for (unsigned i = 0; i < 33U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
-        static uint8_t bank[33U * SECTOR]; memcpy(bank, flash + DX_STORE_BASE, sizeof bank);
+        for (unsigned i = 0; i < 65U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
+        static uint8_t bank[65U * SECTOR]; memcpy(bank, flash + DX_STORE_BASE, sizeof bank);
         struct dx_settings st; memset(&st, 0, sizeof st); st.backlight = 2;
         CHECK(dx_scene_store_state() == 1);
         CHECK(dx_scene_scan() == 0 && dx_scene_read(index, &x) == DX_SCENE_EMPTY);   /* a stale staged copy is not served either */
@@ -757,7 +791,7 @@ static void test_stale_image_never_overwrites_foreign_data(void)
             found = m == DX_SEC_MAGIC && c == 0;
         }
         CHECK(found);
-        for (unsigned i = 0; i < 40U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
+        for (unsigned i = 0; i < 80U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 7U + 1U);
         CHECK(dx_settings_read(&g) == DX_SCENE_EMPTY);                             /* the staged settings are stale, not served */
     }
     /* a stale image is also thrown away by the claim itself, when no write ran recovery first */
@@ -768,7 +802,7 @@ static void test_stale_image_never_overwrites_foreign_data(void)
     op_count = 0; dead = 0; cut_at = 4; tear_mode = 0;
     CHECK(dx_scene_write(10, &b) != 0);
     dead = 0; op_count = 0; cut_at = 0;
-    for (unsigned i = 0; i < 33U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 3U + 5U);
+    for (unsigned i = 0; i < 65U * SECTOR; ++i) flash[DX_STORE_BASE + i] = (uint8_t)(i * 3U + 5U);
     CHECK(dx_scene_claim() == 0 && staging_blank() && dx_scene_store_state() == 0);
     CHECK(dx_scene_write(0, &a) == 0 && dx_scene_read(10, &x) == DX_SCENE_EMPTY && dx_scene_read(0, &x) == 0 && same(&x, &a));
     /* a library record in staging is left for its own owner */
@@ -809,37 +843,58 @@ static void test_capture_and_apply(void)
 {
     struct dx_cfg cfg; dx_cfg_default(&cfg);
     struct dx_live live; memset(&live, 0, sizeof live);
+    dx_parts_default(&live.parts);
     for (unsigned e = 0; e < DX_ENGINES; ++e) { memset(eng_preset[e], (int)(e + 1), DX_PRESET_BYTES); live.pan[e] = (int8_t)(e * 5 - 20); live.expr[e] = (uint8_t)(90 + e); live.bright[e] = (int8_t)e; }
-    cfg.e[2].rx = 0x0003; cfg.e[2].lo = 36; cfg.e[2].hi = 96; cfg.e[2].shift = -12; cfg.e[2].ctl = 11; cfg.e[2].fold = DX_FOLD_WRAP;
-    cfg.e[3].mute = 1; cfg.kbd_ch = 4; cfg.pool = 12; cfg.up = 0xff & ~(1U << 6); /* engine 7 failed to start */
+    /* part 2 (channel 3) has two layers, engines 2 and 3; part 3 is gone; part 7 is gone and its engine is free */
+    live.parts.layer[3].owner = 2; live.parts.layer[3].lvl = 64; live.parts.part[3].channel = 0;
+    live.parts.part[2].level = 90; live.parts.part[2].sel = 1; memcpy(live.parts.part[2].name, "BASS + PAD  ", 12);
+    live.parts.part[7].channel = 0; live.parts.layer[7].owner = DX_NO_PART;
+    live.parts.selected = 2;
+    cfg.scene_ch = 9; cfg.master_ch = 4;
+    cfg.e[2].lo = 36; cfg.e[2].hi = 96; cfg.e[2].shift = -12; cfg.e[2].fold = DX_FOLD_WRAP;
+    cfg.e[3].mute = 1; cfg.e[3].vlo = 64; cfg.e[3].vhi = 127; cfg.pool = 12; cfg.up = 0xff & ~(1U << 6); /* engine 7 failed to start */
+    dx_parts_derive(&live.parts, &cfg);
     live.filter_type = DX_FILTER_LP; live.filter_hz = 4200; live.filter_res = 20;
+    CHECK(dx_parts_valid(&live.parts));
     struct dx_scene s;
     CHECK(dx_scene_capture(&port, &cfg, &live, "LIVE SET    ", &s) == 0);
-    CHECK(!memcmp(s.name, "LIVE SET    ", 12) && s.kbd_ch == 4 && s.pool == 12 && !memcmp(s.effects, fx, 4));
-    CHECK(s.e[2].rx == 3 && s.e[2].shift == -12 && s.e[2].fold == DX_FOLD_WRAP && s.e[3].mute == 1);
-    CHECK(s.e[0].flags == 1 && s.e[6].flags == 0 && s.e[6].preset[0] == 0); /* the missing engine has no preset */
+    CHECK(!memcmp(s.name, "LIVE SET    ", 12) && s.sel == 2 && s.pool == 12 && !memcmp(s.effects, fx, 4));
+    CHECK(s.part[2].channel == 3 && s.part[2].level == 90 && s.part[2].sel == 1 && !memcmp(s.part[2].name, "BASS + PAD  ", 12));
+    CHECK(s.part[3].channel == 0 && s.part[7].channel == 0 && s.part[0].channel == 1);
+    CHECK(s.e[3].owner == 2 && s.e[3].lvl == 64 && s.e[2].shift == -12 && s.e[2].fold == DX_FOLD_WRAP && s.e[3].mute == 1);
+    CHECK(s.e[3].vlo == 64 && s.e[3].vhi == 127 && s.e[0].vlo == 0 + 1 && s.e[0].vhi == 127);   /* "no limit" is stored as 1..127 */
+    CHECK(s.e[0].flags == 1 && s.e[6].flags == 0 && s.e[6].preset[0] == 0); /* the engine that did not start has no preset */
+    CHECK(s.e[7].owner == DX_NO_PART && s.e[7].flags == 0 && s.e[7].preset[0] == 0);   /* a free engine has nothing worth keeping */
     CHECK(s.e[0].preset[0] == 1 && s.e[5].preset[10] == 6 && s.e[1].pan == -15 && s.e[1].expr == 91 && s.e[4].bright == 4);
     CHECK(s.filter_type == DX_FILTER_LP && s.filter_hz == 4200 && s.filter_res == 20);
     CHECK(dx_scene_valid(&s));
 
     /* A different live state, then recall the scene. */
-    struct dx_cfg cfg2; dx_cfg_default(&cfg2); cfg2.up = 0xff & ~(1U << 6);
-    struct dx_live live2; memset(&live2, 0, sizeof live2);
+    struct dx_cfg cfg2; dx_cfg_default(&cfg2); cfg2.up = 0xff & ~(1U << 6); cfg2.scene_ch = 11; cfg2.master_ch = 7;
+    struct dx_live live2; memset(&live2, 0, sizeof live2); dx_parts_default(&live2.parts);
     for (unsigned e = 0; e < DX_ENGINES; ++e) memset(eng_preset[e], 0, DX_PRESET_BYTES);
     eng_muted = 1U << 0; /* engine 0 is muted now, but the scene wants it unmuted; engine 3 vice versa */
     memset(fx, 0, 4); trace[0] = 0; publishes = 0;
     CHECK(dx_scene_apply(&port, &s, &cfg2, &live2) == 0);
-    CHECK(trace[0] == 'P' && strstr(trace, "U;") > strstr(trace, "I7;") && strstr(trace, "I0;") < strstr(trace, "U;")); /* panic first, engines, then the router */
-    CHECK(strstr(trace, "I6;") == NULL); /* the engine that is not up is skipped */
-    CHECK(publishes == 1 && published.e[2].rx == 3 && published.kbd_ch == 4 && published.pool == 12 && published.e[3].mute == 1);
+    CHECK(trace[0] == 'P' && strstr(trace, "U;") > strstr(trace, "I5;") && strstr(trace, "I0;") < strstr(trace, "U;")); /* panic first, engines, then the router */
+    CHECK(strstr(trace, "I6;") == NULL && strstr(trace, "I7;") == NULL); /* an engine that is not up, and a free one, are skipped */
+    CHECK(publishes == 1 && published.e[2].rx == 1U << 2 && published.e[3].rx == 1U << 2 && published.pool == 12 && published.e[3].mute == 1);
+    CHECK(published.e[2].ctl == 0 && published.e[3].ctl == 3 && published.e[0].ctl == 1);    /* the selected layer is the SysEx target */
+    CHECK(published.e[7].rx == 0 && published.e[7].ctl == 0 && published.kbd_ch == 2);       /* the keys play the selected part's channel */
+    CHECK(published.e[3].vlo == 64 && published.e[3].vhi == 127);
+    CHECK(published.scene_ch == 11 && published.master_ch == 7);   /* the device's control channels are not the scene's */
     CHECK(published.up == cfg2.up && published.priv[7] == 9); /* up mask and private channels are the device's, not the scene's */
     CHECK(cfg2.e[2].shift == -12 && cfg2.e[2].fold == DX_FOLD_WRAP);
+    CHECK(!memcmp(live2.parts.part, live.parts.part, sizeof live.parts.part) && !memcmp(live2.parts.layer, live.parts.layer, sizeof live.parts.layer) && live2.parts.selected == 2);
+    CHECK(dx_parts_valid(&live2.parts));
     CHECK(!memcmp(eng_preset[0], s.e[0].preset, DX_PRESET_BYTES) && eng_preset[6][0] == 0);
     CHECK(eng_muted == (1U << 3)); /* engine 0 unmuted, engine 3 muted, others unchanged */
     CHECK(strstr(trace, "M0;") && strstr(trace, "M3;") && !strstr(trace, "M1;"));
     CHECK(fx[0] == 10 && fx[3] == 40 && strstr(trace, "F10;"));
     CHECK(live2.pan[1] == -15 && live2.expr[1] == 91 && live2.bright[4] == 4 && live2.filter_hz == 4200 && live2.filter_type == DX_FILTER_LP);
     CHECK(strstr(trace, "C0:10=") && strstr(trace, "C1:10=") && strstr(trace, "C1:11=91;")); /* pan then expression for every live engine */
+    CHECK(strstr(trace, "C2:7=90;") && strstr(trace, "C3:7=45;") && strstr(trace, "C0:7=127;")); /* layer level x part level */
+    CHECK(strstr(trace, "C7:") == NULL);                               /* nothing is sent to a free engine */
     CHECK(strstr(trace, "T1:4200:20;"));
     /* pan to CC10: centre 64, hard left 1, hard right 127 */
     struct dx_scene p = s; p.e[0].pan = -50; p.e[1].pan = 0; p.e[2].pan = 50;
@@ -849,7 +904,7 @@ static void test_capture_and_apply(void)
     /* The first engine error is returned but the rest still load. */
     import_fail_for = 2; trace[0] = 0;
     CHECK(dx_scene_apply(&port, &s, &cfg2, &live2) == -8);
-    CHECK(strstr(trace, "I3;") && strstr(trace, "I7;") && strstr(trace, "U;"));
+    CHECK(strstr(trace, "I3;") && strstr(trace, "I5;") && strstr(trace, "U;"));
     import_fail_for = -1;
     CHECK(dx_scene_apply(&port, &s, &cfg2, &live2) == 0);
     struct dx_scene invalid = s; invalid.pool = 0; trace[0] = 0;
@@ -860,6 +915,7 @@ static void test_capture_and_apply(void)
     CHECK(dx_scene_write(12, &s) == 0);
     struct dx_scene back;
     CHECK(dx_scene_read(12, &back) == 0 && same(&s, &back));
+    CHECK(dx_scene_info(12, (char[13]){0}, NULL) == 0);
 }
 
 int main(void)

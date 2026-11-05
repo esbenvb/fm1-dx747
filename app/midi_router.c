@@ -92,6 +92,7 @@ void fm1_app_midi_received(unsigned source, const uint8_t *m, size_t n)
 {
     if (dx_safe_boot() || source >= 3 || !m || !n || n > 3) return;
     if (m[0] == 0xff) { dx_route_panic(); return; }
+    if (m[0] == 0xf3 && n == 2) { dx_router_song_select(&ext, source, m[1], fm1_millis()); return; } /* only if the engine passes it on */
     if (m[0] >= 0xf0) return;
     dx_router_event(&ext, source, m, (unsigned)n, fm1_millis());
 }
