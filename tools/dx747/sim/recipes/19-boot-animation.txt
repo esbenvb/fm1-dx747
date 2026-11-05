@@ -1,0 +1,30 @@
+# Recipe 19: the boot screen is a five second animation: the 747 rolls in from the right, nose first and faster and faster, rotates and
+# climbs out of the top left corner while the logo and the texts stand still; then the Parts screen follows. (A button press skips
+# it: recipe 6.) 'boot logo' itself runs 100 ms, so the checks below are at about 0.2, 1.7, 3.2, 4.0, 4.9 and 5.2 s. Pixel (200, 95)
+# is on the plane's nose while it crosses the screen, (130, 48) on the tail fin once it has climbed, (30, 148) on the D of the logo.
+boot logo
+run 100
+expect_screen 0
+expect_px 200 95 0000
+expect_px 30 148 FFFF
+shot 19a-boot-start
+run 1500
+expect_px 200 95 FFFF
+expect_px 30 148 FFFF
+shot 19b-boot-roll
+run 1500
+shot 19c-boot-rotate
+run 800
+expect_px 130 48 06F7
+expect_px 30 148 FFFF
+shot 19d-boot-climb
+# 4.9 s: the plane has left, the logo has not moved, and it is still the boot screen
+run 900
+expect_screen 0
+expect_px 120 95 0000
+expect_px 8 20 0000
+expect_px 30 148 FFFF
+shot 19e-boot-end
+# 5.2 s: the Parts screen
+run 300
+expect_screen 1

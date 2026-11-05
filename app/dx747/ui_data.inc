@@ -18,6 +18,7 @@ enum { OV_NONE, OV_TEXT, OV_PART, OV_LAYER, OV_SOUND, OV_LVL, OV_PAN, OV_BRIGHT,
        OV_OCT, OV_SYS };
 
 #define SL_ROWS 7U                  /* programs in the sound overlay: the current one in the middle, three before and three after */
+#define BOOT_MS 5000U               /* the boot screen: the 747 takes off, then the Parts screen (any button skips it) */
 static struct ui {
     uint8_t screen, scene, mode, sys_row, learn, learn_lo, name_pos;
     uint8_t mixkeys;                 /* Mix: the white keys mute and solo (EDIT toggles it) */
@@ -27,6 +28,7 @@ static struct ui {
     int8_t octave;
     char name[12];
     uint32_t ov_until, boot_until, learn_sig;
+    uint16_t boot_t;                 /* boot screen: milliseconds since power-on, 0 to BOOT_MS (the clock of the animation) */
     const char *notice;              /* the words of OV_TEXT */
 } ui;
 

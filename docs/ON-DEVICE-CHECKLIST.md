@@ -34,7 +34,9 @@ serial or label.
 
 | Check | How | Pass |
 |---|---|---|
-| Boots to the DX747 logo, then Parts | power on | the screen shows the aircraft and "DX747", then the Parts screen with eight parts on channels 1 to 8 |
+| Boot animation, then Parts | power on | the logo shows, the 747 rolls in from the right after about half a second, speeds up, rotates and climbs out of the top left (about 5 s in all, smooth, no tearing or stutter), the logo and the texts stand still, then the Parts screen with eight parts on channels 1 to 8; write down the time from power-on to Parts |
+| The animation can be skipped | power on, press HOME, then again with a key and with an encoder turn | each ends the animation at once and shows Parts; the key plays no note |
+| MIDI during the animation | power on with an external keyboard on channel 1, play at once | notes sound while the plane is still moving without delay (the screen is redrawn about every 33 ms on the same task as the MIDI polling), or press a button first and compare |
 | All eight engines exist | an external keyboard on channel 1, then 2, up to 8 (part n is on channel n by default) | every part sounds; none says it is out of memory |
 | Memory | System screen | CPU reading is steady at idle |
 | All eight engines up | look at every screen's header | the `ENGINES` count reads 8/8 and is not amber; write down the second number if it is lower |

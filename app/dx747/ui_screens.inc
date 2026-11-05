@@ -139,8 +139,8 @@ static void px_poly_at(const int16_t (*p)[2], unsigned n, uint16_t color, int dx
 }
 static void draw_logo(void)
 {
-    static const int16_t d_out[][2] = {{13,148},{48,148},{67,167},{48,186},{13,186}};
-    static const int16_t d_cnt[][2] = {{22,159},{45,159},{53,167},{45,175},{22,175}};
+    static const int16_t d_out[][2] = {{10,148},{45,148},{64,167},{45,186},{10,186}};
+    static const int16_t d_cnt[][2] = {{19,159},{42,159},{50,167},{42,175},{19,175}};
     static const int16_t x_out[][2] = {{52,148},{66,148},{79,161},{93,148},{107,148},{88,167},{107,186},{93,186},{79,173},{66,186},{52,186},{71,167}};
     static const int16_t seven[][2] = {{0,148},{40,148},{40,159},{13,186},{0,186},{27,159},{0,159}};      /* 40 wide, bars 11 thick */
     static const int16_t seven_in[][2] = {{2,150},{38,150},{38,158},{12,184},{5,184},{32,157},{2,157}};
@@ -175,9 +175,17 @@ static void draw_boot(void)
     static const int16_t whi[][2] = {{77,101},{100,99},{125,99},{158,98},{146,99},{125,100},{104,102},{78,102}};
     static const int16_t door[] = {38, 68, 104, 137, 182};
     static const int16_t eng[2][2] = {{80,105},{110,103}};
+    _Static_assert(sizeof body / sizeof *body <= PX_MOVED_MAX && sizeof belly / sizeof *belly <= PX_MOVED_MAX, "the plane's polygons fit the moved-corner buffer");
     const uint16_t hi = RGB(0xC4, 0xC4, 0xC8), md = RGB(0x8C, 0x8C, 0x90), lo = RGB(0x54, 0x54, 0x58);
     const uint16_t gh = RGB(0x8E, 0xF2, 0xE2), gm = RGB(0x12, 0xA8, 0x94), gl = RGB(0x08, 0x5E, 0x52), gc = RGB(0x7F, 0xDD, 0xCF);   /* the engines, tinted with the DX7 green */
-    px_text_c(120, 10, "Esben von buchwald - 2026", 1, C_DIM);
+    {   /* the run: the plane rolls in from the right, nose first and faster and faster, rotates at 55 % and climbs out of the top left */
+        int u = (int)(ui.boot_t * 1024U / BOOT_MS), rot = u > 560 ? u - 560 : 0;
+        fx_ox = 240 - (int)(((unsigned)(u * u) * 520U) >> 20);
+        fx_oy = -(rot * rot >> 11);
+        fx_k = rot > 200 ? 12 : rot * 12 / 200;                            /* nose up: the nose side rises, the tail side sinks */
+        for (int x = 0; x < 240; x += 24) px_rect_raw(x, 119, 12, 1, C_LN);   /* the runway */
+        if (rot < 40) { px_rect(36, 108, 3, 11, C_LN); px_rect(100, 108, 4, 11, C_LN); }   /* the wheels, up after the rotation */
+    }
     px_poly(body, sizeof body / sizeof *body, C_TX);
     px_poly(belly, sizeof belly / sizeof *belly, RGB(0xCC, 0xCC, 0xCC));
     px_poly(fin, sizeof fin / sizeof *fin, C_DXG);     /* the fin in the DX7 green, a lighter line along its leading edge */
@@ -213,6 +221,8 @@ static void draw_boot(void)
         if (x < 53 || x > 59) px_rect(x, 87, 1, 2, C_BLACK);
     px_rect(24, 89, 5, 1, C_BLACK);
     px_rect(22, 90, 5, 1, C_BLACK);
+    fx_ox = fx_oy = fx_k = 0;                          /* the logo and the texts stand still, and are drawn over the plane */
+    px_text_c(120, 10, "Esben von buchwald - 2026", 1, C_DIM);
     px_rect(0, 140, 240, 1, C_GD);
     draw_logo();
     px_text_c(120, 194, "8-PART MULTITIMBRAL DX7 MODULE", 1, C_DIM);

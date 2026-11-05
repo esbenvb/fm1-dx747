@@ -43,11 +43,11 @@ void groove_screen_init(void)
     memset(&ui, 0, sizeof ui);
     memset(&fr, 0, sizeof fr);
     ui.screen = S_BOOT;
-    ui.boot_until = fm1_millis() + 1200U;
     ui.octave = 0;
     fm1_controls_init();
     if (fm1_panel_safe_boot()) { dx_safe_boot_enter(); ui.screen = S_SAFE; }
     fm1_screen_init();
+    ui.boot_until = fm1_millis() + BOOT_MS;       /* the animation starts when the screen is ready, not before its 0.2 s start-up delay */
     for (unsigned i = 0; i < 41; ++i) fm1_led_set(i, 0);
     if (ui.screen == S_SAFE) { fm1_led_set(BTN_ENV, 1); fm1_led_set(BTN_LFO, 1); } /* a cue that does not need the LCD */
     memset(led_code, 0, sizeof led_code);
@@ -75,6 +75,7 @@ void groove_screen_control(void)
     on_encoders();
     prev_ctl = ctl;
     if (ui.screen == S_BOOT && (int32_t)(now - ui.boot_until) >= 0) go(S_PARTS);
+    if (ui.screen == S_BOOT) { uint32_t left = ui.boot_until - now; ui.boot_t = (uint16_t)(BOOT_MS - (left > BOOT_MS ? BOOT_MS : left)); }
     if (now - last_frame < 33U && !frame_forced) return;
     last_frame = now;
     frame_collect(now & ~255U);

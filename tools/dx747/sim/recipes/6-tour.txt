@@ -2,7 +2,6 @@
 boot logo
 run 100
 expect_screen 0
-shot 6a-boot
 # any key press leaves the boot screen
 tap btn 8
 expect_screen 1

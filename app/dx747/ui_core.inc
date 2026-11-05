@@ -56,7 +56,11 @@ static unsigned band_buf, band_top;
 static uint32_t band_sig[BAND_N];
 static uint8_t band_known[BAND_N];
 
-static void px_rect(int x, int y, int w, int h, uint16_t color)
+/* The boot animation moves and tilts the picture: whatever px_rect, px_frame, px_line and px_poly draw is moved by (fx_ox, fx_oy) and
+ * sheared by fx_k/64 rows per column from x = 120 (the left side rises when positive). All three zero draws normally. */
+static int fx_ox, fx_oy, fx_k;
+#define PX_MOVED_MAX 48                              /* corners of a polygon that px_poly can move (the plane's largest has 39) */
+static void px_rect_raw(int x, int y, int w, int h, uint16_t color)
 {
     if (w <= 0 || h <= 0) return;
     int x0 = x < 0 ? 0 : x, x1 = x + w > BAND_W ? BAND_W : x + w;
@@ -65,6 +69,11 @@ static void px_rect(int x, int y, int w, int h, uint16_t color)
     uint16_t *row = band_px[band_buf] + (y0 - top) * BAND_W;
     for (int r = y0; r < y1; ++r, row += BAND_W)
         for (int c = x0; c < x1; ++c) row[c] = color;
+}
+static void px_rect(int x, int y, int w, int h, uint16_t color)
+{
+    if (fx_ox | fx_oy | fx_k) px_rect_raw(x + fx_ox, y + fx_oy + (((x + w / 2 - 120) * fx_k) >> 6), w, h, color);
+    else px_rect_raw(x, y, w, h, color);
 }
 static void px_frame(int x, int y, int w, int h, uint16_t color)
 {
@@ -238,6 +247,12 @@ static unsigned stripe_period, stripe_on;
 static int stripe_y0;
 static void px_poly(const int16_t (*p)[2], unsigned n, uint16_t color)
 {
+    int16_t moved[PX_MOVED_MAX][2];                 /* the picture moved and tilted */
+    if (fx_ox | fx_oy | fx_k) {
+        if (n > PX_MOVED_MAX) return;
+        for (unsigned i = 0; i < n; ++i) { moved[i][0] = (int16_t)(p[i][0] + fx_ox); moved[i][1] = (int16_t)(p[i][1] + fx_oy + (((p[i][0] - 120) * fx_k) >> 6)); }
+        p = (const int16_t (*)[2])moved;
+    }
     int y0 = (int)band_top, y1 = y0 + BAND_H;
     for (int y = y0; y < y1; ++y) {
         if (stripe_period && (unsigned)(y - stripe_y0) % stripe_period >= stripe_on) continue;
@@ -250,7 +265,7 @@ static void px_poly(const int16_t (*p)[2], unsigned n, uint16_t color)
             }
         }
         for (int i = 1; i < count; ++i) for (int j = i; j > 0 && xs[j] < xs[j - 1]; --j) { int t = xs[j]; xs[j] = xs[j - 1]; xs[j - 1] = t; }
-        for (int i = 0; i + 1 < count; i += 2) px_rect(xs[i], y, xs[i + 1] - xs[i], 1, color);
+        for (int i = 0; i + 1 < count; i += 2) px_rect_raw(xs[i], y, xs[i + 1] - xs[i], 1, color);
     }
 }
 static void px_line(int x0, int y0, int x1, int y1, uint16_t color)
