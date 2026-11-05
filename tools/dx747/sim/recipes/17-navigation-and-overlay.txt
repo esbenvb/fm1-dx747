@@ -13,6 +13,11 @@ press btn 8
 tap btn 12
 release btn 8
 expect_screen 1
+# K1 on the parts screen is the volume of the selected part
+enc 2 -5
+expect_level 0 117
+enc 2 5
+expect_level 0 127
 # HOME a second time shows the part in detail; once more goes back
 tap btn 8
 expect_screen 14
@@ -25,11 +30,11 @@ tap btn 5
 tap btn 4
 expect_part 0 1 2
 expect_layer 7 0 -1
-# the details: K1 is the channel, K2 the part level, K3 the framed layer's level; ALGO frames the other layer
+# the details: K1 is the framed layer's level, K2 the part level, K3 the channel; ALGO frames the other layer
 tap btn 8
 expect_screen 14
 enc 1 -1
-enc 4 -10
+enc 2 -10
 expect_layer 0 0 80
 expect_layer 7 0 100
 enc 1 1
@@ -41,10 +46,10 @@ shot 17d-details-two-layers
 expect_level 0 127
 enc 3 -5
 expect_level 0 117
-enc 2 1
+enc 4 1
 expect_part 0 8 2
 expect_sel 0
-enc 2 -1
+enc 4 -1
 expect_part 0 1 2
 # PRESETS chooses the sound of the framed layer (layer 2, engine 8) on the details, and only that layer's
 expect_patch 7 151 49

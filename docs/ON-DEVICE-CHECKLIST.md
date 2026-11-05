@@ -39,8 +39,9 @@ serial or label.
 | Memory | System screen | CPU reading is steady at idle |
 | All eight engines up | look at every screen's header | the `ENGINES` count reads 8/8 and is not amber; write down the second number if it is lower |
 | Octave buttons step | on EDIT's pages, FX, Scenes, System, Mix and the part in detail (HOME twice) press OCT- and OCT+ | each steps the page, the filter page, the bank, the row, the part; on Parts, Part and MIDI in they move the keyboard octave |
-| Part in detail | HOME twice; K1 and K2; ARP then two keys | K1 moves the MIDI channel, K2 the part level; a split and an octave shift show as bars and a small amber tag |
+| Part in detail | HOME twice; K1, K2 and K3; ARP then two keys | K1 sets the framed layer's level, K2 the part level, K3 moves the MIDI channel; a split and an octave shift show as bars and a small amber tag |
 | Readable text | look at every screen at arm's length, in a bright and a dim room | the text you need to read is white and legible, the large text is smooth, not blocky; write down any text that is hard to read and on which screen |
+| Part volume on the Parts screen | K1 on the first home screen | the selected part's volume changes (the overlay shows it) |
 | PRESETS | turn PRESETS on Parts, Part, the detail screen and each of the four layer pages | the framed layer's patch changes (the name shows in the overlay); K1 on the Sound page is the layer's volume |
 | Overlay | turn each knob on each screen once | a box with the label and the new value shows at the bottom for about a second after the last click, readable at arm's length; it is gone after that and the screen under it is unchanged |
 

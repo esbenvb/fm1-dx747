@@ -388,6 +388,19 @@ static void edit_velocity(unsigned e, int which, int delta)
 }
 static void apply_filter(void) { dx_apply_filter(); }
 
+/* A knob step on the volume of a part (all its layers) or of one layer inside its part: two units a click. */
+static void part_level_step(unsigned part, int d)
+{
+    struct dx_live *live = dx_live_edit();
+    live->parts.part[part].level = (uint8_t)clampi(live->parts.part[part].level + d * 2, 0, 127);
+    dx_part_level_changed(part);
+}
+static void layer_level_step(unsigned engine, int d)
+{
+    struct dx_live *live = dx_live_edit();
+    live->parts.layer[engine].lvl = (uint8_t)clampi(live->parts.layer[engine].lvl + d * 2, 0, 127);
+    dx_level_changed(engine);
+}
 static void on_encoders(void)
 {
     const int16_t *e = ctl.encoders;
@@ -408,23 +421,21 @@ static void on_encoders(void)
     /* PRESETS chooses the sound of the framed layer on every screen that shows a part and on every edit page */
     if (e[6] && se >= 0 && screen_has_parts()) { groove_control_edit(eng, e[6], 0, 0); dx_bright_force_voice(eng); ov_show(OV_SOUND, eng, 1800U); } /* a new voice: BRIGHT starts from it */
     switch (ui.screen) {
+    case S_PARTS:                          /* K1: the volume of the selected part */
+        if (e[2] && used) { part_level_step(p, e[2]); knob(OV_PLEVEL, p); }
+        break;
     case S_PART:
-    case S_DETAIL:
         if (e[2] && used) { step_channel(e[2]); knob(OV_PCH, p); }
-        if (e[3] && used) {
-            live->parts.part[p].level = (uint8_t)clampi(live->parts.part[p].level + e[3] * 2, 0, 127);
-            dx_part_level_changed(p);
-            knob(OV_PLEVEL, p);
-        }
-        if (ui.screen == S_DETAIL && e[4] && se >= 0) {      /* the framed layer's own level, the balance inside the part */
-            live->parts.layer[eng].lvl = (uint8_t)clampi(live->parts.layer[eng].lvl + e[4] * 2, 0, 127);
-            dx_level_changed(eng);
-            knob(OV_LVL, eng);
-        }
+        if (e[3] && used) { part_level_step(p, e[3]); knob(OV_PLEVEL, p); }
+        break;
+    case S_DETAIL:                         /* K1 the framed layer's own level (the balance inside the part), K2 the part's level, K3 its channel */
+        if (e[2] && se >= 0) { layer_level_step(eng, e[2]); knob(OV_LVL, eng); }
+        if (e[3] && used) { part_level_step(p, e[3]); knob(OV_PLEVEL, p); }
+        if (e[4] && used) { step_channel(e[4]); knob(OV_PCH, p); }
         break;
     case S_ESOUND:                         /* K1 the layer's volume, K2 its pan, K3 BRIGHT (PRESETS: the sound, above) */
         if (se < 0) break;
-        if (e[2]) { live->parts.layer[eng].lvl = (uint8_t)clampi(live->parts.layer[eng].lvl + e[2] * 2, 0, 127); dx_level_changed(eng); knob(OV_LVL, eng); }
+        if (e[2]) { layer_level_step(eng, e[2]); knob(OV_LVL, eng); }
         if (e[3]) { live->pan[eng] = (int8_t)clampi(live->pan[eng] + e[3] * 2, -50, 50); send_pan(eng); knob(OV_PAN, eng); }
         if (e[4]) { live->bright[eng] = (int8_t)clampi(live->bright[eng] + e[4], -50, 50); dx_bright_changed(eng); knob(OV_BRIGHT, eng); }
         break;
@@ -450,11 +461,7 @@ static void on_encoders(void)
     case S_MIX:                            /* every knob here works on the whole part */
         if (!used) break;
         if (e[1]) { step_channel(e[1]); knob(OV_PCH, p); }
-        if (e[2]) {
-            live->parts.part[p].level = (uint8_t)clampi(live->parts.part[p].level + e[2] * 2, 0, 127);
-            dx_part_level_changed(p);
-            knob(OV_PLEVEL, p);
-        }
+        if (e[2]) { part_level_step(p, e[2]); knob(OV_PLEVEL, p); }
         if (e[3]) { part_pan_step(p, e[3]); knob(OV_PPAN, p); }
         if (e[4]) { part_sends_step(p, 0, e[4]); knob(OV_PREV, p); }
         if (e[5]) { part_sends_step(p, 1, e[5]); knob(OV_PDLY, p); }

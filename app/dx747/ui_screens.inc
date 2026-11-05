@@ -304,7 +304,7 @@ static void draw_parts(void)
             px_text(36, y + 17, line, 1, sel ? C_AC : C_TX);
         }
     }
-    draw_hint("SELECT PART  PRESETS SOUND  HOME DETAIL");
+    draw_hint("K1 PART VOL  PRESETS SOUND  HOME DETAIL");
 }
 
 /* ---- one part: its layers --------------------------------------------------------- */
@@ -385,7 +385,7 @@ static void draw_part(void)
 /* Note 0..127 along a 224 px line, 1.75 px to the note. */
 static int note_x(unsigned note) { return 8 + (int)(note > 127 ? 127U : note) * 224 / 128; }
 /* One line per layer over a keyboard ruler: its sound, its keys as a bar, an octave shift as a small amber tag, its level,
- * pan and velocity window. The channel and the part level are the big numbers above and are edited with K1 and K2.
+ * pan and velocity window. The channel and the part level are the big numbers above; K1 is the framed layer's level, K2 the part's, K3 the channel.
  * Up to three layers get roomy lines (the name large, the figures spelled out); more are packed as tightly as eight need. */
 static void draw_detail(void)
 {
@@ -447,7 +447,7 @@ static void draw_detail(void)
         }
     }
     if (big) px_text(4, 214, "BARS = KEYS  +N = SHIFT  V = VELOCITY", 1, C_TX);
-    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "K1 CH K2 VOL K3 LAYER VOL PRESETS SOUND");
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "K1 LAYER VOL K2 PART VOL K3 CH");
 }
 
 /* ---- layer pages ------------------------------------------------------------------- */
