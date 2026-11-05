@@ -121,33 +121,29 @@ static void cell_num(struct cell *c, unsigned i) { char *o = put_u(c->t, i + 1U)
 
 /* The logo in the manner of the DX7's own: D and X cut into horizontal lines (the D one line in three, the X two in three) with
  * the X's notch pushed into the D's point, then 747 as an outline in the green of the DX7's buttons. The tables are the shapes
- * of Yamaha's logo scaled to 38 rows; the outlines stop one row higher so that their bottom line meets the X's. */
+ * of Yamaha's logo scaled to 38 rows; the outlines are the centre lines of 2 pixel wide, softly edged lines (px_outline_soft). */
 static void px_stripes(const int16_t (*p)[2], unsigned n, uint16_t color, unsigned period, unsigned on, int top)
 {
     stripe_period = period; stripe_on = on; stripe_y0 = top;
     px_poly(p, n, color);
     stripe_period = 0;
 }
-static void px_outline(const int16_t (*p)[2], unsigned n, uint16_t color)
-{
-    for (unsigned i = 0; i < n; ++i) px_line(p[i][0], p[i][1], p[(i + 1) % n][0], p[(i + 1) % n][1], color);
-}
 static void draw_logo(void)
 {
     static const int16_t d_out[][2] = {{9,148},{44,148},{63,167},{44,186},{9,186}};
     static const int16_t d_cnt[][2] = {{18,159},{41,159},{49,167},{41,175},{18,175}};
     static const int16_t x_out[][2] = {{48,148},{62,148},{75,161},{89,148},{103,148},{84,167},{103,186},{89,186},{75,173},{62,186},{48,186},{67,167}};
-    static const int16_t n7a[][2] = {{105,148},{146,148},{146,157},{122,185},{111,185},{136,157},{105,157}};
-    static const int16_t n4[][2] = {{174,148},{182,148},{182,171},{189,171},{189,180},{182,180},{182,185},{174,185},{174,180},{148,180},{148,171},{153,171}};
-    static const int16_t c4[][2] = {{174,160},{174,171},{163,171}};
-    static const int16_t n7b[][2] = {{191,148},{231,148},{231,157},{207,185},{197,185},{222,157},{191,157}};
+    static const int16_t n7a[][2] = {{106,149},{145,149},{145,158},{122,185},{112,185},{135,158},{106,158}};
+    static const int16_t n4[][2] = {{174,149},{182,149},{182,171},{188,171},{188,180},{182,180},{182,185},{174,185},{174,180},{149,180},{149,171},{154,171}};
+    static const int16_t c4[][2] = {{174,160},{174,171},{164,171}};
+    static const int16_t n7b[][2] = {{192,149},{231,149},{231,158},{208,185},{198,185},{221,158},{192,158}};
     px_stripes(d_out, sizeof d_out / sizeof *d_out, C_TX, 3, 1, 148);
     px_poly(d_cnt, sizeof d_cnt / sizeof *d_cnt, C_BLACK);
     px_stripes(x_out, sizeof x_out / sizeof *x_out, C_TX, 3, 2, 148);
-    px_outline(n7a, sizeof n7a / sizeof *n7a, C_DXG);
-    px_outline(n4, sizeof n4 / sizeof *n4, C_DXG);
-    px_outline(c4, sizeof c4 / sizeof *c4, C_DXG);
-    px_outline(n7b, sizeof n7b / sizeof *n7b, C_DXG);
+    px_outline_soft(n7a, sizeof n7a / sizeof *n7a, 32, C_DXG);
+    px_outline_soft(n4, sizeof n4 / sizeof *n4, 32, C_DXG);
+    px_outline_soft(c4, sizeof c4 / sizeof *c4, 32, C_DXG);
+    px_outline_soft(n7b, sizeof n7b / sizeof *n7b, 32, C_DXG);
 }
 
 static void draw_boot(void)
@@ -166,7 +162,7 @@ static void draw_boot(void)
     static const int16_t eng[2][2] = {{80,105},{110,103}};
     const uint16_t hi = RGB(0xC4, 0xC4, 0xC8), md = RGB(0x8C, 0x8C, 0x90), lo = RGB(0x54, 0x54, 0x58);
     const uint16_t gh = RGB(0x8E, 0xF2, 0xE2), gm = RGB(0x12, 0xA8, 0x94), gl = RGB(0x08, 0x5E, 0x52), gc = RGB(0x7F, 0xDD, 0xCF);   /* the engines, tinted with the DX7 green */
-    px_text_c(120, 10, "Esben von Buchwald - 2026", 1, C_DIM);
+    px_text_c(120, 10, "Esben von buchwald - 2026", 1, C_DIM);
     px_poly(body, sizeof body / sizeof *body, C_TX);
     px_poly(belly, sizeof belly / sizeof *belly, RGB(0xCC, 0xCC, 0xCC));
     px_poly(fin, sizeof fin / sizeof *fin, C_DXG);     /* the fin in the DX7 green, a lighter line along its leading edge */
