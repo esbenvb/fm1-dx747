@@ -96,3 +96,25 @@ Differences from `Build.ps1` (all deliberate): tool names (`common/bin/clang`, `
   `tools/portable/fwsc.mjs`, and its package is byte for byte the Windows one (docs/BUILD-WINDOWS.md).
 - The working tree was not built (sibling sessions are editing `app/`); `build.sh` takes it as an argument.
 - No download of the V14 release workbench for a cross-check, and no hardware run.
+
+## Second comparison: Windows and Mac builds of the portable build (6 November 2026)
+
+Commit `656b37a734972053d4d280eb3335e3f1aa80c17b` (branch `dx747-on-portable`, DX747 on the portable build of the SDK it
+is a fork of), built once on a Windows PC with `build.bat --package` and once on a Mac with
+`./build.sh --package --from-git 656b37a734972053d4d280eb3335e3f1aa80c17b`, both with
+`FM1_SOURCE_URL=https://github.com/esbenvb/fm1-dx747/archive/656b37a734972053d4d280eb3335e3f1aa80c17b.zip` (the page embeds it).
+
+| | Windows (JieLi 2.5.3, WASI SDK for Windows) | Mac (JieLi Linux toolchain in Docker, macOS WASI SDK) |
+|---|---|---|
+| `build_id` | `a7ed189583cac5e7fd24b55bbcfadaa1834b3257f2fc9fa7592b41acf055aecf` | the same |
+| App image | 447,432 bytes of 453,921 | the same (headroom 6,489) |
+| Image fit | image 466,944, VM 36,864, user 536,576 bytes | the same |
+| `FM1_OFFICIAL_OPEN.fwsc` and `FM1_DX747.fwsc` | `25861feece92755d93e4c93eda01fe1ff4fcda559cd9c70489e9c5b87498e981` (487,988 bytes) | the same |
+| `FM1-Official-Open-Source.html` and `FM1-DX747.html` | `85e68bc09477385c4e1df3d3ca9c8aa9f7452f34d3d1babe933603657ea45344` | the same |
+
+So the firmware package is byte for byte the same from the two toolchains, which settles that the firmware image is, and the
+flashing page is byte for byte the same too, so the browser core compiled by the two WASI SDKs is the same. On Windows
+`build.bat --package` left `FM1_DX747.fwsc` and `FM1-DX747.html` beside the SDK-named files with the same bytes (the alias step
+works); the Windows `SHA256SUMS.txt` lists only the SDK-named page, which has the same hash. `DX747-Workbench.html` is made only
+by `./build.sh` (Mac and Linux, `tools/dx747/workbench.mjs`), so there is no Windows counterpart to compare. The loadable
+sections were not compared separately (`tools/portable/elf-compare.mjs`) because the identical package contains them.

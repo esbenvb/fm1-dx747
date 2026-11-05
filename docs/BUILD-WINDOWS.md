@@ -148,12 +148,12 @@ Expected last lines (the numbers vary a little between toolchain builds):
 Build FM1 Official Open V01
 ...
 Link dx7 using prebuilt FM1 SDK
-FM1: 429544 bytes app image; SRAM/BLE/USB checks passed
-Offline package fits 1 MiB: image 446464, VM 57344, user 536576 bytes
+FM1: 447432 bytes app image; SRAM/BLE/USB checks passed
+Offline package fits 1 MiB: image 466944, VM 36864, user 536576 bytes
 Firmware: <your clone>\build\dx7\sdk.elf
 ```
 
-The numbers above are what the project's Windows PC printed for commit `2243433`. The
+The numbers above are what the project's Windows PC printed for commit `656b37a`. The
 limit is 453,921 bytes. JieLi's Linux toolchain, run in Docker on the Mac, produced exactly the
 same loadable content for that commit, byte for byte (see "How the two routes compare" in
 [BUILDING.md](BUILDING.md)), so the Docker numbers and gates are a reliable stand-in for the
@@ -215,7 +215,7 @@ inside the page, so installing it downloads nothing. **Copy the page and its
 `SHA256SUMS.txt` somewhere safe now** (see the warning above), then go to Step 6.
 
 The last lines of a good run (this is what the project's Windows PC printed, after
-the Visual C++ runtime was updated, for commit `e59e3e7`):
+the Visual C++ runtime was updated; the wording is from commit `e59e3e7`, and for commit `656b37a` the page came out byte for byte the same as the Mac's, see [LINUX-BUILD-BASELINE.md](LINUX-BUILD-BASELINE.md)):
 
 ```
 Compile the browser application
@@ -356,6 +356,5 @@ What DX747 adds to it:
 
 To compare a Windows build of your tree with a Docker build, see "Comparing your own builds" in [docs/BUILDING.md](BUILDING.md):
 `node tools/portable/elf-compare.mjs build/dx7/sdk.elf <windows folder>/sdk.elf` ends with `loadable content: IDENTICAL` or
-`DIFFERENT`. The record of the first comparison for DX747 (commit `2243433`, 4 November 2026: the same `build_id` and sizes,
-identical loadable sections, and a `.fwsc` byte for byte the Windows one, SHA-256 `385f83e5a01a17e2...`) is in
-[docs/LINUX-BUILD-BASELINE.md](LINUX-BUILD-BASELINE.md).
+`DIFFERENT`. The records of the two comparisons for DX747 are in [docs/LINUX-BUILD-BASELINE.md](LINUX-BUILD-BASELINE.md): commit `2243433` (4 November 2026: the same `build_id` and sizes, identical loadable sections, a `.fwsc` byte for byte the Windows one) and
+commit `656b37a` (6 November 2026, the portable build: the same `build_id`, `.fwsc` and flashing page from Windows and from the Mac).
