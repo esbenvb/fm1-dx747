@@ -10,12 +10,12 @@ tap btn 4
 tap btn 9
 tap btn 9
 run 200
-# layer 1 of part 1 (ALGO frames it), Sound page, patch 97 = voice 1 of bank D as shipped
+# layer 1 of part 1 (ALGO frames it), Sound page, PRESETS to patch 97 = voice 1 of bank D as shipped
 tap btn 8
 enc 1 -1
 tap btn 6
 expect_screen 3
-enc 2 96
+enc 6 96
 run 100
 shot 7a-bank-d-as-shipped
 # a corrupted upload is refused and leaves bank D alone
@@ -24,8 +24,8 @@ bank_badcrc 0 3
 bank_copy 0 3
 run 200
 # select the patch again so the engine loads it from the new bank
-enc 2 1
-enc 2 -1
+enc 6 1
+enc 6 -1
 run 100
 shot 7b-bank-d-after-import
 # the scene saved before the import still recalls

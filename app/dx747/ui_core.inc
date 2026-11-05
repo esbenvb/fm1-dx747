@@ -90,7 +90,8 @@ static void px_blend(int x, int y, uint16_t color, unsigned alpha)
     if (x < 0 || x >= BAND_W || row < 0 || row >= BAND_H || !alpha) return;
     uint16_t *p = &band_px[band_buf][row * BAND_W + x];
     uint32_t a = (alpha + 4U) >> 3;                       /* 0..32 */
-    uint32_t bg = (uint32_t)((*p | (*p << 16)) & 0x07E0F81FU), fg = (uint32_t)((color | (color << 16)) & 0x07E0F81FU);
+    uint32_t pv = *p, cv = color;                          /* widen before shifting: a uint16_t promotes to a signed int */
+    uint32_t bg = (pv | (pv << 16)) & 0x07E0F81FU, fg = (cv | (cv << 16)) & 0x07E0F81FU;
     uint32_t res = ((((fg - bg) * a) >> 5) + bg) & 0x07E0F81FU;
     *p = (uint16_t)(res | (res >> 16));
 }
@@ -121,7 +122,7 @@ static void px_vglyph(int x, int y, const uint8_t *g, unsigned scale, uint16_t c
     if (r0 >= r1 || c0 >= c1) return;
     const int mw = c1 - c0, mh = r1 - r0;
     memset(vf_mask, 0, (size_t)(mw * mh));
-    const int hw = (int)scale * 7 + 3;                    /* half the stroke width: (14 * scale + 6) / 16 pixels */
+    const int hw = (int)scale * 7 + 3;                    /* half the stroke width in sixteenths of a pixel (the stroke is (14 * scale + 6) / 16 pixels) */
     const int outer = hw + 8, inner = hw - 8;             /* coverage 0 beyond outer, 1 within inner */
     const int r2 = inner * inner, o2 = outer * outer;
     const int rcp = (255 << 16) / (o2 - r2);

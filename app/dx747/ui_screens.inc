@@ -110,9 +110,9 @@ static void strip(int y, const struct cell *c)
 {
     for (unsigned i = 0; i < 16; ++i) {
         int x = 8 + 14 * (int)i;
-        if (c[i].fill) px_rect(x, y, 12, 12, c[i].fill); else px_frame(x, y, 12, 12, C_OUT);
+        if (c[i].fill) px_rect(x, y, 13, 12, c[i].fill); else px_frame(x, y, 13, 12, C_OUT);   /* 13 wide: two digits (11 px) fit inside the frame */
         if (c[i].t[0]) px_text_c(x + 6, y + 3, c[i].t, 1, c[i].fill ? C_BLACK : C_DIM);
-        if (c[i].sel) px_frame(x - 1, y - 1, 14, 14, C_TX);
+        if (c[i].sel) px_frame(x - 1, y - 1, 15, 14, C_TX);
     }
 }
 static void cell_num(struct cell *c, unsigned i) { char *o = put_u(c->t, i + 1U); (void)o; }

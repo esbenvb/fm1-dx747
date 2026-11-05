@@ -58,7 +58,7 @@ GLYPHS = {
     "%": [[(0, 0), (3, 0), (3, 4), (0, 4), (0, 0)], [(5, 8), (8, 8), (8, 12), (5, 12), (5, 8)], [(8, 0), (0, 12)]],
     ">": [[(1, 1), (7, 6), (1, 11)]],
     "<": [[(7, 1), (1, 6), (7, 11)]],
-    "?": [[(0, 3), (1, 1), (3, 0), (5, 0), (7, 1), (8, 3), (7, 5), (4, 7), (4, 9)], [(4, 11), (4, 12)]],
+    "?": [[(0, 3), (1, 1), (3, 0), (5, 0), (7, 1), (8, 3), (7, 5), (4, 7), (4, 8)], [(4, 11), (4, 12)]],
     "!": [[(4, 0), (4, 8)], [(4, 11), (4, 12)]],
     "(": [[(6, 0), (3, 3), (3, 9), (6, 12)]],
     ")": [[(2, 0), (5, 3), (5, 9), (2, 12)]],
@@ -103,20 +103,23 @@ def emit():
 def specimen(path):
     # A rough preview with plain polylines (the firmware's anti-aliased renderer is the real thing: use a native recipe shot).
     from PIL import Image, ImageDraw
-    sizes = [2, 3, 5]
-    img = Image.new("RGB", (1500, 560), (0, 0, 0))
-    d = ImageDraw.Draw(img)
-    y = 10
+    sizes, zoom, width = [2, 3, 5], 3, 1500
+    glyphs = ORDER + PUNCT
+    layout, y = [], 10                      # lay everything out first so the canvas is as tall as the sheet needs
     for s in sizes:
         x = 10
-        for ch in ORDER + PUNCT:
-            for stroke in GLYPHS[ch]:
-                pts = [(x + px * 5 * s / 8 * 3, y + py * 7 * s / 12 * 3) for (px, py) in stroke]
-                d.line(pts, fill=(255, 255, 255), width=int(s * 3.5))
-            x += 6 * s * 3
-            if x > 1400:
-                x, y = 10, y + 7 * s * 3 + 20
-        y += 7 * s * 3 + 30
+        for ch in glyphs:
+            if x + 6 * s * zoom > width - 20:
+                x, y = 10, y + 7 * s * zoom + 20
+            layout.append((s, ch, x, y))
+            x += 6 * s * zoom
+        y += 7 * s * zoom + 30
+    img = Image.new("RGB", (width, y + 10), (0, 0, 0))
+    d = ImageDraw.Draw(img)
+    for s, ch, x, y in layout:
+        for stroke in GLYPHS[ch]:
+            pts = [(x + px * 5 * s * zoom / 8, y + py * 7 * s * zoom / 12) for (px, py) in stroke]
+            d.line(pts, fill=(255, 255, 255), width=max(1, int(s * zoom * 0.9)))
     img.save(path)
 
 

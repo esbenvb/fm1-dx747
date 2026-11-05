@@ -29,10 +29,10 @@ if len(data) != 4104:
     sys.exit(f"error: {rom} is {len(data)} bytes; a standard 32-voice DX7 bank is 4104")
 names = [data[6 + v * 128 + 118:6 + v * 128 + 128].decode("ascii", "replace").rstrip() for v in range(32)]
 script = ["boot", "wipe", "run 400", f"bank_load {group} {rom}", "run 200",
-          "tap btn 8", "expect_screen 2", "white 1", "expect_screen 4", f"enc 2 {group * 32}", "run 100"]
+          "tap btn 6", "expect_screen 3", f"enc 6 {group * 32}", "run 2000"]
 for v in range(32):
     script += [f"shot voice{v + 1:02d}", "midi 1 90 3c 64", "expect_peak 600 0", "midi 1 80 3c 00",
-               "midi 1 b0 78 00", "run 200", "enc 2 1", "run 60"]
+               "midi 1 b0 78 00", "run 200", "enc 6 1", "run 2000"]
 path = f"{out}/script.txt"
 open(path, "w").write("\n".join(script) + "\n")
 r = subprocess.run(["tools/dx747/sim/native/dx747-sim", out, path], capture_output=True, text=True)
