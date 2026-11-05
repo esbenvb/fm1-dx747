@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DX747 workbench</title>
+<style>
+:root{color-scheme:dark;--bg:#0f1214;--panel:#181d20;--panel2:#20272b;--line:#323b41;--tx:#eef2f4;--dim:#9aa7ad;--ac:#00e5ff;--am:#ffb000;--gr:#44ff6e;--rd:#ff4d4d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+.logo{font-size:20px;letter-spacing:.04em}.logo b{color:var(--tx)}.logo i{color:var(--ac);font-style:normal;font-weight:700}.logo span{color:var(--dim);font-size:13px;margin-left:8px}
+.pill{padding:4px 12px;border-radius:99px;background:var(--panel2);color:var(--dim);font-size:13px}.pill.ok{color:var(--gr)}
+header .actions{margin-left:auto;display:flex;gap:8px}
+button,select,input[type=number],input.name{font:inherit;color:var(--tx);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 12px}
+button{cursor:pointer}button:hover{border-color:var(--ac)}button.active,button.on{background:var(--ac);color:#001418;border-color:var(--ac)}
+button.warn{color:#ff8f8f}button.warn:hover{border-color:var(--rd)}
+nav#tabs{display:flex;gap:2px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+nav#tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:12px 16px;color:var(--dim)}
+nav#tabs button.active{color:var(--tx);border-bottom-color:var(--ac);background:none}
+main{padding:20px;max-width:1180px;margin:0 auto}
+h3{margin:22px 0 8px;font-size:15px;color:var(--ac);font-weight:600}
+.hint{color:var(--dim);max-width:70ch}
+.row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end;margin:8px 0}
+.field{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--dim)}.field>span:first-child{max-width:20ch}
+label.ctl{display:flex;align-items:center;gap:8px}label.ctl input{width:150px}label.ctl.wide input{width:240px}.val{min-width:3.4em;color:var(--tx);font-variant-numeric:tabular-nums}
+input.name{width:150px;text-transform:uppercase}input.num{width:62px}.pair{display:flex;align-items:center;gap:4px}
+.part{border:1px solid var(--line);border-left:6px solid var(--c,#555);border-radius:8px;background:var(--panel);padding:10px 14px;margin:0 0 14px}
+.part.selected{box-shadow:0 0 0 1px var(--ac)}
+.part-head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
+.chip{display:inline-flex;align-items:center;justify-content:center;width:34px;height:30px;border-radius:5px;color:#000;font-weight:700;font-size:17px}.chip.small{width:24px;height:22px;font-size:13px}
+.lane{position:relative;margin:10px 0 6px;border-radius:4px;background:#0b0e10 repeating-linear-gradient(90deg,#2b343a 0 1px,transparent 1px 9.375%)}.lane i{position:absolute;height:5px;border-radius:2px}
+.layer{border-top:1px solid var(--line);margin-top:8px;padding-top:6px}.layer.silent{opacity:.65}
+.layer .row{margin:4px 0}select.voice{min-width:220px}button.toggle.on{background:var(--am);border-color:var(--am)}
+.banks{display:flex;gap:6px;margin:6px 0 12px}
+.scene-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:640px}
+.scene{display:flex;flex-direction:column;gap:2px;text-align:left;padding:8px;min-height:62px}.scene b{color:var(--dim)}.scene.sel{outline:2px solid var(--tx)}.scene.current{border-color:var(--ac);background:#052a31}
+.dots{display:grid;grid-template-columns:repeat(8,6px);gap:2px;margin-top:auto}.dots i{width:6px;height:6px;background:#2c3237}
+.voice-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}.voice{text-align:left}.voice i{color:var(--dim);font-style:normal;display:inline-block;min-width:2em}.voice.sel{background:var(--ac);color:#001418}.voice.sel i{color:#003}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:80vw;padding:10px 18px;border-radius:8px;background:#102a33;border:1px solid var(--ac);opacity:0;pointer-events:none;transition:opacity .2s}#toast.show{opacity:1}#toast.bad{background:#3a1515;border-color:var(--rd)}
+/* the simulator panel */
+.simpanel{background:linear-gradient(#2b3033,#202427);border:1px solid #444c50;border-radius:14px;padding:18px;max-width:1020px}
+.sim-top{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.sim-screen{background:#000;padding:8px;border-radius:6px;border:2px solid #0b0d0e}.sim-screen canvas{display:block;width:360px;height:360px;image-rendering:pixelated}
+.sim-controls{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+.sim-encoders{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.sim-encoder{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--dim)}.sim-pm{display:flex;gap:3px}.sim-step{width:26px;padding:3px 0;text-align:center}
+.sim-knob{font-size:12px;color:var(--dim)}.sim-knob input{width:200px;vertical-align:middle}
+.sim-buttons{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.sim-button{padding:10px 0;font-size:12px;background:#394146;position:relative;user-select:none;touch-action:none}.sim-button.held{transform:translateY(1px);background:#4a545a}
+.sim-button.lit{box-shadow:0 0 0 2px rgba(68,255,110,calc(var(--lamp,1)*1)),0 0 10px rgba(68,255,110,calc(var(--lamp,1)*.7))}
+.sim-keys{position:relative;height:120px;margin-top:20px;user-select:none}
+.sim-key{position:absolute;padding:0;border-radius:0 0 5px 5px;touch-action:none}
+.sim-key.white{top:0;height:100%;width:6.25%;background:#d8dcde;border:1px solid #777}.sim-key.black{top:0;height:62%;width:3.8%;background:#15191b;border:1px solid #000;z-index:2}
+.sim-key.held{background:#9fd0ff}.sim-key.black.held{background:#3a6ea5}
+.sim-key.lit.white{box-shadow:inset 0 -14px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}.sim-key.lit.black{box-shadow:inset 0 -10px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}
+/* the test keyboard */
+.kb-bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}.kb-bar .val{min-width:2.5em}
+.kb-piano{position:relative;height:170px;margin:16px 0;user-select:none}
+.pk{position:absolute;padding:0;top:0;touch-action:none;border-radius:0 0 4px 4px}.pk.white{height:100%;background:#e6e9ea;border:1px solid #777;color:#333}.pk.black{height:60%;width:1.8%;background:#14181a;border:1px solid #000;z-index:2}
+.pk.white.on{background:#7cc4ff}.pk.black.on{background:#3a78b5}.pk i{position:absolute;bottom:4px;left:3px;font-style:normal;font-size:10px;color:#555}
+.kb-monitor{white-space:pre;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--dim);min-height:5em;background:var(--panel);padding:8px 12px;border-radius:6px;overflow-x:auto}
+label.check{display:block;margin:6px 0}
+.kv{border-collapse:collapse;margin:10px 0}.kv th{text-align:left;color:var(--dim);font-weight:400;padding:2px 18px 2px 0}.kv td{font-family:ui-monospace,Menlo,Consolas,monospace}
+.err{color:#ff8f8f}progress{width:100%;max-width:560px;height:10px;accent-color:var(--ac)}button.primary{background:var(--ac);color:#001418;border-color:var(--ac)}button:disabled{opacity:.45;cursor:default}
+details{margin-top:40px;color:var(--dim)}details pre{white-space:pre-wrap;font-size:11px;max-height:300px;overflow:auto}
+@media (max-width:700px){.sim-screen canvas{width:300px;height:300px}main{padding:12px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><b>DX</b><i>747</i><span>workbench</span></div>
+  <span id="conn" class="pill">Not connected</span>
+  <div class="actions"><button id="btn-sim">Simulator</button><button id="btn-unit">Connect FM-1 (USB)</button></div>
+</header>
+<nav id="tabs">
+  <button data-tab="device">Device</button><button data-tab="configure">Configure</button><button data-tab="sounds">Sounds</button>
+  <button data-tab="scenes">Scenes</button><button data-tab="master">Master and FX</button><button data-tab="keyboard">Keyboard</button><button data-tab="update">Update</button><button data-tab="help">Help</button>
+</nav>
+<main>
+  <section id="tab-device">
+    <p class="hint" id="sound-note"></p>
+    <div id="sim-host"></div>
+    <p class="hint">This is the DX747 firmware itself, compiled to run in your browser, with the panel of the FM-1: buttons, encoders, master knob and keys. It is the unit the Configure, Sounds, Scenes and Master tabs work on while <b>Simulator</b> is selected above. Its scenes and settings are kept in this browser. <button id="btn-reset">Reset the simulator</button></p>
+  </section>
+  <section id="tab-configure" hidden><div id="parts"></div></section>
+  <section id="tab-sounds" hidden><div id="sounds-body"></div></section>
+  <section id="tab-scenes" hidden><div id="scenes-body"></div></section>
+  <section id="tab-master" hidden><div id="master-body"></div></section>
+  <section id="tab-keyboard" hidden><div id="kb-host"></div></section>
+  <section id="tab-update" hidden>
+    <p id="up-intro" class="hint">Install the DX747 firmware that is inside this page on an FM-1, or put the original M-VAVE firmware back. Flashing replaces the firmware on the unit: read <b>docs/FLASHING-AND-RECOVERY.md</b> first and have the recovery tool ready. While you update, the configurator lets go of the unit's MIDI ports.</p>
+    <table class="kv"><tr><th>Release</th><td id="up-release">…</td></tr><tr><th>Update identity</th><td id="up-product">…</td></tr><tr><th>Build</th><td id="up-build">…</td></tr><tr><th>Size</th><td id="up-size">…</td></tr><tr><th>Unit</th><td id="up-identity"></td></tr></table>
+    <label class="check"><input type="checkbox" id="up-backup"> I have saved what I want to keep (voice banks, scenes). Updating can erase them.</label>
+    <label class="check"><input type="checkbox" id="up-force"> Force the update (only when the unit runs another firmware and the page says so)</label>
+    <p id="up-force-note" class="hint" hidden>The unit runs a different firmware. If it is an FM-1 with the M-VAVE Open firmware, tick <b>Force the update</b> and connect again.</p>
+    <div class="row"><button id="up-connect">Connect for the update</button><button id="up-install" class="primary">Install DX747</button></div>
+    <progress id="up-progress" max="100" value="0"></progress>
+    <p id="up-status"></p><p id="up-error" class="err"></p>
+    <details id="up-details" hidden><summary>Connection details</summary><pre></pre></details>
+    <h3>Back to the original</h3>
+    <p class="hint">Puts M-VAVE's original V15 firmware and its 128 factory voices back (the saved scenes of DX747 are removed).</p>
+    <div class="row"><button id="up-restore-connect">Connect for the restore</button><button id="up-restore" class="warn">Restore original V15</button></div>
+  </section>
+  <section id="tab-help" hidden></section>
+  <details><summary>Notices and source</summary><p>Source: <a href="/*DX_SOURCE_URL*/" style="color:var(--ac)">/*DX_SOURCE_URL*/</a></p><pre>/*DX_NOTICES*/</pre></details>
+</main>
+<div id="toast"></div>
+<script>/*DX_SIMULATOR*/</script>
+<script>/*DX_PAYLOAD*/</script>
+<script>/*DX_WEBUPDATE*/</script>
+<script>/*DX_CORE*/</script>
+<script>/*DX_DEVICE*/</script>
+<script>/*DX_CLIENT*/</script>
+<script>/*DX_SIM*/</script>
+<script>/*DX_KEYBOARD*/</script>
+<script>/*DX_UI*/</script>
+<script>/*DX_UPDATE*/</script>
+</body>
+</html>

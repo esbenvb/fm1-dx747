@@ -15,4 +15,9 @@ if command -v node >/dev/null 2>&1; then
     echo "== page-flow.mjs"
     node tools/dx747/sim/page-flow.mjs > /dev/null || status=1
 fi
+# The DX747 workbench's own client (web/page/) against the firmware compiled to WebAssembly, through the page's virtual MIDI port.
+if command -v node >/dev/null 2>&1; then
+    echo "== tools/dx747/page/test-client.mjs"
+    node tools/dx747/page/test-client.mjs > /dev/null || status=1
+fi
 exit $status

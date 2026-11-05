@@ -5,7 +5,9 @@
 #   1. the firmware, with JieLi's Linux toolchain in Docker, and the SDK's checks (tools/dx747/docker)
 #   2. the firmware package, .fwsc (tools/dx747/compare/make_fwsc.py, a port of sdk/Package.cs)
 #   3. the browser core, simulator.wasm, with the macOS WASI SDK (tools/dx747/sim)
-#   4. the workbench page with the firmware inside (tools/dx747/compare/make_page.py, a port of Build-Web.ps1)
+#   4. the workbench pages with the firmware inside: DX747-Workbench.html (the DX747 configurator, simulator, keyboard and
+#      updater, tools/dx747/compare/make_dx_page.py) and the stock-derived FM1-Official-Open-Source.html (make_page.py, a port
+#      of Build-Web.ps1, kept as a fallback)
 #
 #   tools/dx747/mac-build.sh [-o OUT_DIR] [--worktree] [--source-url URL]
 #
@@ -52,4 +54,6 @@ echo "== 3/4 browser core"
 echo "== 4/4 flashing page"
 python3 "$REPO/tools/dx747/compare/make_page.py" --root "$SRC" --fwsc "$OUT/FM1_OFFICIAL_OPEN.fwsc" \
   --identity "$OUT/firmware/build-identity.json" --wasm "$OUT/simulator/simulator.wasm" --source-url "$URL" -o "$OUT/official-web"
-echo "== done: $OUT/official-web/FM1-Official-Open-Source.html"
+python3 "$REPO/tools/dx747/compare/make_dx_page.py" --root "$SRC" --fwsc "$OUT/FM1_OFFICIAL_OPEN.fwsc" \
+  --identity "$OUT/firmware/build-identity.json" --wasm "$OUT/simulator/simulator.wasm" --source-url "$URL" -o "$OUT/official-web"
+echo "== done: $OUT/official-web/DX747-Workbench.html (and FM1-Official-Open-Source.html)"

@@ -453,7 +453,11 @@ tools/dx747/mac-build.sh
 It builds a clean export of `HEAD` in about 15 seconds: the firmware and the SDK's checks in Docker, the
 `.fwsc` with `make_fwsc.py`, the browser core with the macOS WASI SDK, and the flashing page with
 `make_page.py`. Results are in `build/dx747/mac/` (`FM1_OFFICIAL_OPEN.fwsc` and
-`official-web/FM1-Official-Open-Source.html` with its `SHA256SUMS.txt`). The page's source address is the
+`official-web/FM1-Official-Open-Source.html` with its `SHA256SUMS.txt`, and beside it **`DX747-Workbench.html`**, the DX747
+workbench with the configurator, simulator, keyboard and updater, made by `tools/dx747/compare/make_dx_page.py` from `web/page/`).
+That page needs only Python 3, the browser core and a `.fwsc`, so it can be made on any machine from the Windows-built package:
+`python3 tools/dx747/compare/make_dx_page.py --root . --wasm simulator.wasm --fwsc FM1_OFFICIAL_OPEN.fwsc --identity build-identity.json --source-url URL -o OUTDIR`.
+The page's source address is the
 GitHub archive of the commit, made from the `origin` remote, so push the commit first or pass
 `--source-url`. `-o DIR` changes the output folder and `--worktree` builds uncommitted changes.
 

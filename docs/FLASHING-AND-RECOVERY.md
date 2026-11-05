@@ -126,7 +126,9 @@ staging area; saving a scene on the unit and agreeing to the flash setup clears 
 - The check build writes `build\dx7\generated\FM1_OFFICIAL_OPEN.fwsc`, but the
   workbench cannot load a loose file. A custom firmware is installed from the page
   that `build.bat --package` builds, `build\official-web\FM1-Official-Open-Source.html`,
-  which carries the firmware inside it ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 5).
+  which carries the firmware inside it ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 5), or
+  from `DX747-Workbench.html` (its Update tab, [DX747.md](../DX747.md), "The DX747 workbench"), which
+  carries the same package.
   The same page also carries the original V15 firmware, for going back. The
   official hosted workbench has no way to take a local file.
 - DX747 has its own identity: release label **V01** and update identity
