@@ -8,7 +8,6 @@
   const COLORS = ['#ff5a5a', '#ffa23a', '#ffe34a', '#5cf06a', '#2de0d0', '#5aa9ff', '#b68cff', '#ff7ad2'];
   const FOLD = ['Drop', 'Clip', 'Wrap'], FILTER = ['Off', 'Low pass', 'High pass', 'Band pass'];
   const SYNC = ['1/32T', '1/32', '1/16T', '1/16', '1/8T', '1/16D', '1/8', '1/8D', '1/4'];
-  const noteName = n => Dx747.noteName(n);
   const $ = (sel, root = document) => root.querySelector(sel);
   function h(tag, cls, ...kids) {
     const e = document.createElement(tag); if (cls) e.className = cls;
@@ -16,7 +15,8 @@
     return e;
   }
   const app = { sim: null, dx: null, mode: null, realAccess: null, state: null, voices: null, scenes: null, sceneRev: null, sceneBank: 0, sceneSel: 0,
-                soundBank: 0, tab: 'device', sig: '', controls: [], connecting: false, locked: false, errors: 0 };
+                soundBank: 0, tab: 'device', sig: '', controls: [], connecting: false, locked: false, errors: 0,
+                voiceSeq: 0, voiceState: null, voiceBanks: 0, voiceError: '', autoReread: false };
   const english = text => (globalThis.FM1I18n ? FM1I18n.t(String(text), 'en') : String(text));
 
   // ---- small things ---------------------------------------------------------------------------------------
@@ -39,11 +39,20 @@
   const recent = el => el._edit && Date.now() - el._edit < 1500;
   let releaseSlider = null;
   for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, () => { if (releaseSlider) { releaseSlider(); releaseSlider = null; } });
-  function slider(min, max, fmt, onSet, cls) {
-    const wrap = h('label', 'ctl ' + (cls || '')), input = h('input'), out = h('span', 'val');
-    input.type = 'range'; input.min = min; input.max = max; input.step = 1; wrap.append(input, out);
+  /** opts.snap = { at, within }: a drag that ends within `within` steps of `at` lands on it, and a double-click goes there (the centre
+   *  of pan, BRIGHT and the octave shift). The keyboard is not snapped, so the arrow keys can still step off the centre. */
+  function slider(min, max, fmt, onSet, cls, opts = {}) {
+    const wrap = h('label', 'ctl ' + (cls || '')), input = h('input'), out = h('span', 'val'), track = h('span', 'track');
+    input.type = 'range'; input.min = min; input.max = max; input.step = 1; track.append(input);
+    if (opts.snap) { const tick = h('i', 'tick'); tick.style.setProperty('--at', (opts.snap.at - min) / (max - min)); track.append(tick); }
+    wrap.append(track, out);
     const send = throttled(onSet); let busy = false;
-    input.addEventListener('input', () => { touch(input); out.textContent = fmt(+input.value); send(+input.value); });
+    const apply = () => { touch(input); out.textContent = fmt(+input.value); send(+input.value); };
+    input.addEventListener('input', () => {
+      if (opts.snap && busy) input.value = DxControls.snap(+input.value, opts.snap.at, opts.snap.within);
+      apply();
+    });
+    if (opts.snap) input.addEventListener('dblclick', () => { input.value = opts.snap.at; apply(); });
     input.addEventListener('pointerdown', () => { busy = true; releaseSlider = () => { busy = false; }; });
     return { el: wrap, input, set(v, label) { if (busy || recent(input)) return; input.value = v; out.textContent = label != null ? label : fmt(v); } };
   }
@@ -52,13 +61,7 @@
     s.addEventListener('change', () => { touch(s); onSet(+s.value); s.blur(); });
     return { el: s, node: s, set(v) { if (!recent(s)) s.value = v; } };
   }
-  function number(min, max, onSet) {
-    const i = h('input', 'num'); i.type = 'number'; i.min = min; i.max = max;
-    i.addEventListener('change', () => { touch(i); const v = Math.max(min, Math.min(max, Math.round(+i.value) || min)); i.value = v; onSet(v); });
-    return { el: i, set(v) { if (!recent(i) && document.activeElement !== i) i.value = v; } };
-  }
-  function field(label, node) { const f = h('label', 'field'); f.append(h('span', null, label), node); return f; }
-  const NOTE_OPTIONS = Array.from({ length: 128 }, (_, n) => [n, noteName(n) + '  (' + n + ')']);
+  function field(label, node, cls) { const f = h(node.matches && node.matches('.keyrange, .dual-wrap, .seg') ? 'div' : 'label', 'field' + (cls ? ' ' + cls : '')); f.append(h('span', null, label), node); return f; }
   const PART_COLOR = p => COLORS[p % 8];
   const notConnected = root => { root.textContent = ''; root.append(h('p', 'hint', 'Not connected. Choose Simulator or Connect FM-1 (USB) at the top.')); app.sig = ''; };
 
@@ -71,6 +74,7 @@
     $('#btn-sim').classList.toggle('active', app.mode === 'simulator' && !!(dx && dx.connected));
     $('#btn-unit').classList.toggle('active', app.mode === 'unit' && !!(dx && dx.connected));
     $('#btn-sim').disabled = $('#btn-unit').disabled = app.connecting || app.locked;
+    updatePresetBar();
   }
   /** Connect the configurator to a MIDI access (the simulator's or the unit's). A failed attempt leaves the working connection alone. */
   async function connect(access, mode) {
@@ -83,7 +87,7 @@
       try { await dx.connect(); }
       catch (error) { if (same) { app.mode = null; renderCurrent(); } throw error; }
       if (old && !same) { old.stopPolling(); await old.disconnect().catch(() => {}); }
-      app.dx = dx; app.mode = mode; app.sig = ''; app.voices = null; app.scenes = null; app.sceneRev = null; app.errors = 0; app.state = null;
+      app.dx = dx; app.mode = mode; app.sig = ''; app.voices = null; app.voiceState = null; app.autoReread = false; app.scenes = null; app.sceneRev = null; app.errors = 0; app.state = null;
       dx.startPolling(onState, onPollError, 400, () => { app.errors = 0; });
       if (app.kb) { app.kb.refreshOutputs(mode === 'unit' ? 'unit' : 'sim'); app.kb.refreshInputs(); }
       loadVoices();
@@ -109,18 +113,46 @@
     await connect(app.realAccess, 'unit');
     toast('Connected to the FM-1');
   });
-  async function loadVoices() {
+  /** Read the voice presets (the names of the 128 library voices) from the unit, so the voice lists show what the unit holds.
+   *  force: forget what was read before (the library may have changed under us). */
+  async function loadVoices(force) {
     const dx = app.dx; if (!dx) return;
+    const seq = ++app.voiceSeq; if (force) dx.forgetVoiceNames();
+    app.voiceState = 'loading'; app.voiceBanks = 0; updatePresetBar();
     try {
       const names = [];
-      for (let b = 0; b < 4; b++) { names.push(...await dx.voiceNames(b)); if (app.dx !== dx) return; }
-      app.voices = names; app.sig = ''; renderCurrent();
-    } catch (error) { if (app.dx === dx) toast('Could not read the voice library: ' + error.message, true); }
+      for (let b = 0; b < 4; b++) { names.push(...await dx.voiceNames(b)); if (app.dx !== dx || seq !== app.voiceSeq) return; app.voiceBanks = b + 1; updatePresetBar(); }
+      app.voices = names; app.voiceState = 'ok'; app.sig = ''; updatePresetBar(); renderCurrent();
+    } catch (error) {
+      if (app.dx !== dx || seq !== app.voiceSeq) return;
+      app.voiceState = 'error'; app.voiceError = error.message || String(error); updatePresetBar();
+      toast('Could not read the voice presets: ' + app.voiceError, true);
+    }
+  }
+  function updatePresetBar() {
+    const bar = $('#presetbar'); if (!bar) return;
+    bar.hidden = !app.dx;
+    const where = app.mode === 'unit' ? 'the FM-1' : 'the simulator', status = $('#preset-status');
+    status.className = app.voiceState === 'error' ? 'err' : '';
+    status.textContent = !app.dx ? '' : app.voiceState === 'loading' ? 'Reading the voice presets from ' + where + '… ' + app.voiceBanks + ' of 4 banks'
+      : app.voiceState === 'error' ? 'Could not read the presets (' + app.voiceError + '). Voices show their program numbers until this works.'
+      : app.voices ? 'Presets: the ' + app.voices.length + ' voices of banks A to D, as ' + where + ' holds them.' : '';
+    $('#preset-reload').disabled = !app.dx || app.voiceState === 'loading';
+  }
+  /** The layer's engine plays a voice other than the library voice of its program (edited, or sent as DX7 SysEx). */
+  function voiceDiffers(x, lib) {
+    const name = (x.voice || '').trim();
+    return !!(x.up && name && typeof lib === 'string' && lib.trim() !== name);
+  }
+  /** When a part shows a voice the library does not list, the names read earlier may be out of date: read them again, once. */
+  function checkLibrary(s) {
+    if (!app.voices || app.autoReread || app.voiceState !== 'ok') return;
+    if (s.engines.some(x => x.owner < 8 && voiceDiffers(x, app.voices[x.program]))) { app.autoReread = true; loadVoices(true); }
   }
   const voiceLabel = p => 'ABCD'[p >> 5] + String((p & 31) + 1).padStart(2, '0') + '  ' + ((app.voices && app.voices[p]) || 'program ' + (p + 1));
 
   // ---- state in, drawing out ------------------------------------------------------------------------------------------
-  function onState(s) { app.state = s; renderCurrent(); }
+  function onState(s) { app.state = s; renderCurrent(); checkLibrary(s); }
   function renderCurrent() {
     const fn = { configure: renderConfigure, master: renderMaster, scenes: renderScenes, sounds: renderSounds }[app.tab];
     if (fn) fn();
@@ -175,29 +207,48 @@
       root.append(card);
     }
   }
+  /** The voice list of a layer: the unit's own 128 presets in four banks, named as the unit's library names them. */
+  function voiceSelect(onSet) {
+    const s = h('select', 'voice');
+    for (let b = 0; b < 4; b++) {
+      const group = h('optgroup'); group.label = 'Bank ' + 'ABCD'[b];
+      for (let i = 0; i < 32; i++) group.append(new Option(voiceLabel(b * 32 + i), b * 32 + i));
+      s.append(group);
+    }
+    s.addEventListener('change', () => { touch(s); onSet(+s.value); s.blur(); });
+    return { el: s, node: s, set(v) { if (!recent(s)) s.value = v; } };
+  }
+  const shiftText = v => (v > 0 ? '+' : '') + v + ' oct';
   function buildLayer(e, index, color, part) {
     const set = (f, v) => act(() => app.dx.setLayer(e, f, v)), box = h('div', 'layer');
     const chip = h('span', 'chip small', index + 1); chip.style.background = color;
-    const voice = select(Array.from({ length: 128 }, (_, n) => [n, voiceLabel(n)]), v => act(() => app.dx.setLayer(e, 14, v), refresh), 'voice');
+    const voice = voiceSelect(v => act(() => app.dx.setLayer(e, 14, v), refresh));
     voice.node.setAttribute('aria-label', 'Voice of layer ' + (index + 1));
+    const odd = h('span', 'voice-odd'); odd.hidden = true;
     const mute = h('button', 'toggle', 'Mute'), solo = h('button', 'toggle', 'Solo'), remove = h('button', 'warn', 'Remove');
     mute.onclick = () => act(() => app.dx.setLayer(e, 12, app.state.engines[e].muted ? 0 : 1), refresh);
     solo.onclick = () => act(() => app.dx.setLayer(e, 13, app.state.engines[e].solo ? 0 : 1), refresh);
     remove.onclick = () => act(() => app.dx.partOp(2, part.index, index), refresh);
-    const row1 = h('div', 'row', chip, voice.el, mute, solo, remove);
-    const level = slider(0, 127, v => v, v => set(0, v)), pan = slider(-50, 50, v => (v ? (v < 0 ? 'L' : 'R') + Math.abs(v) : 'C'), v => set(1, v + 50)),
-      bright = slider(-50, 50, v => (v > 0 ? '+' : '') + v, v => set(2, v + 50)), rev = slider(0, 15, v => v, v => set(3, v)), dly = slider(0, 15, v => v, v => set(4, v));
+    const row1 = h('div', 'row', chip, voice.el, odd, mute, solo, remove);
+    const centre = { snap: { at: 0, within: 3 } };
+    const level = slider(0, 127, v => v, v => set(0, v)), pan = slider(-50, 50, v => (v ? (v < 0 ? 'L' : 'R') + Math.abs(v) : 'C'), v => set(1, v + 50), '', centre),
+      bright = slider(-50, 50, v => (v > 0 ? '+' : '') + v, v => set(2, v + 50), '', centre), rev = slider(0, 15, v => v, v => set(3, v)), dly = slider(0, 15, v => v, v => set(4, v));
     const row2 = h('div', 'row sliders', field('Level', level.el), field('Pan', pan.el), field('BRIGHT', bright.el), field('Reverb', rev.el), field('Delay', dly.el));
-    const lo = select(NOTE_OPTIONS, v => set(5, v)), hi = select(NOTE_OPTIONS, v => set(6, v));
-    const shift = select(Array.from({ length: 9 }, (_, i) => [i - 4, (i - 4 > 0 ? '+' : '') + (i - 4) + ' octave' + (Math.abs(i - 4) === 1 ? '' : 's')]), v => set(7, v * 12 + 64));
-    const fold = select(FOLD.map((n, i) => [i, n]), v => set(8, v)), poly = select(Array.from({ length: 8 }, (_, i) => [i + 1, i + 1 + ' voice' + (i ? 's' : '')]), v => set(11, v));
-    const vlo = number(1, 127, v => set(9, v)), vhi = number(1, 127, v => set(10, v));
-    const row3 = h('div', 'row', field('Lowest key', lo.el), field('Highest key', hi.el), field('Shift', shift.el), field('Fold', fold.el), field('Velocity', h('span', 'pair', vlo.el, '–', vhi.el)), field('Polyphony', poly.el));
-    box.append(row1, row2, row3);
+    const keys = DxControls.keyRange((end, n) => set(end === 'lo' ? 5 : 6, n), color);
+    const shift = slider(-4, 4, shiftText, v => set(7, v * 12 + 64), '', { snap: { at: 0, within: 0 } });
+    const fold = select(FOLD.map((n, i) => [i, n]), v => set(8, v));
+    const vel = DxControls.dualSlider(1, 127, (end, v) => set(end === 'lo' ? 9 : 10, v), ['Lowest', 'Highest']);
+    const poly = DxControls.segmented(Array.from({ length: 8 }, (_, i) => [i + 1, String(i + 1)]), v => set(11, v), 'Polyphony of layer ' + (index + 1) + ', voices');
+    const row3 = h('div', 'row', field('Octave shift', shift.el), field('Fold', fold.el), field('Velocity range', vel.el), field('Polyphony (voices)', poly.el));
+    const row4 = h('div', 'row', field('Key range', keys.el, 'full'));
+    box.append(row1, row2, row4, row3);
     app.controls.push(st => {
-      const x = st.engines[e];
+      const x = st.engines[e], lib = app.voices && app.voices[x.program];
       voice.set(x.program); level.set(x.level); pan.set(x.pan); bright.set(x.bright); rev.set(x.reverb); dly.set(x.delay);
-      lo.set(x.low); hi.set(x.high); shift.set(Math.round(x.shift / 12)); fold.set(x.fold); poly.set(x.poly); vlo.set(x.velLow); vhi.set(x.velHigh);
+      keys.set(x.low, x.high); shift.set(Math.round(x.shift / 12), x.shift % 12 ? (x.shift > 0 ? '+' : '') + x.shift + ' semitones' : undefined); fold.set(x.fold);
+      poly.set(x.poly); vel.set(Math.max(1, x.velLow), x.velHigh || 127);
+      const differs = voiceDiffers(x, lib); odd.hidden = !differs;
+      if (differs) { odd.textContent = 'Sounding as \u201c' + x.voice + '\u201d'; odd.title = 'The voice in this layer is not the library voice ' + voiceLabel(x.program) + ': it was edited or loaded as DX7 SysEx.'; }
       mute.classList.toggle('on', x.muted); solo.classList.toggle('on', x.solo); box.classList.toggle('silent', !x.audible);
     });
     return box;
@@ -323,7 +374,7 @@
       if (!confirm('Replace bank ' + 'ABCD'[+target.node.value] + ' of the voice library with this file?')) return;
       app.soundBank = +target.node.value;
       await app.dx.importRom(+target.node.value, bytes); toast('Imported and read back');
-      app.voices = null; app.sig = ''; soundsUI.key = ''; loadVoices(); fillSounds();   // the names changed everywhere
+      app.voices = null; app.sig = ''; app.autoReread = false; soundsUI.key = ''; loadVoices(true); fillSounds();   // the names changed everywhere
     });
     root.append(banks, soundsUI.note, soundsUI.grid, h('h3', null, 'Import a DX7 ROM or bank file'), h('div', 'row', file, field('Into', target.el), go));
   }
@@ -349,7 +400,7 @@
     $('#tab-help').append(...[
       ['What this is', 'The workbench for DX747, the firmware that makes the FM-1 an eight-part multitimbral DX7 module. Use it with the simulator in this page or with the unit over USB. Everything you see is the unit\'s own state: changes made here appear on the panel and the other way round.'],
       ['Connect', 'Simulator: starts with the page; click anywhere to start its sound. FM-1: plug it in by USB, close other MIDI programs, press Connect FM-1 and allow MIDI with SysEx (Chrome or Edge on a computer).'],
-      ['Configure', 'Eight parts, each on one MIDI channel with one to eight layers. A layer is one DX7 voice with its own key range, velocity range, octave shift, level, pan, BRIGHT and sends. Choose Play this part to make it the part the keyboard plays and the DX7 editors edit.'],
+      ['Configure', 'Eight parts, each on one MIDI channel with one to eight layers. A layer is one DX7 voice with its own key range, velocity range, octave shift, polyphony, level, pan, BRIGHT and sends. The voice lists hold the presets read from the unit (Reload presets reads them again). Pan, BRIGHT and the octave shift snap to the centre (double-click goes there); on the keyboard, click or drag to set the lowest or highest key (Reset selects the whole keyboard); the velocity window has a handle at each end. Choose Play this part to make it the part the keyboard plays and the DX7 editors edit.'],
       ['Sounds, Scenes, Master', 'Sounds: the 128 voices in four banks, and DX7 ROM import. Scenes: 64 stored setups with names; a program change on the scene channel recalls one. Master: the filter, the shared reverb and delay and the unit\'s settings.'],
       ['Keyboard', 'Play any part from the computer keyboard or the on-screen piano, with a channel and output of your choice. Use it to try layers and splits.'],
       ['Update', 'Installs the DX747 firmware that is inside this page, or puts the original V15 firmware back. Read docs/FLASHING-AND-RECOVERY.md first.'],
@@ -373,6 +424,7 @@
     if (!globalThis.FM1Web) { document.body.textContent = 'The workbench script failed to load.'; return; }
     document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
     $('#btn-sim').onclick = useSimulator; $('#btn-unit').onclick = useUnit;
+    $('#preset-reload').onclick = () => { app.autoReread = true; loadVoices(true); };
     $('#btn-reset').onclick = () => { if (confirm('Erase the simulator\'s saved scenes and settings and start again?')) app.sim.reset(); };
     const wasm = Uint8Array.from(atob(DX_SIMULATOR.data), c => c.charCodeAt(0));
     app.sim = new SimPanel($('#sim-host'), wasm);

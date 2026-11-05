@@ -54,7 +54,7 @@
   class Dx747 {
     constructor(access) {
       this.access = access; this.lib = new FM1Web.Library(access); this.chain = Promise.resolve();
-      this.state = null; this.lastCrc = null; this.timer = null; this.polling = false; this.bankNames = {};
+      this.state = null; this.lastCrc = null; this.timer = null; this.polling = false; this.bankNames = {}; this.libGen = 0;
     }
     run(fn) {
       const p = this.chain.then(fn, fn).catch(error => { throw translate(error); });
@@ -77,7 +77,7 @@
         catch (error) { await this.lib.disconnect().catch(() => {}); throw new Error(error.deviceCode === 71 ? 'This unit runs firmware without the DX747 configuration commands. Update it (Update tab).' : error.message); }
         if (h.length !== 11 || h[0] !== 68 || h[1] !== 88) { await this.lib.disconnect().catch(() => {}); throw new Error('This is not a DX747 unit.'); }
         this.hello = { protocol: h[2], enginesUp: h[4], parts: h[5], layers: h[6], scenes: h[7], release: String.fromCharCode(h[8], h[9], h[10]) };
-        this.state = null; this.lastCrc = null; this.bankNames = {};
+        this.state = null; this.lastCrc = null; this.forgetVoiceNames();
         return this.hello;
       });
     }
@@ -144,16 +144,19 @@
     /** Names of the 32 voices in library bank 0..3 (A to D). */
     async voiceNames(bank) {
       if (this.bankNames[bank]) return this.bankNames[bank];
-      const raw = await this.run(() => this.lib.readBank(bank));
+      const gen = this.libGen, raw = await this.run(() => this.lib.readBank(bank));
       const names = Array.from({ length: 32 }, (_, v) => text(raw, v * 128 + 118, 10));
-      return (this.bankNames[bank] = names);
+      if (gen === this.libGen) this.bankNames[bank] = names;                 // a read that began before the library changed must not be remembered
+      return names;
     }
+    /** Forget the names read so far: the next voiceNames reads the unit again. */
+    forgetVoiceNames() { this.bankNames = {}; this.libGen++; }
     async allVoiceNames() { const out = []; for (let b = 0; b < 4; b++) out.push(...await this.voiceNames(b)); return out; }
     /** Import a 32-voice DX7 bank file (4,104 bytes of SysEx) into library bank 0..3; the library reads it back and checks it. */
     importRom(bank, file) {
       const raw = checkRom(file);
-      this.bankNames = {};
-      return this.run(() => this.lib.writeBank(bank, raw));
+      this.forgetVoiceNames();
+      return this.run(() => this.lib.writeBank(bank, raw)).finally(() => this.forgetVoiceNames());
     }
   }
   globalThis.Dx747 = Dx747;

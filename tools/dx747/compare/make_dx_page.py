@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_page as mp  # noqa: E402  (the stock page assembler: its helpers are reused)
 
 SCRIPTS = [("/*DX_I18N*/", "sdk/I18n.js"), ("/*DX_WEBUPDATE*/", "sdk/WebUpdate.js"), ("/*DX_CORE*/", "web/page/dx747-core.js"), ("/*DX_DEVICE*/", "web/page/dx747-device.js"),
-           ("/*DX_CLIENT*/", "web/page/dx747-client.js"), ("/*DX_SIM*/", "web/page/dx747-sim.js"),
+           ("/*DX_CLIENT*/", "web/page/dx747-client.js"), ("/*DX_CONTROLS*/", "web/page/dx747-controls.js"), ("/*DX_SIM*/", "web/page/dx747-sim.js"),
            ("/*DX_KEYBOARD*/", "web/page/dx747-keyboard.js"), ("/*DX_UI*/", "web/page/dx747-ui.js"),
            ("/*DX_UPDATE*/", "web/page/dx747-update.js")]
 

@@ -118,6 +118,10 @@ const file = new Uint8Array(4104); file.set([0xf0, 0x43, 0x00, 0x09, 0x20, 0x00]
 let sum = 0; for (const v of raw) sum = (sum + v) & 127; file[4102] = (128 - sum) & 127; file[4103] = 0xf7;
 await dx.importRom(3, file);
 const imported = await dx.voiceNames(3); check(imported.join('|') === names.join('|'), 'bank D holds the imported names');
+// the names are read once and kept; forgetting them reads the unit again, and a read that began before the library changed is not kept
+check((await dx.voiceNames(3)) === imported, 'the names are kept after the first read');
+dx.forgetVoiceNames(); const again = await dx.voiceNames(3); check(again !== imported && again.join('|') === imported.join('|'), 'forgetting the names reads the unit again');
+{ dx.forgetVoiceNames(); const slow = dx.voiceNames(2); dx.forgetVoiceNames(); await slow; check(!dx.bankNames[2], 'a read that began before the library changed is not remembered'); }
 file[100] ^= 1;
 try { dx.importRom(3, file); check(false, 'a corrupt bank file must be refused'); } catch (error) { check(/checksum/.test(error.message), 'checksum message'); }
 

@@ -38,6 +38,23 @@ input.name{width:150px;text-transform:uppercase}input.num{width:62px}.pair{displ
 .dots{display:grid;grid-template-columns:repeat(8,6px);gap:2px;margin-top:auto}.dots i{width:6px;height:6px;background:#2c3237}
 .voice-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}.voice{text-align:left}.voice i{color:var(--dim);font-style:normal;display:inline-block;min-width:2em}.voice.sel{background:var(--ac);color:#001418}.voice.sel i{color:#003}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:80vw;padding:10px 18px;border-radius:8px;background:#102a33;border:1px solid var(--ac);opacity:0;pointer-events:none;transition:opacity .2s}#toast.show{opacity:1}#toast.bad{background:#3a1515;border-color:var(--rd)}
+/* Configure: sliders with a centre mark, the key range keyboard, the two-handle slider, the segmented control */
+.presetbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:0 0 14px;color:var(--dim)}.presetbar .err{color:#ff8f8f}
+.track{position:relative;display:inline-flex;align-items:center}.track .tick{position:absolute;top:-1px;left:calc(8px + (100% - 16px) * var(--at));width:2px;height:5px;margin-left:-1px;background:var(--dim);pointer-events:none}
+.field.full{flex:1 1 100%}.field>div{color:var(--tx)}
+button.mini{padding:2px 9px;font-size:12px}
+.seg{display:inline-flex}.seg-b{border-radius:0;margin-left:-1px;padding:4px 10px;min-width:2.1em;font-size:13px}.seg-b:first-child{border-radius:6px 0 0 6px;margin-left:0}.seg-b:last-child{border-radius:0 6px 6px 0}.seg-b.on{position:relative;z-index:1}
+.dual-wrap{display:flex;align-items:center;gap:8px}.dual{position:relative;width:170px;height:24px;margin:0 8px;touch-action:none;cursor:pointer}
+.dual-track{position:absolute;left:0;right:0;top:10px;height:4px;border-radius:2px;background:#0b0e10;border:1px solid var(--line)}.dual-fill{position:absolute;top:10px;height:4px;border-radius:2px;background:var(--ac)}
+.dual-thumb{position:absolute;top:3px;width:16px;height:18px;margin-left:-8px;border-radius:4px;background:var(--panel2);border:2px solid var(--ac);cursor:grab}.dual-thumb:focus-visible{outline:2px solid var(--tx);outline-offset:2px}
+.keyrange{width:100%}.kr-head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-bottom:6px}.kr-read{color:var(--tx);font-variant-numeric:tabular-nums}
+.kr-scroll{overflow-x:auto;padding-bottom:4px}.kr-piano{position:relative;height:30px;min-width:840px;touch-action:none;user-select:none;cursor:pointer;border-radius:4px}.kr-piano:focus-visible{outline:2px solid var(--tx);outline-offset:2px}
+.kr-piano .k{position:absolute;top:0;display:block;border:1px solid #05080a;border-top:0;border-radius:0 0 3px 3px}.kr-piano .white{height:100%;background:#39434a}.kr-piano .black{height:60%;background:#101416;z-index:2}
+.kr-piano .white.in{background:var(--c,#7cc4ff)}.kr-piano .black.in{background:var(--c,#7cc4ff);filter:brightness(.55)}
+.kr-piano .k.elo::after,.kr-piano .k.ehi::after{content:"";position:absolute;left:0;right:0;bottom:0;height:5px;background:#fff;border-radius:0 0 2px 2px}.kr-piano .black.elo::after,.kr-piano .black.ehi::after{height:4px;bottom:auto;top:calc(100% - 5px)}
+.kr-piano .k.elo::after,.kr-piano .k.ehi::after{height:4px}
+.kr-piano b{position:absolute;left:1px;bottom:5px;font-size:8px;line-height:1;font-weight:400;color:#9aa7ad;pointer-events:none}.kr-piano .white.in b{color:#000}
+.voice-odd{color:var(--am);font-size:12px}
 /* the simulator panel */
 .simpanel{background:linear-gradient(#2b3033,#202427);border:1px solid #444c50;border-radius:14px;padding:18px;max-width:1020px}
 .sim-top{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
@@ -83,7 +100,7 @@ details{margin-top:40px;color:var(--dim)}details pre{white-space:pre-wrap;font-s
     <div id="sim-host"></div>
     <p class="hint">This is the DX747 firmware itself, compiled to run in your browser, with the panel of the FM-1: buttons, encoders, master knob and keys. It is the unit the Configure, Sounds, Scenes and Master tabs work on while <b>Simulator</b> is selected above. Its scenes and settings are kept in this browser. <button id="btn-reset">Reset the simulator</button></p>
   </section>
-  <section id="tab-configure" hidden><div id="parts"></div></section>
+  <section id="tab-configure" hidden><div id="presetbar" class="presetbar" hidden><span id="preset-status"></span><button id="preset-reload" type="button" title="Read the names of the 128 voices from the unit again">Reload presets</button></div><div id="parts"></div></section>
   <section id="tab-sounds" hidden><div id="sounds-body"></div></section>
   <section id="tab-scenes" hidden><div id="scenes-body"></div></section>
   <section id="tab-master" hidden><div id="master-body"></div></section>
@@ -113,6 +130,7 @@ details{margin-top:40px;color:var(--dim)}details pre{white-space:pre-wrap;font-s
 <script>/*DX_CORE*/</script>
 <script>/*DX_DEVICE*/</script>
 <script>/*DX_CLIENT*/</script>
+<script>/*DX_CONTROLS*/</script>
 <script>/*DX_SIM*/</script>
 <script>/*DX_KEYBOARD*/</script>
 <script>/*DX_UI*/</script>
