@@ -94,6 +94,21 @@ on hardware.
 | Circuit Tracks or another sequencer | what it sends when a pattern or project changes | **write down the message type, bank select and channel**, so the scene channel can be set to match |
 | Voices that need a controller | load a voice with amplitude-modulation sensitivity (the "BC" voices of ROM 3A, patches 113 and 120 when it is in bank D), then send CC120, then a program change | the voice sounds at once each time; **write down whether any voice stays silent until you move a controller**: the fix sends CC2 = 127 and was only tested in the simulator |
 
+## 4b. The workbench page (`DX747-Workbench.html`)
+
+Open the page in Chrome or Edge on a computer, close other MIDI programs, plug the unit in by USB.
+
+| Check | How | Pass |
+|---|---|---|
+| Connect | press Connect FM-1 and allow MIDI with SysEx | the status pill reads `FM-1 connected · DX747 V01 · protocol 1`; write down the USB MIDI port name the browser shows and any message if it fails |
+| State and voice names | open Configure and Sounds | eight parts with their channels and layers as on the Parts screen; the voice names of banks A to D appear (note how long they take) |
+| Page to unit | change a layer's lowest key, a level, a channel, add and remove a layer | the unit's Parts and Part-in-detail screens show it at once; the unit refuses what the panel would refuse and the page says so |
+| Unit to page | change the same things on the panel (PRESETS, K1, ENV) | the page follows within about a second |
+| Playing while connected | hold a chord from a MIDI keyboard while the page is open and polling | no dropouts, stuck notes or screen glitches; write down any |
+| Scenes | save, rename, recall, delete a scene from the Scenes tab | works on the unit (set up the scene store from the panel first); two saves within 1.5 s are refused with a "busy" message |
+| Keyboard | Keyboard tab, output = the unit, play from the computer keyboard on a part's channel | the part sounds; changing the channel, octave and velocity works; Panic ends all notes |
+| Update tab | open it (do not install) | it says the firmware checks out; Install is only enabled after Connect and the backup box |
+
 ## 5. Scenes and the first save
 
 | Check | How | Pass |
