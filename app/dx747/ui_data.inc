@@ -108,6 +108,7 @@ static struct frame {
     char scene_name[DX_SCENES][12];
     uint8_t scene_parts[DX_SCENES];
     uint8_t scenes_known;
+    unsigned scene_rev;              /* dx_scene_revision when the catalogue above was read */
 } fr;
 
 static void frame_collect(uint32_t now)
@@ -153,6 +154,7 @@ static void frame_collect(uint32_t now)
     fr.cpu = st.deadline_ticks ? (st.render_ticks * 100U) / st.deadline_ticks : 0U;
     if (fr.cpu > 99U) fr.cpu = 99U;
     /* The scene catalogue changes only when a scene is written. */
+    if (fr.scene_rev != dx_scene_revision()) { fr.scene_rev = dx_scene_revision(); fr.scenes_known = 0; }   /* the workbench can write scenes too */
     if (!fr.scenes_known) {
         memset(fr.scene_used, 0, sizeof fr.scene_used);
         for (unsigned i = 0; i < DX_SCENES; ++i) {

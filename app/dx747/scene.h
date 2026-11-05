@@ -84,6 +84,7 @@ int dx_scene_store_state(void);       /* 0 usable, 1 holds foreign data (needs c
 int dx_scene_claim(void);
 int dx_scene_recover(void);           /* called with the rest of the staging recovery */
 int dx_scene_scan(void);              /* refresh the catalogue below; run at boot and after claim */
+unsigned dx_scene_revision(void);     /* counts scene writes since power-on (the panel and the workbench both write) */
 int dx_scene_read(unsigned index, struct dx_scene *out);
 int dx_scene_write(unsigned index, const struct dx_scene *s);
 int dx_scene_clear(unsigned index);

@@ -395,6 +395,8 @@ int dx_scene_recover(void)
 
 /* Replace the image of one sector with payload (n bytes, the rest of the image erased), or clear it when payload is
  * NULL. */
+static unsigned scene_revision;                        /* counts scene writes, so a screen that lists the scenes knows when to read them again */
+unsigned dx_scene_revision(void) { return scene_revision; }
 static int dx_sector_put(unsigned sector, const uint8_t *payload, unsigned n)
 {
     if (sector >= DX_STORE_SECTORS || n > DX_SCENE_BYTES) return DX_SCENE_INVALID;
@@ -427,7 +429,7 @@ static int dx_sector_put(unsigned sector, const uint8_t *payload, unsigned n)
     r = dx_program(sector, img, nh.crc);
     fm1_engine_resume();
     free(img);
-    if (!r && sector < DX_SCENE_SECTORS) (void)dx_scene_scan();
+    if (!r && sector < DX_SCENE_SECTORS) { (void)dx_scene_scan(); ++scene_revision; }
     return r;
 }
 

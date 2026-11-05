@@ -48,6 +48,11 @@
  *   expect_sel P        fail unless part P is the selected part (the keyboard plays it)
  *   expect_layer E P L  fail unless engine E (0..7) is a layer of part P (-1 = free) at level L (0..127; -1 = any)
  *   expect_level P V    fail unless part P has part level V (0..127)
+ *   wb CMD STATUS [HEX...]  send workbench command CMD with the hex bytes as data (the framing, packing and checksum are
+ *                       done here) and fail unless the reply status is STATUS (0 ok, 71 invalid, 67 busy, 95..98 part codes)
+ *   expect_reply I V    fail unless byte I of the last reply (0 = the status byte, then its data) is V (decimal or 0x..)
+ *   expect_state OFF V  read the DX747 state image (transfer kind 5, docs/CONFIG-PROTOCOL.md) and fail unless byte OFF is V
+ *   expect_state_text OFF TEXT  the same for a text field ("_" stands for a space; compares as many characters as TEXT has)
  *   expect_sends E W V  fail unless engine E (0..7) has send W (0 reverb, 1 delay) at V (0..15)
  *   expect_volume E V   fail unless the engine's own volume (what CC7 on its private channel set) is V (0..127)
  *   expect_vel E LO HI  fail unless engine E (0..7) has the velocity window LO..HI
@@ -72,6 +77,7 @@
 
 #include "instrument.h"
 #include "dx747/scene.h"
+#include "dx747/dx747.h"
 extern unsigned dx_route_voices(void);
 extern unsigned dx_engines_up(void);
 extern void sim_safe_boot(unsigned);
@@ -545,6 +551,32 @@ int main(int argc, char **argv)
             unsigned part = (unsigned)atoi(a);
             const struct dx_parts *pp = &dx_live_edit()->parts;
             if (part >= DX_PARTS || pp->part[part].level != (unsigned)atoi(b)) { fprintf(stderr, "expect_level %s: wanted %s, got %d\n", a, b, part < DX_PARTS ? pp->part[part].level : -1); ++errors; }
+        }
+        else if (!strcmp(p, "wb") && a && b) {
+            unsigned cmd = (unsigned)atoi(a), want = (unsigned)atoi(b), n = 0;
+            uint8_t d[140];
+            for (char *t; (t = strtok(NULL, " \t\r\n")) && n < sizeof d;) d[n++] = (uint8_t)strtoul(t, NULL, 16);
+            int r = wb_query(cmd, d, n);
+            if (r != (int)want) { fprintf(stderr, "wb %u: wanted status %u, got %d\n", cmd, want, r); ++errors; }
+        }
+        else if (!strcmp(p, "expect_reply") && a && b) {
+            unsigned i = (unsigned)atoi(a), want = (unsigned)strtoul(b, NULL, 0);
+            if (i >= wb_data_len || wb_data[i] != want) { fprintf(stderr, "expect_reply %u: wanted %u, got %d\n", i, want, i < wb_data_len ? wb_data[i] : -1); ++errors; }
+        }
+        else if (!strcmp(p, "expect_state") && a && b) {
+            uint8_t img[DX_CFG_STATE_BYTES];
+            unsigned off = (unsigned)atoi(a), want = (unsigned)strtoul(b, NULL, 0);
+            if (wb_download(5, 0, img, sizeof img)) { fprintf(stderr, "expect_state: the state image could not be read\n"); ++errors; }
+            else if (off >= sizeof img || img[off] != want) { fprintf(stderr, "expect_state %u: wanted %u, got %d\n", off, want, off < sizeof img ? img[off] : -1); ++errors; }
+        }
+        else if (!strcmp(p, "expect_state_text") && a && b) {
+            uint8_t img[DX_CFG_STATE_BYTES];
+            unsigned off = (unsigned)atoi(a), len = (unsigned)strlen(b), bad = 0;
+            if (wb_download(5, 0, img, sizeof img)) { fprintf(stderr, "expect_state_text: the state image could not be read\n"); ++errors; }
+            else {
+                for (unsigned i = 0; i < len; ++i) if (off + i >= sizeof img || img[off + i] != (uint8_t)(b[i] == '_' ? ' ' : b[i])) bad = 1;
+                if (bad) { fprintf(stderr, "expect_state_text %u: wanted %s, got %.*s\n", off, b, (int)(len < sizeof img - off ? len : sizeof img - off), (const char *)img + off); ++errors; }
+            }
         }
         else if (!strcmp(p, "expect_sends") && a && b) {
             char *c3 = strtok(NULL, " \t\r\n");

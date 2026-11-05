@@ -69,7 +69,7 @@ void groove_transfer_init(void)
 }
 static int transfer_begin(unsigned kind, unsigned target, unsigned size, unsigned writing)
 {
-    if (kind > 4 || (kind == 4 && (target >= 4 || size != 4096)) || (kind == 1 && (target >= GROOVE_TRACKS || size != 156)) ||
+    if (kind > 5 || (kind == 5 && (target || size != DX_CFG_STATE_BYTES || writing)) || (kind == 4 && (target >= 4 || size != 4096)) || (kind == 1 && (target >= GROOVE_TRACKS || size != 156)) ||
         (kind == 2 && (target >= GROOVE_TRACKS || size != sizeof(struct groove_preset))) ||
         (!kind && (target || (size != GROOVE_PROJECT_BYTES && size != GROOVE_PROJECT_LEGACY_BYTES &&
                               (!writing || size != GROOVE_PROJECT_TUNED_BYTES)))) ||
@@ -101,6 +101,7 @@ static int command(unsigned cmd, const uint8_t *data, unsigned n, uint8_t *out, 
 {
     int r = GROOVE_PROJECT_INVALID;
     *count = 0;
+    if (cmd >= 23 && cmd <= 31) return dx_config_command(cmd, data, n, out, count);   /* DX747's configuration protocol */
     /* Additive capability reply; command 21 retains its old exact layout. */
     if (cmd == 22 && !n) {
         out[0]=1; out[1]=128; out[2]=4; out[3]=(uint8_t)groove_fm_library_available();
@@ -171,11 +172,12 @@ static int command(unsigned cmd, const uint8_t *data, unsigned n, uint8_t *out, 
         return 0;
     }
     if (cmd == 1 && n == 2) {
-        unsigned size = data[0] == 2 ? sizeof(struct groove_preset) : data[0] == 1 ? 156
+        unsigned size = data[0] == 2 ? sizeof(struct groove_preset) : data[0] == 1 ? 156 : data[0] == 5 ? DX_CFG_STATE_BYTES
                         : data[0] == 4 ? 4096 : data[0] == 3 ? GROOVE_PROJECT_TUNED_BYTES : GROOVE_PROJECT_BYTES;
         r = transfer_begin(data[0], data[1], size, 0);
         if (!r) {
-            r = data[0] == 4 ? groove_fm_library_read(data[1],transfer)
+            r = data[0] == 5 ? dx_config_state(transfer)
+                : data[0] == 4 ? groove_fm_library_read(data[1],transfer)
                 : data[0] == 2 ? groove_timbre_export(data[1], transfer, size)
                 : data[0] == 1 ? groove_fm_copy(data[1], transfer, NULL)
                         : groove_project_export(transfer, size);

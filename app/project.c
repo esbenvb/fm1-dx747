@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "dx747/dx747.h"
+#include "version.h"
 #include "dx747/scene.inc"
 #include "dx747/boot.inc"
 #include "dx747/ctl.inc"
@@ -280,6 +281,8 @@ static void service_midi_requests(void)
         if (index < DX_SCENES) (void)dx_scene_recall(index); /* an empty slot does nothing */
     }
 }
+
+#include "dx747/config.inc"
 
 /* ---- project hooks the engine links against ----------------------------- */
 

@@ -1,0 +1,179 @@
+# Recipe 18: the DX747 configuration protocol (docs/CONFIG-PROTOCOL.md): hello, the state image, every setter, the error
+# codes and the scene commands. 'wb CMD STATUS HEX...' sends one request and checks the status byte; 'expect_reply I V' checks a
+# byte of the last reply (0 = status, 1.. = data); 'expect_state OFF V' reads the state image (offsets in the protocol document).
+boot
+wipe
+run 400
+# hello: 'D' 'X', protocol 1, flags 0, all eight engines up, 8 parts, 8 layers, 64 scenes, release V01
+wb 23 0
+expect_reply 1 68
+expect_reply 2 88
+expect_reply 3 1
+expect_reply 5 255
+expect_reply 6 8
+expect_reply 7 8
+expect_reply 8 64
+expect_reply 9 86
+wb 23 71 00
+# the state image: version, selected part, engines up, no current scene; part 1 on channel 1 at level 127; engine 1 is its layer
+expect_state 0 1
+expect_state 1 0
+expect_state 2 255
+expect_state 3 64
+expect_state 16 1
+expect_state 17 127
+expect_state 31 2
+expect_state 136 0
+expect_state 162 1
+expect_state 147 64
+expect_state 145 0
+expect_state 146 127
+expect_state 150 1
+expect_state 151 127
+expect_state_text 152 PIANO_1
+# the CRC command answers with the image size (344 = 0x158)
+wb 24 0
+expect_reply 5 88
+expect_reply 6 1
+# layer settings: range, shift, velocity window, level, pan, BRIGHT, sends, polyphony
+wb 25 0 00 05 3c
+wb 25 0 00 06 48
+expect_engine 0 60 72
+expect_state 145 60
+wb 25 0 00 07 4c
+expect_state 147 76
+wb 25 0 00 09 14
+wb 25 0 00 0a 64
+expect_vel 0 20 100
+expect_state 150 20
+wb 25 0 00 00 40
+expect_layer 0 0 64
+wb 25 0 00 01 46
+expect_live pan 0 20
+expect_state 138 70
+wb 25 0 00 02 3c
+expect_live bright 0 10
+wb 25 0 00 03 09
+wb 25 0 00 04 04
+expect_sends 0 0 9
+expect_sends 0 1 4
+expect_state 141 9
+expect_state 142 4
+wb 25 0 00 0b 04
+expect_state 149 4
+wb 25 0 00 08 02
+expect_state 148 2
+# mute and solo: a muted layer, then a solo that silences the other parts and clears the mute
+wb 25 0 00 0c 01
+expect_state 144 9
+wb 25 0 00 0c 00
+wb 25 0 00 0d 01
+expect_state 144 14
+expect_state 170 8
+wb 25 0 00 0d 00
+expect_state 144 12
+# the voice: program 5 is PIANO 2
+wb 25 0 00 0e 04
+run 200
+expect_patch 0 151 50
+expect_state 143 4
+wb 25 0 00 0e 00
+run 200
+expect_patch 0 151 49
+# refused: out of range, a free or missing engine, an unknown field, a wrong length
+wb 25 71 00 05 80
+wb 25 71 09 00 10
+wb 25 71 00 0f 01
+wb 25 71 00 05
+# parts: level and channel (a channel another part has is refused)
+wb 26 0 00 00 50
+expect_level 0 80
+wb 26 0 00 01 0a
+expect_part 0 10 1
+wb 26 71 01 01 03
+wb 26 0 00 01 01
+expect_part 0 1 1
+wb 26 71 07 00 80
+# parts: no free engine for a layer (status 96), free one by removing part 8, add a layer, take it away, add the part back
+wb 27 96 01 00 00
+wb 27 0 02 07 00
+expect_reply 1 7
+expect_part 7 0 0
+wb 27 0 01 00 00
+expect_reply 1 7
+expect_part 0 1 2
+wb 27 0 04 00 01
+expect_selayer 0 1
+wb 27 0 02 00 01
+expect_part 0 1 1
+wb 27 0 00 07 00
+expect_reply 1 7
+expect_part 7 8 1
+wb 27 0 03 02 00
+expect_sel 2
+wb 27 0 03 00 00
+wb 27 71 09 00 00
+wb 27 95 00 00 00
+# the master filter and the effects
+wb 28 0 00 02 00
+expect_live filter_type 0 2
+wb 28 0 01 dc 05
+expect_live filter_hz 0 1500
+wb 28 0 02 28 00
+expect_live filter_res 0 40
+wb 28 71 01 0a 00
+wb 28 71 00 09 00
+wb 28 0 03 32 00
+expect_state 12 50
+expect_state 8 2
+expect_state 10 220
+expect_state 11 5
+expect_state 9 40
+# settings: scene channel, master channel, button light
+wb 29 0 00 05
+expect_cfg scene_ch 5
+expect_state 4 5
+wb 29 0 01 0a
+expect_cfg master_ch 10
+wb 29 0 02 06
+expect_state 6 6
+wb 29 0 00 00
+wb 29 0 01 00
+wb 29 71 00 11
+wb 29 71 02 09
+# part names: printable only
+wb 31 0 00 42 41 53 53 20 4c 49 4e 45 20 20 20
+expect_state_text 19 BASS_LINE
+wb 31 71 00 42 41 53 53 20 4c 49 4e 45 20 20 01
+wb 31 71 08 42 41 53 53 20 4c 49 4e 45 20 20 20
+# scenes: save with a name, list it, a second write inside 1.5 s is busy, rename, recall, delete
+wb 30 0 02 00 43 46 47 20 54 45 53 54 20 20 20 20
+expect_state 3 0
+wb 30 0 00 00
+expect_reply 2 67
+expect_reply 3 70
+wb 30 67 02 01 43 46 47 20 54 45 53 54 20 20 20 32
+run 1600
+wb 30 0 03 00 52 45 4e 41 4d 45 44 20 20 20 20 20
+wb 30 0 00 00
+expect_reply 2 82
+expect_reply 1 255
+expect_reply 14 0
+run 1600
+wb 25 0 00 00 20
+expect_layer 0 0 32
+wb 30 0 01 00
+run 300
+expect_layer 0 0 64
+wb 30 1 01 01
+wb 30 71 00 01
+wb 30 71 01 40
+run 1600
+wb 30 0 04 00
+wb 30 0 00 00
+expect_reply 1 0
+expect_reply 2 32
+# a state image cannot be written, and an unknown command is refused
+wb 3 71 05 00 58 01
+wb 32 71
+wb 22 0

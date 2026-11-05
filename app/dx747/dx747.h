@@ -11,6 +11,7 @@
 
 /* ---- app/project.c ---- */
 #define DX_NO_SCENE DX_SCENES
+enum { DX_CFG_STATE_BYTES = 344 };                     /* the state image of docs/CONFIG-PROTOCOL.md */
 unsigned dx_engines_up(void);                          /* bit e: engine e is a live DX7 */
 struct dx_live *dx_live_edit(void);                    /* pan, expression, BRIGHT, filter: owned by the UI */
 void dx_apply_filter(void);                         /* push the live master-filter settings to the audio stage */
@@ -34,6 +35,9 @@ void dx_part_select(unsigned part);                    /* the part the keyboard 
 void dx_part_select_layer(unsigned part, unsigned layer); /* the layer that takes DX7 SysEx */
 void dx_level_changed(unsigned engine);                /* live.parts layer or part level changed: tell the engine */
 void dx_part_level_changed(unsigned part);             /* the same for every layer of a part */
+int dx_config_state(uint8_t *image);                   /* the 344-byte state image of docs/CONFIG-PROTOCOL.md */
+int dx_config_command(unsigned cmd, const uint8_t *data, unsigned n, uint8_t *out, unsigned *count); /* commands 23..31 */
+void dx_ui_release_keys(void);                         /* end the notes the built-in keys hold (before the part they play changes) */
 int dx_storage_state(void);                            /* 0 usable, 1 needs dx_storage_claim, <0 error */
 int dx_storage_state_cached(void);                     /* the same, from the last check; no flash access */
 int dx_storage_claim(void);                            /* erases the stock sample bank: ask the user first */

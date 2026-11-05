@@ -21,6 +21,7 @@
 
 static uint32_t last_frame, last_signature;
 static unsigned frame_forced = 1;
+void dx_ui_release_keys(void) { release_keys(); }
 
 static uint32_t hash_bytes(const void *data, unsigned bytes, uint32_t h)
 {
