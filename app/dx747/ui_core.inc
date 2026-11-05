@@ -16,6 +16,7 @@
 #define C_SEL RGB(0x30, 0x30, 0x34)  /* the selected row's background: its marker is a white bar at the left edge */
 #define C_MU RGB(0x5B, 0x5B, 0x5B)
 #define C_AC RGB(0x00, 0xE5, 0xFF)
+#define C_DXG RGB(0x04, 0xDF, 0xBF)  /* the green of the DX7's buttons (boot screen) */
 #define C_AM RGB(0xFF, 0xB0, 0x00)
 #define C_GR RGB(0x44, 0xFF, 0x6E)
 #define C_RD RGB(0xFF, 0x4D, 0x4D)
@@ -231,11 +232,15 @@ static void px_text_c(int cx, int y, const char *s, unsigned scale, uint16_t col
 static void px_text_r(int right, int y, const char *s, unsigned scale, uint16_t color)
 { px_text(right - (int)text_w(s, scale), y, s, scale, color); }
 
-/* Filled polygon, scanline by scanline within the current band. */
+/* Filled polygon, scanline by scanline within the current band. With stripe_period set only the rows (y - stripe_y0) %
+ * stripe_period < stripe_on are drawn: the lines of the DX7 logo. */
+static unsigned stripe_period, stripe_on;
+static int stripe_y0;
 static void px_poly(const int16_t (*p)[2], unsigned n, uint16_t color)
 {
     int y0 = (int)band_top, y1 = y0 + BAND_H;
     for (int y = y0; y < y1; ++y) {
+        if (stripe_period && (unsigned)(y - stripe_y0) % stripe_period >= stripe_on) continue;
         int xs[16], count = 0;
         for (unsigned i = 0; i < n && count < 16; ++i) {
             int ax = p[i][0], ay = p[i][1], bx = p[(i + 1) % n][0], by = p[(i + 1) % n][1];

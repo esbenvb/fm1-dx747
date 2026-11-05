@@ -119,6 +119,37 @@ static void cell_num(struct cell *c, unsigned i) { char *o = put_u(c->t, i + 1U)
 
 /* ---- boot ----------------------------------------------------------------- */
 
+/* The logo in the manner of the DX7's own: D and X cut into horizontal lines (the D one line in three, the X two in three) with
+ * the X's notch pushed into the D's point, then 747 as an outline in the green of the DX7's buttons. The tables are the shapes
+ * of Yamaha's logo scaled to 38 rows; the outlines stop one row higher so that their bottom line meets the X's. */
+static void px_stripes(const int16_t (*p)[2], unsigned n, uint16_t color, unsigned period, unsigned on, int top)
+{
+    stripe_period = period; stripe_on = on; stripe_y0 = top;
+    px_poly(p, n, color);
+    stripe_period = 0;
+}
+static void px_outline(const int16_t (*p)[2], unsigned n, uint16_t color)
+{
+    for (unsigned i = 0; i < n; ++i) px_line(p[i][0], p[i][1], p[(i + 1) % n][0], p[(i + 1) % n][1], color);
+}
+static void draw_logo(void)
+{
+    static const int16_t d_out[][2] = {{9,148},{44,148},{63,167},{44,186},{9,186}};
+    static const int16_t d_cnt[][2] = {{18,159},{41,159},{49,167},{41,175},{18,175}};
+    static const int16_t x_out[][2] = {{48,148},{62,148},{75,161},{89,148},{103,148},{84,167},{103,186},{89,186},{75,173},{62,186},{48,186},{67,167}};
+    static const int16_t n7a[][2] = {{105,148},{146,148},{146,157},{122,185},{111,185},{136,157},{105,157}};
+    static const int16_t n4[][2] = {{174,148},{182,148},{182,171},{189,171},{189,180},{182,180},{182,185},{174,185},{174,180},{148,180},{148,171},{153,171}};
+    static const int16_t c4[][2] = {{174,160},{174,171},{163,171}};
+    static const int16_t n7b[][2] = {{191,148},{231,148},{231,157},{207,185},{197,185},{222,157},{191,157}};
+    px_stripes(d_out, sizeof d_out / sizeof *d_out, C_TX, 3, 1, 148);
+    px_poly(d_cnt, sizeof d_cnt / sizeof *d_cnt, C_BLACK);
+    px_stripes(x_out, sizeof x_out / sizeof *x_out, C_TX, 3, 2, 148);
+    px_outline(n7a, sizeof n7a / sizeof *n7a, C_DXG);
+    px_outline(n4, sizeof n4 / sizeof *n4, C_DXG);
+    px_outline(c4, sizeof c4 / sizeof *c4, C_DXG);
+    px_outline(n7b, sizeof n7b / sizeof *n7b, C_DXG);
+}
+
 static void draw_boot(void)
 {
     /* A 747 in side view, gear up, traced from a reference drawing at 0.23 scale: fuselage with the upper-deck hump and
@@ -133,12 +164,13 @@ static void draw_boot(void)
     static const int16_t whi[][2] = {{77,101},{100,99},{125,99},{158,98},{146,99},{125,100},{104,102},{78,102}};
     static const int16_t door[] = {38, 68, 104, 137, 182};
     static const int16_t eng[2][2] = {{80,105},{110,103}};
-    const uint16_t hi = RGB(0xC4, 0xC4, 0xC8), md = RGB(0x8C, 0x8C, 0x90), lo = RGB(0x54, 0x54, 0x58), cn = RGB(0x98, 0x98, 0x9C);
-    px_text_c(120, 10, "Esben von Buchwald, 2026", 1, C_DIM);
+    const uint16_t hi = RGB(0xC4, 0xC4, 0xC8), md = RGB(0x8C, 0x8C, 0x90), lo = RGB(0x54, 0x54, 0x58);
+    const uint16_t gh = RGB(0x8E, 0xF2, 0xE2), gm = RGB(0x12, 0xA8, 0x94), gl = RGB(0x08, 0x5E, 0x52), gc = RGB(0x7F, 0xDD, 0xCF);   /* the engines, tinted with the DX7 green */
+    px_text_c(120, 10, "Esben von Buchwald - 2026", 1, C_DIM);
     px_poly(body, sizeof body / sizeof *body, C_TX);
     px_poly(belly, sizeof belly / sizeof *belly, RGB(0xCC, 0xCC, 0xCC));
-    px_poly(fin, sizeof fin / sizeof *fin, C_AC);      /* the fin in the accent colour, a lighter line along its leading edge */
-    px_poly(fedge, sizeof fedge / sizeof *fedge, RGB(0x90, 0xF4, 0xFF));
+    px_poly(fin, sizeof fin / sizeof *fin, C_DXG);     /* the fin in the DX7 green, a lighter line along its leading edge */
+    px_poly(fedge, sizeof fedge / sizeof *fedge, RGB(0x90, 0xF8, 0xE8));
     px_poly(stab, sizeof stab / sizeof *stab, RGB(0x70, 0x70, 0x74));
     px_line(198, 90, 224, 88, RGB(0xA4, 0xA4, 0xA8));
     for (unsigned i = 0; i < sizeof door / sizeof *door; ++i) px_frame(door[i] - 1, 93, 3, 8, RGB(0xB0, 0xB0, 0xB4));
@@ -150,16 +182,16 @@ static void draw_boot(void)
         int x = eng[e][0], y = eng[e][1];
         px_rect(x + 12, y, 2, 1, lo);
         px_rect(x + 14, y, 8, 3, lo);
-        px_rect(x + 1, y, 14, 10, md);
-        px_rect(x + 1, y, 14, 2, hi);
-        px_rect(x + 1, y + 7, 14, 3, lo);
+        px_rect(x + 1, y, 14, 10, gm);
+        px_rect(x + 1, y, 14, 2, gh);
+        px_rect(x + 1, y + 7, 14, 3, gl);
         px_rect(x + 15, y + 3, 7, 5, RGB(0x66, 0x66, 0x6A));
         px_rect(x + 15, y + 3, 7, 1, md);
-        px_rect(x + 22, y + 3, 2, 5, cn);
-        px_rect(x + 24, y + 4, 2, 3, cn);
-        px_rect(x + 26, y + 5, 1, 1, cn);
+        px_rect(x + 22, y + 3, 2, 5, gc);
+        px_rect(x + 24, y + 4, 2, 3, gc);
+        px_rect(x + 26, y + 5, 1, 1, gc);
         px_rect(x + 1, y + 2, 2, 5, RGB(0x3C, 0x3C, 0x40));
-        px_rect(x, y + 1, 1, 8, C_AC);
+        px_rect(x, y + 1, 1, 8, C_DXG);
     }
     for (int x = 14; x < 178; x += 3) {                /* main deck windows, a gap at each door */
         int gap = 0;
@@ -171,10 +203,9 @@ static void draw_boot(void)
     px_rect(24, 89, 5, 1, C_BLACK);
     px_rect(22, 90, 5, 1, C_BLACK);
     px_rect(0, 140, 240, 1, C_GD);
-    px_text(47, 148, "DX", 5, C_TX);
-    px_text(107, 148, "747", 5, C_AC);
+    draw_logo();
     px_text_c(120, 194, "8-PART MULTITIMBRAL DX7 MODULE", 1, C_DIM);
-    px_text_c(120, 218, "DX747 " FM1_RELEASE_VERSION " PREVIEW", 1, C_LN);
+    px_text_c(120, 218, FM1_RELEASE_VERSION " PREVIEW", 1, C_LN);
 }
 
 /* ---- safe boot: the only screen while dx_safe_boot() is on ----------------- */
