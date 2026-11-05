@@ -19,6 +19,7 @@ midi 1 80 3c 00
 press btn 8
 tap btn 12
 release btn 8
+expect_screen 1
 run 300
 midi 1 90 3c 64
 expect_peak 400 0.1

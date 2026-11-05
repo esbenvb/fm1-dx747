@@ -2,7 +2,7 @@
 /* DX747 screen state, text formatting and the per-frame snapshot. Included by
  * app/screen.c only, after ui_core.inc. */
 
-enum { S_BOOT, S_PARTS, S_PART, S_ESOUND, S_EPLAYS, S_EVEL, S_ESENDS, S_MON, S_MIX, S_FX, S_MASTER, S_SCENES, S_SYS, S_SAFE, S_COUNT };
+enum { S_BOOT, S_PARTS, S_PART, S_ESOUND, S_EPLAYS, S_EVEL, S_ESENDS, S_MON, S_MIX, S_FX, S_MASTER, S_SCENES, S_SYS, S_SAFE, S_DETAIL, S_COUNT };
 enum { M_BROWSE, M_NAME, M_CLAIM };                      /* scene screen modes */
 enum { BTN_OCT_DOWN, BTN_OCT_UP, BTN_FX, BTN_SEL, BTN_ENV, BTN_LFO, BTN_EDIT, BTN_GLO, BTN_HOME, BTN_SAVE, BTN_ARP, BTN_SEQ, BTN_PLAY, BTN_REC };
 #define BTN_BIT(b) (1U << (b))
@@ -10,12 +10,23 @@ static const uint8_t white_key[16] = {0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 
 
 /* The part being edited is the selected part (live.parts.selected, the one the keyboard plays); the layer is its
  * selected layer. Neither is kept here: they belong to the scene. */
+/* What the overlay says: a box over the lower part of the screen that follows a knob or a message for a moment. A kind
+ * with an argument names what it is about: a layer kind the engine, a part kind the part, OV_FX the effect knob,
+ * OV_SCENE the scene, OV_SYS the system row. The words and numbers are read from the frame snapshot when it is drawn. */
+enum { OV_NONE, OV_TEXT, OV_PART, OV_LAYER, OV_SOUND, OV_LVL, OV_PAN, OV_BRIGHT, OV_LO, OV_HI, OV_SHIFT, OV_FOLD, OV_VLO, OV_VHI,
+       OV_REV, OV_DLY, OV_POLY, OV_PLEVEL, OV_PCH, OV_PPAN, OV_PREV, OV_PDLY, OV_PMIX, OV_FX, OV_FTYPE, OV_FHZ, OV_FRES, OV_SCENE,
+       OV_OCT, OV_SYS };
+
 static struct ui {
     uint8_t screen, scene, mode, sys_row, learn, learn_lo, name_pos;
+    uint8_t mixkeys;                 /* Mix: the white keys mute and solo (EDIT toggles it) */
+    uint8_t home_from;               /* the screen HOME was pressed on, while HOME is held (the HOME + PLAY chord puts it back), else 0xff */
+    uint8_t home_learn, home_learn_lo, home_mixkeys; /* what that screen had armed, put back with it */
+    uint8_t ov_kind, ov_arg;
     int8_t octave;
     char name[12];
-    uint32_t notice_until, boot_until, learn_sig;
-    const char *notice;
+    uint32_t ov_until, boot_until, learn_sig;
+    const char *notice;              /* the words of OV_TEXT */
 } ui;
 
 /* ---- text ---------------------------------------------------------------- */
@@ -89,6 +100,9 @@ static struct frame {
     uint16_t active;                 /* channels with notes in the last 1.2 s */
     uint8_t src[16];
     uint8_t lit_blink;               /* 2 Hz phase for flashing cues */
+    uint8_t ov_on;                   /* the overlay is showing (decided on the real clock; now below is coarser) */
+    uint8_t pprog;                   /* the sound overlay: the program in the middle of its list, and the names of the five around it */
+    char pname[5][11];
     uint32_t now;
     uint8_t scene_used[DX_SCENES / 8];
     char scene_name[DX_SCENES][12];
@@ -123,6 +137,16 @@ static void frame_collect(uint32_t now)
                 char c = (char)patch[145 + i];
                 e->name[i] = c >= 32 && c <= 126 ? c : ' ';
             }
+    }
+    if (ui.ov_kind == OV_SOUND && ui.ov_arg < DX_ENGINES) {      /* the sound overlay lists the two programs before and after the current one */
+        unsigned prog = fr.e[ui.ov_arg].program % FM1_FM_PROGRAMS;
+        fr.pprog = (uint8_t)prog;
+        for (unsigned k = 0; k < 5; ++k) {
+            uint8_t patch[156];
+            groove_fm_program(patch, (prog + FM1_FM_PROGRAMS + k - 2U) % FM1_FM_PROGRAMS);
+            for (unsigned i = 0; i < 10; ++i) { char c = (char)patch[145 + i]; fr.pname[k][i] = c >= 32 && c <= 126 ? c : ' '; }
+            fr.pname[k][10] = 0;
+        }
     }
     struct fm1_render_stats st;
     groove_audio_stats(&st);

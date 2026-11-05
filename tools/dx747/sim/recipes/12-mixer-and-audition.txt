@@ -18,7 +18,7 @@ midi 1 80 3c 00
 # LFO solos part 1 while it is muted: the solo clears the mute, so the part must play
 tap btn 5
 run 100
-expect_px 7 177 0000
+expect_px 7 177 3186
 expect_px 19 177 FD80
 midi 1 90 3c 64
 run 100
@@ -28,7 +28,7 @@ midi 1 80 3c 00
 expect_px 40 150 5ACB
 tap btn 5
 run 100
-expect_px 19 177 0000
+expect_px 19 177 3186
 expect_px 40 150 FD07
 midi 1 90 3d 64
 run 100

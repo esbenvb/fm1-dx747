@@ -35,11 +35,11 @@ tap key 7
 run 100
 expect_engine 7 65 72
 expect_engine 0 0 127
-# the same on the Range page, for the framed layer
+# the same on the Range page, for the framed layer (the octave buttons step the pages there, so the octave goes back first)
+tap btn 0
 tap btn 6
 tap btn 6
 expect_screen 4
-tap btn 0
 tap btn 10
 tap key 2
 run 60

@@ -37,12 +37,24 @@ static void draw_head(void)
 static void draw_title(const char *t, const char *right)
 {
     px_text(4, 29, t, 2, C_AC);
-    if (right) px_text_r(236, 33, right, 1, C_DIM);
+    if (right) px_text_r(236, 33, right, 1, C_TX);
 }
-static void draw_hint(const char *s)
+static void draw_hint(const char *s) { px_text_c(120, 230, s, 1, C_TX); }
+/* Page tabs: the current one filled. */
+static void draw_tabs(int x, int y, const char *const *names, unsigned n, unsigned cur)
 {
-    if (ui.notice && (int32_t)(ui.notice_until - fr.now) > 0) px_text_c(120, 230, ui.notice, 1, C_AM);
-    else px_text_c(120, 230, s, 1, C_DIM);
+    for (unsigned i = 0; i < n; ++i) {
+        int w = (int)text_w(names[i], 1) + 10;
+        if (i == cur) { px_rect(x, y, w, 14, C_AC); px_text(x + 5, y + 4, names[i], 1, C_BLACK); }
+        else { px_frame(x, y, w, 14, C_LN); px_text(x + 5, y + 4, names[i], 1, C_TX); }
+        x += w + 6;
+    }
+}
+static int tabs_w(const char *const *names, unsigned n)
+{
+    int w = -6;
+    for (unsigned i = 0; i < n; ++i) w += (int)text_w(names[i], 1) + 16;
+    return w;
 }
 /* A coloured chip with a one or two digit number in it. */
 static void chip_n(unsigned number, int x, int y, int w, int h, uint16_t color, unsigned sel)
@@ -56,34 +68,35 @@ static void chip_n(unsigned number, int x, int y, int w, int h, uint16_t color, 
         px_text_c(x + w / 2, ty, d, 1, C_BLACK);
         px_text_c(x + w / 2 + 1, ty, d, 1, C_BLACK);
     }
-    if (sel) px_frame(x - 2, y - 2, w + 4, h + 4, C_TX);
+    if (sel) px_rect(x - 3, y - 1, 2, h + 2, C_TX);
 }
-/* A part's chip: its MIDI channel. An empty slot is an outline with the slot number. */
+/* A part's chip: the part number, in the part's colour. The MIDI channel is always written out ("CH 5"), never a bare
+ * number, so the two cannot be mistaken for each other. An empty slot is an outline with the slot number. */
 static void part_chip(unsigned p, int x, int y, int w, int h, unsigned sel)
 {
-    const struct dx_part *pt = &fr.live.parts.part[p];
-    if (pt->channel) { chip_n(pt->channel, x, y, w, h, part_color(p), sel); return; }
+    if (part_used(p)) { chip_n(p + 1U, x, y, w, h, part_color(p), sel); return; }
     char d[3];
     put_u(d, p + 1U);
     px_dotted(x, y, w, h, sel ? C_TX : C_LN);
     px_text_c(x + w / 2, y + (h - 7) / 2, d, 1, C_DIM);
+    if (sel) px_rect(x - 3, y - 1, 2, h + 2, C_TX);
 }
-/* An engine's chip: the channel of the part it is a layer of, or an outline when the engine is free. */
+/* An engine's chip: the number of the part it is a layer of, or an outline when the engine is free. */
 static void engine_chip(unsigned e, int x, int y, int w, int h, unsigned sel)
 {
     unsigned owner = fr.live.parts.layer[e].owner;
-    if (owner < DX_PARTS && fr.live.parts.part[owner].channel) { chip_n(fr.live.parts.part[owner].channel, x, y, w, h, engine_color(e), sel); return; }
+    if (owner < DX_PARTS && part_used(owner)) { chip_n(owner + 1U, x, y, w, h, engine_color(e), sel); return; }
     char d[2] = {(char)('1' + e), 0};
     px_frame(x, y, w, h, C_LN);
-    px_text_c(x + w / 2, y + (h - 7) / 2, d, 1, C_MU);
-    if (sel) px_frame(x - 2, y - 2, w + 4, h + 4, C_TX);
+    px_text_c(x + w / 2, y + (h - 7) / 2, d, 1, C_DIM);
+    if (sel) px_rect(x - 3, y - 1, 2, h + 2, C_TX);
 }
 static void tile(unsigned i, const char *label, const char *val, uint16_t color)
 {
     int x = 6 + 59 * (int)i, y = 195;
     unsigned scale = text_w(val, 2) > 49 ? 1U : 2U;
     px_frame(x, y, 55, 32, C_LN);
-    px_text(x + 3, y + 3, label, 1, C_DIM);
+    px_text(x + 3, y + 3, label, 1, C_TX);
     px_text_c(x + 27, y + (scale == 2 ? 14 : 19), val, scale, color);
 }
 static void tile_u(unsigned i, const char *label, unsigned v, uint16_t color) { put_u(tb, v); tile(i, label, tb, color); }
@@ -172,9 +185,9 @@ static void draw_safe(void)
     px_rect(20, 74, 200, 1, C_LN);
     px_text_c(120, 90, "DX747 STARTED WITHOUT ITS ENGINES,", 1, C_TX);
     px_text_c(120, 104, "SCENES, SETTINGS AND RADIO SETUP.", 1, C_TX);
-    px_text_c(120, 126, "NOTHING IS LOADED OR SAVED.", 1, C_DIM);
-    px_text_c(120, 150, "USB MIDI AND THE FIRMWARE UPDATE", 1, C_DIM);
-    px_text_c(120, 164, "PAGE STILL WORK.", 1, C_DIM);
+    px_text_c(120, 126, "NOTHING IS LOADED OR SAVED.", 1, C_TX);
+    px_text_c(120, 150, "USB MIDI AND THE FIRMWARE UPDATE", 1, C_TX);
+    px_text_c(120, 164, "PAGE STILL WORK.", 1, C_TX);
     px_text_c(120, 196, "POWER OFF, RELEASE ENV + LFO,", 1, C_AC);
     px_text_c(120, 210, "POWER ON FOR A NORMAL START.", 1, C_AC);
 }
@@ -218,10 +231,10 @@ static void draw_parts(void)
     for (unsigned p = 0; p < DX_PARTS; ++p) {
         int y = 26 + 25 * (int)p;
         unsigned used = part_used(p), sel = p == sel_part();
-        if (sel) px_frame(1, y, 238, 25, C_TX);
+        if (sel) { px_rect(1, y, 238, 25, C_SEL); px_rect(1, y, 2, 25, C_TX); }
         part_chip(p, 4, y + 2, 26, 21, 0);
         if (!used) {
-            px_text(36, y + 9, sel ? "EMPTY  ENV = NEW PART" : "EMPTY", 1, sel ? C_AM : C_LN);
+            px_text(36, y + 9, sel ? "EMPTY  ENV = NEW PART" : "EMPTY", 1, sel ? C_AM : C_DIM);
             continue;
         }
         const struct dx_part *pt = &fr.live.parts.part[p];
@@ -234,37 +247,50 @@ static void draw_parts(void)
         px_rect(158, y + 3, 58, 19, RGB(0x10, 0x10, 0x10));
         draw_lanes(p, 158, y + 3, 58, 19);
         if (n > 1) { char *o = put_s(tb, "+"); put_u(o, n - 1U); px_text(220, y + 9, tb, 1, muted ? C_DIM : C_TX); }
-        if (sel && n > 1) { /* the selected part names its other layers; the rows stay uniform without it */
-            char line[40], *o = line;
-            *o++ = '+'; *o++ = ' ';
-            for (unsigned i = 0; i < n; ++i) {
-                if (list[i] == (unsigned)part_main(p)) continue;
-                char nm[11];
-                trim_name(nm, fr.e[list[i]].name, 10);
-                if ((o - line) + (int)strlen(nm) + 2 > 38) break;
-                if (o > line + 2) { *o++ = ','; *o++ = ' '; }
-                o = put_s(o, nm);
+        { /* the channel is always written out; the selected part names its other layers after it (twenty letters fit left of the bars) */
+            char line[24], *o = put_s(line, "CH "); o = put_u(o, pt->channel);
+            if (sel && n > 1) {
+                o = put_s(o, " +");
+                for (unsigned i = 0; i < n; ++i) {
+                    if (list[i] == (unsigned)part_main(p)) continue;
+                    char nm[11];
+                    trim_name(nm, fr.e[list[i]].name, 10);
+                    if ((o - line) + (int)strlen(nm) + 1 > 20) break;
+                    *o++ = ' '; o = put_s(o, nm);
+                }
             }
-            *o = 0;
-            px_text(36, y + 17, line, 1, C_DIM);
+            px_text(36, y + 17, line, 1, sel ? C_AC : C_TX);
         }
     }
-    draw_hint("SELECT = PART  SEQ = LAYERS  ENV = ADD");
+    draw_hint("SELECT PART  PRESETS SOUND  HOME DETAIL");
 }
 
 /* ---- one part: its layers --------------------------------------------------------- */
 
-static void draw_part_title(void)
+/* The identity row under the header: a small coloured caption and a large number for each of the part, the layer, the MIDI
+ * channel and the part level, so none of them is mistaken for another. */
+static int ident_group(int x, const char *cap, uint16_t cap_color, const char *num, const char *suffix, uint16_t num_color)
+{
+    px_text(x, 42, cap, 1, cap_color);                  /* the caption sits on the baseline of the number */
+    x += (int)text_w(cap, 1) + 5;
+    px_text(x, 28, num, 3, num_color);
+    x += (int)text_w(num, 3);
+    if (suffix) { px_text(x + 3, 35, suffix, 2, C_DIM); x += 3 + (int)text_w(suffix, 2); }
+    return x;
+}
+static void draw_ident(unsigned with_layer, unsigned with_channel, unsigned with_level)
 {
     unsigned p = sel_part();
-    char *o = put_s(tb, "PART "); put_u(o, p + 1U);
-    px_text(4, 29, tb, 2, part_used(p) ? part_color(p) : C_DIM);
-    if (part_used(p)) {
-        uint8_t list[DX_ENGINES];
-        unsigned n = part_layers(p, list);
-        o = put_s(tb, "CH "); o = put_u(o, fr.live.parts.part[p].channel); o = put_s(o, n == 1 ? "  1 LAYER" : "  "); if (n > 1) { o = put_u(o, n); put_s(o, " LAYERS"); }
-        px_text_r(236, 33, tb, 1, C_DIM);
-    } else px_text_r(236, 33, "EMPTY", 1, C_DIM);
+    char t[8], u[8];
+    put_u(t, p + 1U);
+    int x = ident_group(4, "PART", part_used(p) ? part_color(p) : C_DIM, t, NULL, C_TX);
+    if (!part_used(p)) { px_text(x + 14, 35, "EMPTY", 2, C_TX); return; }
+    uint8_t list[DX_ENGINES];
+    unsigned n = part_layers(p, list), sl = fr.live.parts.part[p].sel < n ? fr.live.parts.part[p].sel : 0U;
+    x += 12;
+    if (with_layer) { put_u(t, sl + 1U); put_u(put_s(u, "/"), n); x = ident_group(x, "LAYER", C_AM, t, u, C_TX) + 12; }
+    if (with_channel) { put_u(t, fr.live.parts.part[p].channel); x = ident_group(x, "CH", C_AC, t, NULL, C_TX) + 12; }
+    if (with_level) { put_u(t, fr.live.parts.part[p].level); (void)ident_group(x, "LEVEL", C_GR, t, NULL, C_TX); }
 }
 static void draw_no_part(void)
 {
@@ -277,16 +303,16 @@ static void draw_part(void)
 {
     unsigned p = sel_part();
     draw_head();
-    draw_part_title();
+    draw_ident(1, 1, 0);
     if (!part_used(p)) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
     uint8_t list[DX_ENGINES];
     unsigned n = part_layers(p, list), sl = fr.live.parts.part[p].sel < n ? fr.live.parts.part[p].sel : 0U;
     for (unsigned i = 0; i < n; ++i) {
         unsigned e = list[i];
         const struct dx_engine_cfg *c = &fr.cfg.e[e];
-        int y = 49 + 14 * (int)i;
+        int y = 56 + 14 * (int)i;
         uint16_t col = engine_color(e);
-        if (i == sl) px_frame(2, y - 2, 236, 14, C_TX);
+        if (i == sl) { px_rect(2, y - 2, 236, 14, C_SEL); px_rect(2, y - 2, 2, 14, C_TX); }
         char d[2] = {(char)('1' + i), 0};
         px_rect(5, y, 12, 10, col); px_text_c(11, y + 2, d, 1, C_BLACK);
         char name[11];
@@ -303,8 +329,8 @@ static void draw_part(void)
     int e = list[sl];
     const struct dx_engine_cfg *se = &fr.cfg.e[e];
     char *o = put_s(tb, "LAYER "); o = put_u(o, sl + 1U); o = put_s(o, ": "); o = put_range(o, se->lo, se->hi);
-    px_text(4, 49 + 14 * (int)n + 4, tb, 1, C_DIM);
-    px_text(4, 49 + 14 * (int)n + 15, "DX7 SYSEX EDITS THE FRAMED LAYER", 1, C_DIM);
+    px_text(4, 56 + 14 * (int)n + 4, tb, 1, C_TX);
+    px_text(4, 56 + 14 * (int)n + 15, "DX7 SYSEX EDITS THE FRAMED LAYER", 1, C_TX);
     put_u(tb, fr.live.parts.part[p].channel); tile(0, "CHANNEL", tb, part_color(p));
     tile_u(1, "LEVEL", fr.live.parts.part[p].level, C_TX);
     o = put_u(tb, sl + 1U); *o++ = '/'; put_u(o, n); tile(2, "LAYER", tb, C_TX);
@@ -312,27 +338,84 @@ static void draw_part(void)
     draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "ALGO LAYER  ENV ADD  LFO DEL  ARP LEARN");
 }
 
+/* ---- the part in detail: HOME a second time ---------------------------------------- */
+
+/* Note 0..127 along a 224 px line, 1.75 px to the note. */
+static int note_x(unsigned note) { return 8 + (int)(note > 127 ? 127U : note) * 224 / 128; }
+/* One line per layer over a keyboard ruler: its sound, its keys as a bar, an octave shift as a small amber tag, its level,
+ * pan and velocity window. The channel and the part level are the big numbers above and are edited with K1 and K2.
+ * Up to three layers get roomy lines (the name large, the figures spelled out); more are packed as tightly as eight need. */
+static void draw_detail(void)
+{
+    unsigned p = sel_part();
+    draw_head();
+    draw_ident(0, 1, 1);
+    if (!part_used(p)) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
+    uint8_t list[DX_ENGINES];
+    unsigned n = part_layers(p, list), sl = fr.live.parts.part[p].sel < n ? fr.live.parts.part[p].sel : 0U;
+    px_rect(8, 64, 224, 1, C_LN);
+    for (unsigned c = 0; c <= 10; ++c) {            /* the ruler: a tick at every C, a label at every other one */
+        int x = note_x(c * 12U);
+        px_rect(x, c == 5 ? 60 : 62, 1, c == 5 ? 5 : 3, c == 5 ? C_TX : C_LN);
+        if (c % 2U == 1U) { char *o = put_s(tb, "C"); put_i(o, (int)c - 1); px_text_c(x, 52, tb, 1, c == 5 ? C_TX : C_DIM); }
+    }
+    int big = n <= 3, rh = big ? 46 : 152 / (int)n;
+    for (unsigned i = 0; i < n; ++i) {
+        unsigned e = list[i];
+        const struct dx_engine_cfg *c = &fr.cfg.e[e];
+        int y = 69 + rh * (int)i, ly = y + (big ? 27 : 8), lh = big ? 14 : rh - 12 > 14 ? 14 : rh - 12;
+        uint16_t col = engine_color(e);
+        if (i == sl) { px_rect(2, y - 3, 236, rh, C_SEL); px_rect(2, y - 3, 2, rh, C_TX); }
+        char d[2] = {(char)('1' + i), 0};
+        char name[11];
+        trim_name(name, fr.e[e].name, 10);
+        unsigned vlo = c->vlo ? c->vlo : 1U, vhi = c->vhi ? c->vhi : 127U, narrow = vlo != 1 || vhi != 127;
+        int pan = fr.live.pan[e];
+        char *o;
+        if (big) {
+            px_rect(5, y, 14, 15, col); px_text_c(12, y + 4, d, 1, C_BLACK);
+            px_text(24, y + 1, name, 2, c->mute ? C_DIM : C_TX);
+            o = put_s(tb, "LEVEL "); o = put_u(o, fr.live.parts.layer[e].lvl);
+            if (pan) { o = put_s(o, "  PAN "); o = put_pan(o, pan); }
+            if (narrow) { o = put_s(o, "  VEL "); o = put_u(o, vlo); *o++ = '-'; put_u(o, vhi); }
+            px_text(24, y + 18, tb, 1, C_TX);
+        } else {
+            px_rect(5, y, 12, 9, col); px_text_c(11, y + 1, d, 1, C_BLACK);
+            px_text(20, y + 1, name, 1, c->mute ? C_DIM : C_TX);
+            o = put_s(tb, "LVL "); put_u(o, fr.live.parts.layer[e].lvl);
+            px_text(86, y + 1, tb, 1, C_TX);
+            int tx = 138;
+            if (pan) { o = put_s(tb, "PAN "); put_pan(o, pan); px_text(tx, y + 1, tb, 1, C_TX); tx += 52; }
+            if (narrow) { o = put_s(tb, "V"); o = put_u(o, vlo); *o++ = '-'; put_u(o, vhi); px_text(tx, y + 1, tb, 1, C_AM); }
+        }
+        px_rect(8, ly, 224, lh, RGB(0x10, 0x10, 0x10));
+        for (unsigned k = 0; k <= 10; ++k) px_rect(note_x(k * 12U), ly, 1, lh, k == 5 ? C_MU : C_GD);
+        int x0 = note_x(c->lo), x1 = note_x(c->hi + 1U);
+        if (c->hi == 127) x1 = 232;
+        if (x1 - x0 < 3) x1 = x0 + 3;
+        px_rect(x0, ly + 1, x1 - x0, lh - 2, c->mute ? C_MU : i % 2U ? shade(col) : col);
+        if (c->shift) {                             /* the shift as a small tag beside the bar, on its right if there is room */
+            put_shift(tb, c->shift);
+            int w = (int)text_w(tb, 1), tag = x1 + 3, ty = ly + (lh - 7) / 2;
+            if (tag + w > 232) {
+                tag = x0 - 3 - w;
+                if (tag < 8) { tag = x1 - w - 3; px_rect(tag - 2, ty, w + 4, 7, C_BLACK); } /* a bar from end to end: the tag sits on its right end */
+            }
+            px_text(tag, ty, tb, 1, C_AM);
+        }
+    }
+    if (big) px_text(4, 214, "BARS = KEYS  +N = SHIFT  V = VELOCITY", 1, C_TX);
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "K1 CH K2 VOL K3 LAYER VOL PRESETS SOUND");
+}
+
 /* ---- layer pages ------------------------------------------------------------------- */
 
 static void draw_pbar(unsigned page)
 {
-    unsigned p = sel_part();
-    part_chip(p, 4, 28, 26, 16, 0);
-    if (part_used(p)) {
-        uint8_t list[DX_ENGINES];
-        unsigned n = part_layers(p, list), sl = fr.live.parts.part[p].sel < n ? fr.live.parts.part[p].sel : 0U;
-        char *o = put_s(tb, "PART "); o = put_u(o, p + 1U); o = put_s(o, "  LAYER "); o = put_u(o, sl + 1U); *o++ = '/'; put_u(o, n);
-        px_text(38, 32, tb, 1, C_TX);
-    } else px_text(38, 32, "EMPTY PART", 1, C_DIM);
+    draw_ident(1, 1, 0);
     static const char *const names[4] = {"SOUND", "RANGE", "VEL", "SENDS"};
-    int x = 4;
-    for (unsigned i = 0; i < 4; ++i) {
-        int w = (int)text_w(names[i], 1) + 10;
-        if (i == page) { px_rect(x, 52, w, 14, C_AC); px_text(x + 5, 56, names[i], 1, C_BLACK); }
-        else { px_frame(x, 52, w, 14, C_LN); px_text(x + 5, 56, names[i], 1, C_DIM); }
-        x += w + 6;
-    }
-    px_text_r(236, 56, "EDIT = NEXT", 1, C_DIM);
+    draw_tabs(4, 52, names, 4, page);
+    px_text_r(236, 56, "OCT = PAGE", 1, C_TX);
 }
 static void draw_esound(void)
 {
@@ -347,20 +430,20 @@ static void draw_esound(void)
     trim_name(name, fr.e[en].name, 10);
     px_text(4, 72, name, 3, col);
     char *o = put_s(tb, "PROGRAM "); put_u(o, fr.e[en].program + 1U);
-    px_text(4, 98, tb, 1, C_DIM);
-    px_text(4, 115, "LEVEL", 1, C_DIM); bar(64, 112, 150, 12, col, lvl, 127); put_u(tb, lvl); px_text_r(236, 115, tb, 1, C_TX);
-    px_text(4, 137, "PAN", 1, C_DIM); px_frame(64, 134, 150, 12, C_LN); px_rect(139, 134, 1, 12, C_DIM);
+    px_text(4, 98, tb, 1, C_TX);
+    px_text(4, 115, "LEVEL", 1, C_TX); bar(64, 112, 150, 12, col, lvl, 127); put_u(tb, lvl); px_text_r(236, 115, tb, 1, C_TX);
+    px_text(4, 137, "PAN", 1, C_TX); px_frame(64, 134, 150, 12, C_LN); px_rect(139, 134, 1, 12, C_DIM);
     px_rect(139 + fr.live.pan[en] * 7 / 5 - 2, 136, 5, 8, col);
-    px_text(4, 159, "BRIGHT", 1, C_DIM); px_frame(64, 156, 150, 12, C_LN); px_rect(139, 156, 1, 12, C_DIM);
+    px_text(4, 159, "BRIGHT", 1, C_TX); px_frame(64, 156, 150, 12, C_LN); px_rect(139, 156, 1, 12, C_DIM);
     { int b = fr.live.bright[en] * 7 / 5; if (b >= 0) px_rect(140, 158, b, 8, C_AM); else px_rect(139 + b, 158, -b, 8, C_AM); }
     o = put_s(tb, "PLAYS: CH "); o = put_u(o, fr.live.parts.part[p].channel); o = put_s(o, "  "); o = put_range(o, c->lo, c->hi);
     if (c->shift) { o = put_s(o, "  "); put_shift(o, c->shift); }
     px_text(4, 180, tb, 1, C_AC);
-    o = put_u(tb, fr.e[en].program + 1U); tile(0, "PATCH", tb, col);
-    tile_u(1, "LEVEL", lvl, C_TX);
-    put_pan(tb, fr.live.pan[en]); tile(2, "PAN", tb, C_TX);
-    o = tb; if (fr.live.bright[en] > 0) *o++ = '+'; put_i(o, fr.live.bright[en]); tile(3, "BRIGHT", tb, C_AM);
-    draw_hint("KEYS PLAY THE WHOLE PART");
+    tile_u(0, "LEVEL", lvl, C_TX);
+    put_pan(tb, fr.live.pan[en]); tile(1, "PAN", tb, C_TX);
+    o = tb; if (fr.live.bright[en] > 0) *o++ = '+'; put_i(o, fr.live.bright[en]); tile(2, "BRIGHT", tb, C_AM);
+    put_u(tb, fr.e[en].program + 1U); tile(3, "PRESETS", tb, col);
+    draw_hint("K1 LEVEL  K2 PAN  K3 BRIGHT");
 }
 static void draw_eplays(void)
 {
@@ -372,9 +455,9 @@ static void draw_eplays(void)
     uint16_t col = engine_color(en);
     int l2 = (int)c->lo + c->shift, h2 = (int)c->hi + c->shift;
     l2 = l2 < 0 ? 0 : l2 > 127 ? 127 : l2; h2 = h2 < 0 ? 0 : h2 > 127 ? 127 : h2;
-    px_text(4, 72, "THE PART LISTENS ON CHANNEL", 1, C_DIM); put_u(tb, fr.live.parts.part[p].channel); px_text(4, 82, tb, 2, col);
-    px_text(4, 102, "THIS LAYER PLAYS NOTES", 1, C_DIM); put_range(tb, c->lo, c->hi); px_text(4, 112, tb, 2, C_TX);
-    px_text(4, 132, "SOUNDS AT", 1, C_DIM);
+    px_text(4, 72, "THE PART LISTENS ON CHANNEL", 1, C_TX); put_u(tb, fr.live.parts.part[p].channel); px_text(4, 82, tb, 2, col);
+    px_text(4, 102, "THIS LAYER PLAYS NOTES", 1, C_TX); put_range(tb, c->lo, c->hi); px_text(4, 112, tb, 2, C_TX);
+    px_text(4, 132, "SOUNDS AT", 1, C_TX);
     char *o = put_note(tb, (unsigned)l2); *o++ = '-'; o = put_note(o, (unsigned)h2);
     if (c->shift) { o = put_s(o, "  ("); o = put_shift(o, c->shift); put_s(o, " OCT)"); }
     px_text(4, 142, tb, 2, c->shift ? C_AM : C_TX);
@@ -387,7 +470,7 @@ static void draw_eplays(void)
         if (list[i] != en && x->lo <= c->hi && x->hi >= c->lo) { *wo++ = ' '; *wo++ = (char)('1' + i); ++shared; }
     }
     *wo = 0;
-    px_text(4, 166, shared ? with : "NO OTHER LAYER ON THESE KEYS", 1, shared ? C_AM : C_DIM);
+    px_text(4, 166, shared ? with : "NO OTHER LAYER ON THESE KEYS", 1, shared ? C_AM : C_TX);
     put_note(tb, c->lo); tile(0, "LOW", tb, col);
     put_note(tb, c->hi); tile(1, "HIGH", tb, col);
     o = put_shift(tb, c->shift); put_s(o, c->shift % 12 ? "" : " OCT"); tile(2, "SHIFT", tb, C_AM);
@@ -403,12 +486,12 @@ static void draw_evel(void)
     const struct dx_engine_cfg *c = &fr.cfg.e[en];
     uint16_t col = engine_color(en);
     unsigned vlo = c->vlo ? c->vlo : 1U, vhi = c->vhi ? c->vhi : 127U;
-    px_text(4, 72, "THIS LAYER PLAYS VELOCITIES", 1, C_DIM);
+    px_text(4, 72, "THIS LAYER PLAYS VELOCITIES", 1, C_TX);
     char *o = put_u(tb, vlo); *o++ = '-'; put_u(o, vhi);
     px_text(4, 82, tb, 2, vlo == 1 && vhi == 127 ? C_TX : C_AM);
     uint8_t list[DX_ENGINES];
     unsigned n = part_layers(p, list);
-    px_text(4, 106, "ALL LAYERS OF THE PART (SOFT TO HARD)", 1, C_DIM);
+    px_text(4, 106, "ALL LAYERS OF THE PART (SOFT TO HARD)", 1, C_TX);
     for (unsigned i = 0; i < n; ++i) {
         const struct dx_engine_cfg *x = &fr.cfg.e[list[i]];
         unsigned lo = x->vlo ? x->vlo : 1U, hi = x->vhi ? x->vhi : 127U;
@@ -427,16 +510,16 @@ static void draw_esends(void)
     if (e < 0) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
     unsigned en = (unsigned)e;
     const struct dx_engine_cfg *c = &fr.cfg.e[en];
-    char *o = put_u(tb, fr.e[en].rev); put_s(o, " / 15"); px_text(4, 72, "REVERB SEND", 1, C_DIM); px_text(4, 82, tb, 2, C_TX);
-    o = put_u(tb, fr.e[en].dly); put_s(o, " / 15"); px_text(4, 99, "DELAY SEND", 1, C_DIM); px_text(4, 109, tb, 2, C_TX);
-    put_u(tb, c->poly); px_text(4, 126, "MAX VOICES", 1, C_DIM); px_text(4, 136, tb, 2, C_TX);
+    char *o = put_u(tb, fr.e[en].rev); put_s(o, " / 15"); px_text(4, 72, "REVERB SEND", 1, C_TX); px_text(4, 82, tb, 2, C_TX);
+    o = put_u(tb, fr.e[en].dly); put_s(o, " / 15"); px_text(4, 99, "DELAY SEND", 1, C_TX); px_text(4, 109, tb, 2, C_TX);
+    put_u(tb, c->poly); px_text(4, 126, "MAX VOICES", 1, C_TX); px_text(4, 136, tb, 2, C_TX);
     bar(100, 84, 136, 12, RGB(0x8F, 0xB4, 0xFF), fr.e[en].rev, 15);
     bar(100, 111, 136, 12, RGB(0xFF, 0xB8, 0x6B), fr.e[en].dly, 15);
     for (unsigned v = 0; v < 8; ++v) { /* one square per voice this layer may use */
         if (v < c->poly) px_rect(100 + 17 * (int)v, 138, 15, 12, engine_color(en)); else px_frame(100 + 17 * (int)v, 138, 15, 12, C_LN);
     }
-    px_text(4, 160, "THIS LAYER USES ENGINE", 1, C_DIM); put_u(tb, en + 1U); px_text(4, 170, tb, 2, C_TX);
-    px_text(4, 190, "A NOTE ON THE PART USES ONE VOICE", 1, C_DIM);
+    px_text(4, 160, "THIS LAYER USES ENGINE", 1, C_TX); put_u(tb, en + 1U); px_text(4, 170, tb, 2, C_TX);
+    px_text(4, 186, "A NOTE ON THE PART USES ONE VOICE", 1, C_TX);
     tile_u(0, "REV", fr.e[en].rev, C_TX); tile_u(1, "DLY", fr.e[en].dly, C_TX); tile_u(2, "POLY", c->poly, C_TX);
     tile_u(3, "ENGINE", en + 1U, C_AC);
     draw_hint("K1 REVERB  K2 DELAY  K3 MAX VOICES");
@@ -466,66 +549,111 @@ static void draw_mon(void)
         if (l->status == 0xf3) px_text(44, y, "--", 2, C_DIM); else { put_2(tb, l->ch + 1U); px_text(44, y, tb, 2, C_TX); }
         log_text(tb, l); px_text(80, y, tb, 2, i == 0 ? C_TX : C_DIM);
     }
-    if (!fr.nlog) px_text(4, 60, "NO MIDI YET", 2, C_DIM);
+    if (!fr.nlog) px_text(4, 60, "NO MIDI YET", 2, C_TX);
     struct cell c[16];
     memset(c, 0, sizeof c);
     for (unsigned k = 0; k < 16; ++k) { cell_num(&c[k], k); if ((fr.active >> k) & 1U) c[k].fill = C_AM; }
     strip(196, c);
-    px_text(4, 212, "AMBER = SENDING NOW", 1, C_DIM);
+    px_text(4, 212, "AMBER = SENDING NOW", 1, C_TX);
     draw_hint("PLAY EACH KEYBOARD TO FIND ITS CH");
 }
 
 /* ---- mix, fx, master ------------------------------------------------------- */
 
+/* The pan of a part: where its layers sit, the middle of the spread (one layer: its own pan). min and max come back too. */
+static int part_pan(unsigned p, int *lo, int *hi)
+{
+    uint8_t list[DX_ENGINES];
+    unsigned n = part_layers(p, list);
+    int mn = 50, mx = -50;
+    for (unsigned i = 0; i < n; ++i) { int v = fr.live.pan[list[i]]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    if (!n) mn = mx = 0;
+    if (lo) *lo = mn;
+    if (hi) *hi = mx;
+    return (mn + mx) / 2;
+}
+/* A part's sends, the average over its layers. */
+static unsigned part_send(unsigned p, unsigned which)
+{
+    uint8_t list[DX_ENGINES];
+    unsigned n = part_layers(p, list), sum = 0;
+    for (unsigned i = 0; i < n; ++i) sum += which ? fr.e[list[i]].dly : fr.e[list[i]].rev;
+    return n ? (sum + n / 2U) / n : 0U;
+}
 static void draw_mix(void)
 {
     draw_head();
-    draw_title("MIX", "ONE FADER PER PART");
+    draw_title("MIX", NULL);
+    px_text_r(236, 33, ui.mixkeys ? "WHITE KEYS = MUTE / SOLO" : "ONE FADER PER PART", 1, ui.mixkeys ? C_AM : C_TX);
     for (unsigned p = 0; p < DX_PARTS; ++p) {
         int x = 4 + 29 * (int)p;
-        part_chip(p, x, 46, 26, 16, p == sel_part());
+        unsigned sel = p == sel_part();
+        if (sel) px_rect(x - 3, 44, 29, 156, C_SEL);
+        part_chip(p, x, 46, 26, 16, sel);
         if (!part_used(p)) continue;
         uint8_t list[DX_ENGINES];
         unsigned n = part_layers(p, list), muted = part_muted(p), solo = part_solo(p), audible = 0, level = 0;
         for (unsigned i = 0; i < n; ++i) { audible |= fr.e[list[i]].audible; if (fr.e[list[i]].level > level) level = fr.e[list[i]].level; }
         uint16_t col = !muted && !audible ? C_MU : part_color(p);   /* silenced by another part's solo */
-        int fill = 98 * (int)fr.live.parts.part[p].level / 127, meter = muted || !audible ? 0 : 98 * (int)level / 127;
-        px_frame(x + 3, 66, 12, 100, C_LN); px_rect(x + 4, 166 - fill, 10, fill, col);
-        px_frame(x + 18, 66, 6, 100, C_LN); px_rect(x + 19, 165 - meter, 4, meter, level >= 100 ? C_AM : C_GR);
-        int m = part_main(p) >= 0 ? part_main(p) : 0;
-        px_rect(x + 3, 170, 22, 1, C_LN); px_rect(x + 14 + fr.live.pan[m] / 5, 169, 3, 3, col);
-        if (muted) px_rect(x + 2, 176, 11, 11, C_RD); else px_frame(x + 2, 176, 11, 11, C_LN);
-        px_text_c(x + 7, 178, "M", 1, muted ? C_BLACK : C_DIM);
-        if (solo) px_rect(x + 14, 176, 11, 11, C_AM); else px_frame(x + 14, 176, 11, 11, C_LN);
-        px_text_c(x + 19, 178, "S", 1, solo ? C_BLACK : C_DIM);
-        if (n > 1) { char d[3]; put_u(d, n); px_text_c(x + 13, 190, d, 1, C_DIM); }
+        char ch[6], *o = put_s(ch, "CH"); put_u(o, fr.live.parts.part[p].channel);
+        px_text_c(x + 13, 66, ch, 1, sel ? C_AC : C_TX);
+        int fill = 88 * (int)fr.live.parts.part[p].level / 127, meter = muted || !audible ? 0 : 88 * (int)level / 127;
+        px_frame(x + 3, 76, 12, 90, C_LN); px_rect(x + 4, 165 - fill, 10, fill, col);
+        px_frame(x + 18, 76, 6, 90, C_LN); px_rect(x + 19, 165 - meter, 4, meter, level >= 100 ? C_AM : C_GR);
+        int lo, hi, pan = part_pan(p, &lo, &hi), cx = x + 14;        /* the pan track: the whole part, with its spread when its layers differ */
+        px_rect(x + 3, 170, 22, 1, C_LN); px_rect(cx, 168, 1, 5, C_LN);
+        if (hi > lo) px_rect(cx + lo * 11 / 50, 170, (hi - lo) * 11 / 50 + 1, 1, col);
+        px_rect(cx + pan * 11 / 50 - 1, 167, 3, 7, col);
+        if (muted) px_rect(x + 2, 176, 11, 11, C_RD); else px_frame(x + 2, 176, 11, 11, ui.mixkeys ? C_AC : C_LN);
+        px_text_c(x + 7, 178, "M", 1, muted ? C_BLACK : C_TX);
+        if (solo) px_rect(x + 14, 176, 11, 11, C_AM); else px_frame(x + 14, 176, 11, 11, ui.mixkeys ? C_AC : C_LN);
+        px_text_c(x + 19, 178, "S", 1, solo ? C_BLACK : C_TX);
+        if (n > 1) { char d[3]; put_u(d, n); px_text_c(x + 13, 190, d, 1, C_TX); }
     }
-    px_text(4, 206, "FADER = PART LEVEL  DIGIT = LAYERS", 1, C_DIM);
-    draw_hint("K1 LEVEL  K2 PAN  ENV MUTE  LFO SOLO");
+    if (part_used(sel_part())) {                    /* the selected part in words: what the knobs are changing */
+        unsigned p = sel_part();
+        int pan = part_pan(p, NULL, NULL);
+        char *o = put_s(tb, "PART "); o = put_u(o, p + 1U); o = put_s(o, "  CH "); o = put_u(o, fr.live.parts.part[p].channel);
+        o = put_s(o, "  LEVEL "); o = put_u(o, fr.live.parts.part[p].level); o = put_s(o, "  PAN "); put_pan(o, pan);
+        px_text(4, 206, tb, 1, C_TX);
+    } else px_text(4, 206, "EMPTY PART  ENV ADDS A SOUND", 1, C_TX);
+    draw_hint(ui.mixkeys ? "KEYS MUTE/SOLO  SELECT PART  EDIT = PLAY" : "K1 LVL K2 PAN K3 REV K4 DLY ALGO CH");
+}
+/* The value of effect knob i (decay, delay time, feedback, return) as the tiles and the overlay write it. */
+static void fx_text(unsigned i, const uint8_t v[4], char *o)
+{
+    if (i != 1) { put_u(o, v[i]); return; }
+    if (v[1] >= GROOVE_DELAY_SYNC && v[1] <= GROOVE_DELAY_LAST) {
+        static const char *const sync[9] = {"1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/16D", "1/8", "1/8D", "1/4"};
+        put_s(o, sync[v[1] - GROOVE_DELAY_SYNC]);
+    } else { unsigned ms = v[1] < 128 ? v[1] * 3U : v[1] <= 201 ? 360U + (v[1] - 137U) * 10U : 1020U + (v[1] - 202U) * 20U; put_s(put_u(o, ms), "MS"); }
+}
+static void draw_fx_tabs(unsigned page)
+{
+    static const char *const names[2] = {"FX", "FILTER"};
+    draw_tabs(236 - tabs_w(names, 2), 29, names, 2, page);
 }
 static void draw_fx(void)
 {
     draw_head();
-    draw_title("FX", "SHARED REVERB + DELAY");
-    px_text(40, 46, "REV SEND", 1, C_DIM); px_text(136, 46, "DLY SEND", 1, C_DIM);
+    draw_title("FX", NULL);
+    draw_fx_tabs(0);
+    px_text(40, 46, "REV SEND", 1, C_TX); px_text(136, 46, "DLY SEND", 1, C_TX);
     for (unsigned e = 0; e < DX_ENGINES; ++e) {
         int y = 56 + 17 * (int)e;
         const struct dx_engine_cfg *c = &fr.cfg.e[e];
+        if ((int)e == sel_engine()) px_rect(0, y - 1, 240, 16, C_SEL);
         engine_chip(e, 4, y, 16, 14, (int)e == sel_engine());
         bar(40, y + 2, 80, 10, c->mute || fr.live.parts.layer[e].owner == DX_NO_PART ? C_MU : RGB(0x8F, 0xB4, 0xFF), fr.e[e].rev, 15);
-        put_u(tb, fr.e[e].rev); px_text(128, y + 3, tb, 1, C_TX);
+        put_u(tb, fr.e[e].rev); px_text(123, y + 3, tb, 1, C_TX);
         bar(136, y + 2, 80, 10, c->mute || fr.live.parts.layer[e].owner == DX_NO_PART ? C_MU : RGB(0xFF, 0xB8, 0x6B), fr.e[e].dly, 15);
         put_u(tb, fr.e[e].dly); px_text(224, y + 3, tb, 1, C_TX);
     }
     uint8_t v[4];
     groove_effects_get(v);
-    tile_u(0, "DECAY", v[0], C_TX);
-    if (v[1] >= GROOVE_DELAY_SYNC && v[1] <= GROOVE_DELAY_LAST) {
-        static const char *const sync[9] = {"1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/16D", "1/8", "1/8D", "1/4"};
-        tile(1, "DLY TIME", sync[v[1] - GROOVE_DELAY_SYNC], C_TX);
-    } else { unsigned ms = v[1] < 128 ? v[1] * 3U : v[1] <= 201 ? 360U + (v[1] - 137U) * 10U : 1020U + (v[1] - 202U) * 20U; char *o = put_u(tb, ms); put_s(o, "MS"); tile(1, "DLY TIME", tb, C_TX); }
-    tile_u(2, "FEEDBK", v[2], C_TX); tile_u(3, "RETURN", v[3], C_TX);
-    draw_hint("FX AGAIN = MASTER FILTER");
+    static const char *const labels[4] = {"DECAY", "DLY TIME", "FEEDBK", "RETURN"};
+    for (unsigned i = 0; i < 4; ++i) { fx_text(i, v, tb); tile(i, labels[i], tb, C_TX); }
+    draw_hint("OCT OR FX AGAIN = MASTER FILTER");
 }
 /* Position of a frequency on the 20 Hz to 20 kHz log axis, 0..223. */
 static unsigned log2_q8(unsigned v)
@@ -545,7 +673,8 @@ static void draw_master(void)
 {
     const struct dx_live *l = &fr.live;
     draw_head();
-    draw_title("MASTER", "FILTER + USB TAP");
+    draw_title("MASTER", NULL);
+    draw_fx_tabs(1);
     px_frame(8, 48, 224, 80, C_LN);
     static const unsigned grid[3] = {100, 1000, 10000};
     for (unsigned i = 0; i < 3; ++i) px_rect(axis_x(grid[i]), 49, 1, 78, C_GD);
@@ -566,8 +695,8 @@ static void draw_master(void)
     }
     if (l->filter_type != DX_FILTER_OFF) for (int y = 50; y < 127; y += 4) px_rect(xc, y, 1, 2, C_AM);
     px_text_c(axis_x(100), 131, "100", 1, C_DIM); px_text_c(axis_x(1000), 131, "1K", 1, C_DIM); px_text_c(axis_x(10000), 131, "10K", 1, C_DIM);
-    px_text(8, 146, "USB OUT TAP", 1, C_DIM); px_text(8, 158, "AFTER FILTER, BEFORE VOLUME", 1, C_GR);
-    px_text(8, 174, "BT AND USB IN", 1, C_DIM); px_text(8, 186, "FOLLOW THE KNOB", 1, C_TX);
+    px_text(8, 146, "USB OUT TAP", 1, C_TX); px_text(8, 158, "AFTER FILTER, BEFORE VOLUME", 1, C_GR);
+    px_text(8, 174, "BT AND USB IN", 1, C_TX); px_text(8, 186, "FOLLOW THE KNOB", 1, C_TX);
     static const char *const types[4] = {"OFF", "LP", "HP", "BP"};
     tile(0, "TYPE", types[l->filter_type & 3U], C_TX);
     unsigned hz = l->filter_hz ? l->filter_hz : 1000U;
@@ -575,7 +704,7 @@ static void draw_master(void)
     tile(1, "CUTOFF", tb, C_AM);
     tile_u(2, "RES", l->filter_res, C_TX);
     tile(3, "USB OUT", "PRE VOL", C_GR);
-    draw_hint("FX AGAIN = BACK TO FX PAGE");
+    draw_hint("OCT OR FX AGAIN = BACK TO FX PAGE");
 }
 
 /* ---- scenes ------------------------------------------------------------------ */
@@ -584,32 +713,35 @@ static void draw_scenes(void)
 {
     unsigned bank = ui.scene / DX_SCENES_PER_BANK;
     draw_head();
-    char *o = put_s(tb, "BANK "); *o++ = (char)('A' + bank); o = put_s(o, "  "); o = put_u(o, bank * 16U + 1U); *o++ = '-'; put_u(o, bank * 16U + 16U);
-    draw_title("SCENES", tb);
+    char *o;
+    static const char *const banks[DX_SCENES / DX_SCENES_PER_BANK] = {"A", "B", "C", "D"};
+    draw_title("SCENES", NULL);
+    px_text(116, 33, "BANK", 1, C_TX);
+    draw_tabs(236 - tabs_w(banks, DX_SCENES / DX_SCENES_PER_BANK), 29, banks, DX_SCENES / DX_SCENES_PER_BANK, bank);
     for (unsigned s = 0; s < 16; ++s) {
         unsigned idx = bank * 16U + s;
         int x = 4 + 58 * (int)(s % 4), y = 48 + 38 * (int)(s / 4);
         unsigned has = scene_exists(idx), cur = idx == fr.current_scene, sel = idx == ui.scene;
         if (cur) { px_rect(x, y, 56, 34, RGB(0x00, 0x3C, 0x44)); px_frame(x, y, 56, 34, C_AC); px_frame(x + 1, y + 1, 54, 32, C_AC); }
-        else px_frame(x, y, 56, 34, sel ? C_TX : has ? C_LN : RGB(0x3C, 0x3C, 0x3C));
-        if (sel && cur) px_frame(x - 1, y - 1, 58, 36, C_TX);
-        put_2(tb, idx + 1U); px_text(x + 4, y + 4, tb, 2, has ? (cur ? C_AC : C_TX) : RGB(0x6A, 0x6A, 0x6A));
+        else { if (sel) px_rect(x, y, 56, 34, C_SEL); px_frame(x, y, 56, 34, has ? C_LN : RGB(0x3C, 0x3C, 0x3C)); }
+        if (sel) px_rect(x, y, 2, 34, C_TX);                    /* the cursor: a white bar at the left edge */
+        put_2(tb, idx + 1U); px_text(x + 4, y + 4, tb, 2, has ? (cur ? C_AC : C_TX) : RGB(0x90, 0x90, 0x90));
         if (has) {
             char name[13]; trim_name(name, fr.scene_name[idx], 12); name[8] = 0;
             px_text(x + 4, y + 23, name, 1, C_TX);
             for (unsigned j = 0; j < 8; ++j) px_rect(x + 30 + (int)(j % 4) * 6, y + 5 + (int)(j / 4) * 6, 4, 4, (fr.scene_parts[idx] >> j) & 1U ? EC[j] : RGB(0x2C, 0x2C, 0x2C));
-        } else px_text(x + 4, y + 23, "--", 1, RGB(0x6A, 0x6A, 0x6A));
+        } else px_text(x + 4, y + 23, "--", 1, RGB(0x90, 0x90, 0x90));
     }
     if (ui.mode == M_NAME) {
         px_rect(10, 90, 220, 60, C_BLACK); px_frame(10, 90, 220, 60, C_AC);
         o = put_s(tb, "SAVE AS SCENE "); put_u(o, ui.scene + 1U);
-        px_text(18, 96, tb, 1, C_DIM);
+        px_text(18, 96, tb, 1, C_TX);
         for (unsigned i = 0; i < 12; ++i) {
             char ch[2] = {ui.name[i], 0};
             px_text(18 + 17 * (int)i, 112, ch, 2, i == ui.name_pos ? C_BLACK : C_TX);
             if (i == ui.name_pos) { px_rect(17 + 17 * (int)i, 110, 14, 18, C_AM); px_text(18 + 17 * (int)i, 112, ch, 2, C_BLACK); }
         }
-        px_text(18, 136, "K1 CURSOR  K2 LETTER  SAVE = STORE", 1, C_DIM);
+        px_text(18, 136, "K1 CURSOR  K2 LETTER  SAVE = STORE", 1, C_TX);
     } else if (ui.mode == M_CLAIM) {
         px_rect(10, 78, 220, 84, C_BLACK); px_frame(10, 78, 220, 84, C_AM);
         px_text(18, 84, "FIRST SAVE: FLASH SETUP", 1, C_AM);
@@ -618,9 +750,9 @@ static void draw_scenes(void)
         px_text(18, 122, "SAVE). IT WILL BE ERASED.", 1, C_TX);
         px_text(18, 132, "DX747 CANNOT BACK IT UP.", 1, C_TX);
         px_text(18, 142, "SAVE = ERASE AND CONTINUE", 1, C_AM);
-        px_text(18, 152, "HOME = CANCEL", 1, C_DIM);
+        px_text(18, 152, "HOME = CANCEL", 1, C_TX);
     }
-    draw_hint(ui.mode == M_BROWSE ? "KEYS RECALL  ENV/LFO STEP  SAVE STORES" : "HOME = CANCEL");
+    draw_hint(ui.mode == M_BROWSE ? "KEYS RECALL  OCT BANK  SAVE STORES" : "HOME = CANCEL");
 }
 
 /* ---- system --------------------------------------------------------------------- */
@@ -646,7 +778,7 @@ static void draw_sys(void)
         default: val = fr.storage ? (fr.storage > 0 ? "NEEDS SETUP" : "ERROR") : "READY"; col = fr.storage ? C_AM : C_GR; break;
         }
         if (ui.sys_row == i) { px_rect(0, y, 2, 24, C_AC); }
-        px_text(4, y, labels[i], 1, ui.sys_row == i ? C_AC : C_DIM);
+        px_text(4, y, labels[i], 1, ui.sys_row == i ? C_AC : C_TX);
         px_text(4, y + 9, val, 2, col);
     }
     for (unsigned b = 0; b < 8; ++b) px_rect(150 + (int)b * 10, 47 + 26 * 2 + 9, 8, 12, b < fr.settings.backlight ? C_AM : RGB(0x3C, 0x3C, 0x3C));
@@ -659,8 +791,182 @@ static void draw_sys(void)
         if (s->scene_ch && dx_part_on_channel(&fr.live.parts, s->scene_ch) != DX_NO_PART) draw_hint("A PART USES THIS CH: NO PROGRAM CHANGE");
         else draw_hint(s->scene_ch ? "PROGRAM CHANGE ON THIS CH = SCENE" : "K1 = CHANGE  OFF: NO SCENE CHANNEL");
         break;
-    case 1: case 2: draw_hint("SELECT = ROW  K1 = CHANGE"); break;
-    default: draw_hint("SELECT = ROW"); break;
+    case 1: case 2: draw_hint("SELECT OR OCT = ROW  K1 = CHANGE"); break;
+    default: draw_hint("SELECT OR OCT = ROW"); break;
+    }
+}
+
+/* ---- the overlay ------------------------------------------------------------------ */
+
+/* The box shows a label (what, in small capitals) and a value (large); a message is one to three lines of text. A kind's
+ * words are built here from the snapshot, so they are always what the screen shows. */
+struct ov { char label[20], value[20]; uint16_t color; uint8_t bar; int16_t num, den; }; /* bar: 0 none, 1 filled num/den, 2 centred -50..50 */
+static void ov_layer_label(struct ov *o, unsigned e, const char *what)
+{
+    char *l = put_s(o->label, "LAYER "); l = put_u(l, layer_index(e) + 1U); *l++ = ' '; put_s(l, what);
+}
+static void ov_part_label(struct ov *o, unsigned p, const char *what)
+{
+    char *l = put_s(o->label, "PART "); l = put_u(l, p + 1U); *l++ = ' '; put_s(l, what);
+}
+static unsigned ov_describe(struct ov *o)
+{
+    unsigned k = ui.ov_kind, a = ui.ov_arg;
+    char *v = o->value;
+    o->label[0] = o->value[0] = 0; o->color = C_TX; o->bar = 0; o->num = 0; o->den = 1;
+    if (k >= OV_LAYER && k <= OV_POLY && a < DX_ENGINES) {
+        const struct dx_engine_cfg *c = &fr.cfg.e[a];
+        unsigned owner = fr.live.parts.layer[a].owner;
+        if (owner >= DX_PARTS) return 0;       /* the layer is gone (a program change or a scene took it): nothing to say */
+        o->color = engine_color(a);
+        switch (k) {
+        case OV_LAYER: {
+            uint8_t list[DX_ENGINES];
+            unsigned n = owner < DX_PARTS ? part_layers(owner, list) : 0U;
+            char *l = put_s(o->label, "PART "); l = put_u(l, owner + 1U); l = put_s(l, "  LAYER "); l = put_u(l, layer_index(a) + 1U); *l++ = '/'; put_u(l, n);
+            trim_name(v, fr.e[a].name, 10); break; }
+        case OV_SOUND: {
+            char *l = put_s(o->label, "LAYER "); l = put_u(l, layer_index(a) + 1U); l = put_s(l, "  SOUND "); put_u(l, fr.e[a].program + 1U);
+            trim_name(v, fr.e[a].name, 10); break; }
+        case OV_LVL: ov_layer_label(o, a, "LEVEL"); put_u(v, fr.live.parts.layer[a].lvl); o->bar = 1; o->num = (int16_t)fr.live.parts.layer[a].lvl; o->den = 127; break;
+        case OV_PAN: ov_layer_label(o, a, "PAN"); put_pan(v, fr.live.pan[a]); o->bar = 2; o->num = fr.live.pan[a]; break;
+        case OV_BRIGHT: ov_layer_label(o, a, "BRIGHT"); if (fr.live.bright[a] > 0) *v++ = '+'; put_i(v, fr.live.bright[a]); o->bar = 2; o->num = fr.live.bright[a]; break;
+        case OV_LO: ov_layer_label(o, a, "LOW KEY"); put_note(v, c->lo); o->bar = 1; o->num = c->lo; o->den = 127; break;
+        case OV_HI: ov_layer_label(o, a, "HIGH KEY"); put_note(v, c->hi); o->bar = 1; o->num = c->hi; o->den = 127; break;
+        case OV_SHIFT: ov_layer_label(o, a, "SHIFT"); v = put_shift(v, c->shift); if (c->shift && c->shift % 12 == 0) put_s(v, " OCT"); o->color = c->shift ? C_AM : C_TX; break;
+        case OV_FOLD: ov_layer_label(o, a, "FOLD"); put_s(v, c->fold == DX_FOLD_WRAP ? "WRAP" : c->fold == DX_FOLD_CLIP ? "CLIP" : "DROP"); break;
+        case OV_VLO: ov_layer_label(o, a, "LOW VEL"); put_u(v, c->vlo ? c->vlo : 1U); o->bar = 1; o->num = (int16_t)(c->vlo ? c->vlo : 1U); o->den = 127; break;
+        case OV_VHI: ov_layer_label(o, a, "HIGH VEL"); put_u(v, c->vhi ? c->vhi : 127U); o->bar = 1; o->num = (int16_t)(c->vhi ? c->vhi : 127U); o->den = 127; break;
+        case OV_REV: ov_layer_label(o, a, "REVERB"); put_u(v, fr.e[a].rev); o->bar = 1; o->num = fr.e[a].rev; o->den = 15; break;
+        case OV_DLY: ov_layer_label(o, a, "DELAY"); put_u(v, fr.e[a].dly); o->bar = 1; o->num = fr.e[a].dly; o->den = 15; break;
+        default: ov_layer_label(o, a, "MAX VOICES"); put_u(v, c->poly); o->bar = 1; o->num = c->poly; o->den = 8; break;
+        }
+        return 1;
+    }
+    if (k >= OV_PART && k <= OV_PMIX && (k == OV_PART || k >= OV_PLEVEL) && a < DX_PARTS) {
+        unsigned used = part_used(a);
+        o->color = part_color(a);
+        switch (k) {
+        case OV_PART: {
+            char *l = put_s(o->label, "PART "); l = put_u(l, a + 1U);
+            if (used) { l = put_s(l, "  CH "); put_u(l, fr.live.parts.part[a].channel); trim_name(v, fr.e[part_main(a)].name, 10); }
+            else { put_s(v, "EMPTY"); o->color = C_DIM; }
+            break; }
+        case OV_PLEVEL: ov_part_label(o, a, "LEVEL"); put_u(v, fr.live.parts.part[a].level); o->bar = 1; o->num = fr.live.parts.part[a].level; o->den = 127; break;
+        case OV_PCH: ov_part_label(o, a, "CHANNEL"); put_u(v, fr.live.parts.part[a].channel); break;
+        case OV_PPAN: ov_part_label(o, a, "PAN"); put_pan(v, part_pan(a, NULL, NULL)); o->bar = 2; o->num = (int16_t)part_pan(a, NULL, NULL); break;
+        case OV_PREV: ov_part_label(o, a, "REVERB"); put_u(v, part_send(a, 0)); o->bar = 1; o->num = (int16_t)part_send(a, 0); o->den = 15; break;
+        case OV_PDLY: ov_part_label(o, a, "DELAY"); put_u(v, part_send(a, 1)); o->bar = 1; o->num = (int16_t)part_send(a, 1); o->den = 15; break;
+        default: /* OV_PMIX */
+            ov_part_label(o, a, "MIX");
+        {
+            uint8_t list[DX_ENGINES];
+            unsigned n = part_layers(a, list), audible = 0;
+            for (unsigned i = 0; i < n; ++i) audible |= fr.e[list[i]].audible;
+            put_s(v, part_solo(a) ? "SOLO" : part_muted(a) ? "MUTED" : audible || !n ? "ON" : "SILENCED");
+            o->color = part_solo(a) ? C_AM : part_muted(a) ? C_RD : audible || !n ? C_GR : C_DIM;
+        }
+        break;
+        }
+        return 1;
+    }
+    switch (k) {
+    case OV_FX: {
+        static const char *const names[4] = {"REVERB DECAY", "DELAY TIME", "DELAY FEEDBACK", "FX RETURN"};
+        uint8_t f[4];
+        groove_effects_get(f);
+        put_s(o->label, names[a & 3U]); fx_text(a & 3U, f, v); break; }
+    case OV_FTYPE: { static const char *const types[4] = {"OFF", "LOW PASS", "HIGH PASS", "BAND PASS"}; put_s(o->label, "FILTER TYPE"); put_s(v, types[fr.live.filter_type & 3U]); break; }
+    case OV_FHZ: {
+        unsigned hz = fr.live.filter_hz ? fr.live.filter_hz : 1000U;
+        put_s(o->label, "FILTER CUTOFF");
+        if (hz >= 1000) { v = put_u(v, hz / 1000U); *v++ = '.'; *v++ = (char)('0' + (hz / 100U) % 10U); put_s(v, " KHZ"); } else put_s(put_u(v, hz), " HZ");
+        o->color = C_AM; break; }
+    case OV_FRES: put_s(o->label, "FILTER RESONANCE"); put_u(v, fr.live.filter_res); o->bar = 1; o->num = fr.live.filter_res; o->den = 127; break;
+    case OV_SCENE: {
+        char *l = put_s(o->label, "SCENE "); put_u(l, a + 1U);
+        if (scene_exists(a)) { trim_name(v, fr.scene_name[a], 12); if (a == fr.current_scene) o->color = C_AC; } else { put_s(v, "EMPTY"); o->color = C_DIM; }
+        break; }
+    case OV_OCT: put_s(o->label, "KEY OCTAVE"); if (ui.octave > 0) *v++ = '+'; put_i(v, ui.octave); break;
+    case OV_SYS: {
+        const struct dx_settings *s = &fr.settings;
+        switch (a) {
+        case 1: put_s(o->label, "BT AUDIO IN"); put_s(v, (s->radio_off & GROOVE_RADIO_AUDIO) ? "OFF" : "ON"); break;
+        case 2: put_s(o->label, "BUTTON LIGHT"); put_u(v, s->backlight); o->bar = 1; o->num = s->backlight; o->den = 8; o->color = C_AM; break;
+        case 3: put_s(o->label, "SCENE CHANNEL"); if (s->scene_ch) put_u(put_s(v, "CH "), s->scene_ch); else put_s(v, "OFF"); break;
+        default: put_s(o->label, "MASTER CHANNEL"); if (s->master_ch) put_u(put_s(v, "CH "), s->master_ch); else put_s(v, "OFF"); break;
+        }
+        break; }
+    default: break;
+    }
+    return 1;
+}
+
+/* Word wrap of a message into at most three lines of up to 18 letters; a newline breaks the line where the words belong together. */
+static unsigned ov_wrap(const char *s, char lines[3][20])
+{
+    unsigned n = 0, len = 0;
+    lines[0][0] = 0;
+    while (*s) {
+        if (*s == '\n') { if (n == 2) break; lines[++n][0] = 0; len = 0; ++s; continue; }
+        const char *w = s;
+        unsigned wl = 0;
+        while (s[wl] && s[wl] != ' ' && s[wl] != '\n') ++wl;
+        if (len && len + 1U + wl > 18U) { if (n == 2) break; lines[++n][0] = 0; len = 0; }
+        if (len) lines[n][len++] = ' ';
+        for (unsigned i = 0; i < wl && len < 18U; ++i) lines[n][len++] = w[i];
+        lines[n][len] = 0;
+        s += wl;
+        while (*s == ' ') ++s;
+    }
+    return n + 1U;
+}
+/* The sound overlay (PRESETS): the current program and the two before and two after it, in the middle of the screen. */
+static void draw_sound_list(void)
+{
+    unsigned a = ui.ov_arg;
+    if (a >= DX_ENGINES || fr.live.parts.layer[a].owner >= DX_PARTS) return;
+    const int x = 8, w = 224, y = 57, h = 126;
+    px_rect(x, y, w, h, C_BLACK); px_frame(x, y, w, h, C_AC); px_frame(x + 1, y + 1, w - 2, h - 2, C_AC);
+    char *l = put_s(tb, "LAYER "); l = put_u(l, layer_index(a) + 1U); put_s(l, " SOUND");
+    px_text(x + 10, y + 7, tb, 1, C_TX);
+    l = put_u(tb, fr.pprog + 1U); put_s(l, " / 128");
+    px_text_r(x + w - 10, y + 7, tb, 1, C_TX);
+    for (int k = 0; k < 5; ++k) {
+        int ry = y + 20 + 20 * k;
+        char num[4], name[11];
+        put_u(num, (fr.pprog + FM1_FM_PROGRAMS + (unsigned)k - 2U) % FM1_FM_PROGRAMS + 1U);
+        trim_name(name, fr.pname[k], 10);
+        if (k == 2) { px_rect(x + 4, ry, w - 8, 20, C_SEL); px_rect(x + 4, ry, 2, 20, C_TX); }
+        uint16_t tc = k == 2 ? C_TX : k == 1 || k == 3 ? RGB(0xC0, 0xC0, 0xC0) : RGB(0x88, 0x88, 0x88);
+        px_text_r(x + 50, ry + 7, num, 1, tc);
+        px_text(x + 60, ry + 3, name, 2, tc);
+    }
+}
+static void draw_overlay(void)
+{
+    if (!fr.ov_on || ui.mode != M_BROWSE) return;
+    if (ui.ov_kind == OV_SOUND) { draw_sound_list(); return; }
+    const int x = 0, w = 240;
+    if (ui.ov_kind == OV_TEXT) {
+        char lines[3][20];
+        unsigned n = ov_wrap(ui.notice ? ui.notice : "", lines);
+        int h = 14 + 16 * (int)n, y = 237 - h;
+        px_rect(x, y, w, h, C_BLACK); px_frame(x, y, w, h, C_AM); px_frame(x + 1, y + 1, w - 2, h - 2, C_AM);
+        for (unsigned i = 0; i < n; ++i) px_text_c(120, y + 8 + 16 * (int)i, lines[i], 2, C_AM);
+        return;
+    }
+    struct ov o;
+    if (!ov_describe(&o)) return;
+    int h = 55, y = 237 - h;
+    px_rect(x, y, w, h, C_BLACK); px_frame(x, y, w, h, C_AC); px_frame(x + 1, y + 1, w - 2, h - 2, C_AC);
+    px_text(x + 9, y + 7, o.label, 2, C_TX);
+    px_text(x + 9, y + 27, o.value, 3, o.color);
+    int bx = x + 9 + (int)text_w(o.value, 3) + 14, bw = x + w - 10 - bx;
+    if (o.bar && bw >= 40) {
+        px_frame(bx, y + 30, bw, 15, C_LN);
+        if (o.bar == 1) px_rect(bx + 1, y + 31, (bw - 2) * (o.num < 0 ? 0 : o.num > o.den ? o.den : o.num) / (o.den ? o.den : 1), 13, o.color);
+        else { int mid = bx + bw / 2, d = (bw / 2 - 2) * o.num / 50; px_rect(mid, y + 31, 1, 13, C_DIM); px_rect(mid + d - 2, y + 32, 5, 11, o.color); }
     }
 }
 
@@ -680,6 +986,8 @@ static void draw_screen(void)
     case S_MASTER: draw_master(); break;
     case S_SCENES: draw_scenes(); break;
     case S_SAFE: draw_safe(); break;
+    case S_DETAIL: draw_detail(); break;
     default: draw_sys(); break;
     }
+    draw_overlay();
 }

@@ -62,10 +62,10 @@ void fm1_controls_read(struct fm1_controls *value)
     *value = controls;
     memset(controls.encoders, 0, sizeof controls.encoders);
 }
-void fm1_led_set(unsigned key, int on) { if (key < sizeof leds) leds[key] = on != 0; }
-/* DX747 per-LED brightness. The simulator models LEDs as on/off, so a level is just on or off
- * and the idle glow cannot be shown (it is a hardware-only feature). */
-void fm1_led_level(unsigned key, unsigned level) { if (key < sizeof leds) leds[key] = level != 0; }
+/* A lamp's state is its brightness 0..8 (on is 8), so a screen can tell a dim key from a bright one. The idle glow of the
+ * "off" lamps is a hardware-only feature and is not shown. */
+void fm1_led_set(unsigned key, int on) { if (key < sizeof leds) leds[key] = on ? 8 : 0; }
+void fm1_led_level(unsigned key, unsigned level) { if (key < sizeof leds) leds[key] = (uint8_t)(level > 8 ? 8 : level); }
 void fm1_led_idle_level(unsigned level) { (void)level; }
 /* Track 16-row bands until the browser consumes the next display update. */
 static void screen_changed(unsigned y, unsigned h)

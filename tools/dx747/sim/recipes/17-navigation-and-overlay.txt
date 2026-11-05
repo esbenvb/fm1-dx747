@@ -1,0 +1,306 @@
+# Recipe 17: the octave buttons step pages, rows, banks and parts; HOME a second time shows the part in detail (channel and
+# part level on K1 and K2); every knob and message shows the overlay; the mixer works on whole parts and its white keys mute
+# and solo (EDIT), with the key lamps dark, dim or bright. Buttons: 0 OCT-, 1 OCT+, 2 FX, 3 SEL(MIX), 4 ENV, 5 LFO, 6 EDIT,
+# 7 GLO, 8 HOME, 9 SAVE, 10 ARP, 11 SEQ, 12 PLAY. Encoders: 0 SELECT, 1 ALGO, 2 K1, 3 K2, 4 K3, 5 K4, 6 PRESETS.
+# Screens: 1 parts, 2 part, 3 sound, 4 range, 5 velocity, 6 sends, 8 mix, 9 fx, 10 master, 11 scenes, 12 system, 14 details.
+boot
+wipe
+run 400
+expect_screen 1
+shot 17a-parts-channel-line
+# HOME + PLAY (stop every note) leaves the screen where it was, whichever screen that is
+press btn 8
+tap btn 12
+release btn 8
+expect_screen 1
+# HOME a second time shows the part in detail; once more goes back
+tap btn 8
+expect_screen 14
+shot 17b-details-one-layer
+tap btn 8
+expect_screen 1
+# a second layer on part 1: part 8 makes room (LFO removes it), ENV adds the layer to part 1 on the free engine 8
+enc 0 -1
+tap btn 5
+tap btn 4
+expect_part 0 1 2
+expect_layer 7 0 -1
+# the details: K1 is the channel, K2 the part level, K3 the framed layer's level; ALGO frames the other layer
+tap btn 8
+expect_screen 14
+enc 1 -1
+enc 4 -10
+expect_layer 0 0 80
+expect_layer 7 0 100
+enc 1 1
+shot 17c-details-two-layers-overlay
+expect_px 1 200 073F
+run 1200
+expect_px 1 200 0000
+shot 17d-details-two-layers
+expect_level 0 127
+enc 3 -5
+expect_level 0 117
+enc 2 1
+expect_part 0 8 2
+expect_sel 0
+enc 2 -1
+expect_part 0 1 2
+# PRESETS chooses the sound of the framed layer (layer 2, engine 8) on the details, and only that layer's
+expect_patch 7 151 49
+enc 6 4
+run 200
+expect_patch 7 151 50
+expect_patch 0 151 49
+# the sound overlay is a list of the programs around the current one, in the middle of the screen, and stays longer than the others
+expect_px 100 57 073F
+shot 17q-sound-list
+run 1300
+expect_px 100 57 073F
+run 700
+expect_px 100 57 0000
+enc 6 -4
+run 200
+expect_patch 7 151 49
+# OCT buttons on the details step the part, and a LEARN that was waiting for the first part's layer is over
+tap btn 10
+tap btn 1
+expect_sel 1
+tap key 12
+run 60
+tap key 5
+run 100
+expect_engine 1 0 127
+tap btn 0
+expect_sel 0
+# the lines on the details: layer 2 plays C5 and up, an octave down; layer 1 plays C2 to B4; layer 2 takes soft notes only
+tap btn 6
+expect_screen 3
+enc 6 4
+run 200
+expect_patch 7 151 50
+enc 6 -4
+run 200
+expect_patch 7 151 49
+tap btn 1
+expect_screen 4
+enc 6 4
+run 200
+expect_patch 7 151 50
+enc 2 72
+enc 4 -1
+expect_engine 7 72 127
+tap btn 1
+expect_screen 5
+enc 6 -4
+run 200
+expect_patch 7 151 49
+enc 3 -60
+tap btn 0
+expect_screen 4
+enc 1 -1
+enc 2 36
+enc 3 -56
+expect_engine 0 36 71
+tap btn 8
+tap btn 8
+expect_screen 14
+run 1200
+shot 17e-details-split-shift
+# the octave buttons step the edit pages, round the end in both directions
+tap btn 6
+expect_screen 3
+# on the first page K1 is the layer's volume (layer 1: 80 -> 70), K2 the pan, K3 BRIGHT; K4 is not used there
+enc 2 -5
+expect_layer 0 0 70
+enc 5 5
+expect_layer 0 0 70
+expect_live bright 0 0
+tap btn 1
+expect_screen 4
+tap btn 1
+expect_screen 5
+tap btn 1
+expect_screen 6
+tap btn 1
+expect_screen 3
+tap btn 0
+expect_screen 6
+enc 6 4
+run 200
+expect_patch 0 151 50
+enc 6 -4
+run 200
+expect_patch 0 151 49
+shot 17f-edit-header-sends
+tap btn 0
+tap btn 0
+tap btn 0
+expect_screen 3
+# the FX page and the filter page
+tap btn 2
+expect_screen 9
+shot 17g-fx-tabs
+tap btn 1
+expect_screen 10
+tap btn 0
+expect_screen 9
+tap btn 1
+expect_screen 10
+shot 17h-filter-tabs
+# scenes: the octave buttons step the banks
+tap btn 12
+expect_screen 11
+tap btn 1
+shot 17i-scenes-bank-b
+tap btn 0
+# system: the octave buttons step the rows (row 3 is the scene channel)
+tap btn 7
+expect_screen 12
+tap btn 1
+tap btn 1
+tap btn 1
+enc 2 5
+expect_cfg scene_ch 5
+shot 17j-system-row-overlay
+enc 2 -5
+expect_cfg scene_ch 0
+tap btn 0
+tap btn 0
+tap btn 0
+# the mixer works on whole parts. Layer 1 of part 1 is moved to the left of layer 2 on the Sound page first
+tap btn 11
+tap btn 6
+expect_screen 3
+enc 3 -10
+expect_live pan 0 -20
+expect_live pan 7 0
+tap btn 1
+tap btn 1
+tap btn 1
+expect_screen 6
+enc 2 5
+enc 1 1
+enc 2 15
+expect_sends 0 0 5
+expect_sends 7 0 15
+tap btn 3
+expect_screen 8
+shot 17k-mix-channels
+# K2 pans both layers together and stops when the one furthest out reaches the edge, so they stay apart
+enc 3 5
+expect_live pan 0 -10
+expect_live pan 7 10
+enc 3 100
+expect_live pan 0 30
+expect_live pan 7 50
+shot 17l-mix-pan-overlay
+run 1200
+shot 17m-mix-pan
+enc 3 -100
+expect_live pan 0 -50
+expect_live pan 7 -30
+# K3 and K4 move the sends of both layers together and stop when the one furthest out reaches the end of the scale
+enc 4 3
+expect_sends 0 0 5
+expect_sends 7 0 15
+enc 4 -3
+expect_sends 0 0 2
+expect_sends 7 0 12
+enc 4 -10
+expect_sends 0 0 0
+expect_sends 7 0 10
+enc 5 4
+expect_sends 0 1 4
+expect_sends 7 1 4
+# K1 is the part level
+enc 2 -5
+expect_level 0 107
+# ALGO is the channel of the part, and the octave buttons step the part
+enc 1 1
+expect_part 0 8 2
+enc 1 -1
+expect_part 0 1 2
+tap btn 1
+expect_sel 1
+tap btn 0
+expect_sel 0
+# EDIT on the mixer: the white keys mute and solo, two to a part. Part 8 is not there, so its two keys stay dark; the keys that
+# could be pressed are dim, and a part that is muted or soloed has its key bright. (lamps: 14 buttons, then the 27 keys)
+tap btn 6
+run 1200
+expect_screen 8
+expect_leds ...#..#.......2.2.2.22.2.22.2.2.22.2.2...
+shot 17n-mix-keys
+white 1
+run 100
+expect_px 7 177 FA69
+expect_leds ...#..#.......#.2.2.22.2.22.2.2.22.2.2...
+# soloing clears the mute of that part; a touch also selects the part
+white 2
+expect_leds ...#..#.......2.#.2.22.2.22.2.2.22.2.2...
+white 5
+expect_sel 2
+expect_leds ...#..#.......2.#.2.2#.2.22.2.2.22.2.2...
+shot 17o-mix-keys-after
+# HOME + PLAY (stop every note) with the keys in mute/solo mode leaves the mode as it was
+press btn 8
+tap btn 12
+release btn 8
+expect_screen 8
+expect_leds ...#..#.......2.#.2.2#.2.22.2.2.22.2.2...
+# the keys are not notes in this mode: a black key does nothing at all
+run 100
+expect_voices 0
+press key 1
+run 100
+expect_voices 0
+release key 1
+run 100
+expect_leds ...#..#.......2.#.2.2#.2.22.2.2.22.2.2...
+# an empty part's keys do nothing but select it
+white 15
+expect_sel 7
+expect_part 0 1 2
+enc 0 1
+expect_sel 0
+# EDIT again: the keys play, and the lamps go back
+tap btn 6
+run 100
+expect_leds ...#..........................................
+press key 0
+run 100
+expect_voices 1
+release key 0
+run 200
+# leaving the mixer leaves the key mode: back on it the keys play
+tap btn 6
+expect_leds ...#..#.......2.#.2.2#.2.22.2.2.22.2.2...
+tap btn 8
+tap btn 3
+expect_screen 8
+expect_leds ...#.....................................
+# ENV on the mixer mutes the selected part; in an empty slot there is nothing to mute, so it makes a part there
+tap btn 11
+enc 0 6
+tap btn 5
+expect_part 6 0 0
+tap btn 3
+expect_screen 8
+enc 0 -1
+expect_part 7 0 0
+tap btn 4
+expect_part 7 7 1
+# the same chord with LEARN armed (Part screen, the new part 8 is on the freed engine 7) keeps it armed
+tap btn 11
+expect_screen 2
+tap btn 10
+press btn 8
+tap btn 12
+release btn 8
+expect_screen 2
+tap key 12
+run 60
+tap key 5
+run 100
+expect_engine 6 58 65

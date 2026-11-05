@@ -8,6 +8,7 @@
  * engine calls on its control task and the hooks the browser simulator links
  * against. */
 #include "instrument.h"
+#include "fm_patch.h"
 #include "fm1_engine_control.h"
 #include <string.h>
 #include "dx747/dx747.h"
@@ -48,7 +49,7 @@ void groove_screen_init(void)
     fm1_screen_init();
     for (unsigned i = 0; i < 41; ++i) fm1_led_set(i, 0);
     if (ui.screen == S_SAFE) { fm1_led_set(BTN_ENV, 1); fm1_led_set(BTN_LFO, 1); } /* a cue that does not need the LCD */
-    led_state_lo = led_state_hi = 0;
+    memset(led_code, 0, sizeof led_code);
     band_invalidate();
     frame_forced = 1;
 }
@@ -62,6 +63,7 @@ void groove_screen_control(void)
         if (frame_forced || now - last_frame >= 250U) { last_frame = now; frame_forced = 0; render_frame(); }
         return;
     }
+    if (!(ctl.buttons & BTN_BIT(BTN_HOME))) ui.home_from = 0xff;   /* only a HOME that is still held can be undone by the chord */
     unsigned pressed = ctl.buttons & ~prev_ctl.buttons;
     if (pressed) on_button(pressed);
     uint32_t down = ctl.keys & ~prev_ctl.keys, up = prev_ctl.keys & ~ctl.keys;
@@ -75,6 +77,8 @@ void groove_screen_control(void)
     if (now - last_frame < 33U && !frame_forced) return;
     last_frame = now;
     frame_collect(now & ~255U);
+    fr.ov_on = ui.ov_kind != OV_NONE && (int32_t)(ui.ov_until - now) > 0;   /* the real clock: the snapshot's own is 256 ms coarse */
+    if (!fr.ov_on) ui.ov_kind = OV_NONE;                                    /* an ended overlay must not come back when the clock wraps */
     { /* DX7 SysEx that arrived with no room left is not applied: say so instead of losing it silently */
         static uint32_t sx_seen;
         uint32_t lost = dx_sysex_dropped();

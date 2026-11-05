@@ -4,7 +4,8 @@
  * cleared, every primitive clips itself to it, the finished band is hashed and
  * sent to the panel only when its hash changed, so an unchanged screen costs
  * no SPI traffic. Two band buffers let the next band be drawn while the DMA of
- * the previous one runs. */
+ * the previous one runs. Text at scale 1 is the 5x7 pixel font with softened corners; at larger scales it is a stroke
+ * font (vfont.inc) drawn at the screen's own resolution with soft edges, not the bitmap magnified. */
 
 #define RGB(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
 #define C_BG 0x0000
@@ -12,6 +13,7 @@
 #define C_DIM RGB(0xAA, 0xAA, 0xAA)  /* 9.0:1 on black */
 #define C_LN RGB(0x6A, 0x6A, 0x6A)   /* outlines, 3.5:1 */
 #define C_GD RGB(0x26, 0x26, 0x26)
+#define C_SEL RGB(0x30, 0x30, 0x34)  /* the selected row's background: its marker is a white bar at the left edge */
 #define C_MU RGB(0x5B, 0x5B, 0x5B)
 #define C_AC RGB(0x00, 0xE5, 0xFF)
 #define C_AM RGB(0xFF, 0xB0, 0x00)
@@ -80,7 +82,114 @@ static unsigned text_w(const char *s, unsigned scale)
     while (s[n]) ++n;
     return n ? n * 6U * scale - scale : 0;
 }
-/* Transparent text: only the glyph pixels are drawn. Lower case is upper-cased. */
+#include "vfont.inc"
+/* Blend colour over a pixel of the band being drawn; alpha 0..255. */
+static void px_blend(int x, int y, uint16_t color, unsigned alpha)
+{
+    int row = y - (int)band_top;
+    if (x < 0 || x >= BAND_W || row < 0 || row >= BAND_H || !alpha) return;
+    uint16_t *p = &band_px[band_buf][row * BAND_W + x];
+    uint32_t a = (alpha + 4U) >> 3;                       /* 0..32 */
+    uint32_t bg = (uint32_t)((*p | (*p << 16)) & 0x07E0F81FU), fg = (uint32_t)((color | (color << 16)) & 0x07E0F81FU);
+    uint32_t res = ((((fg - bg) * a) >> 5) + bg) & 0x07E0F81FU;
+    *p = (uint16_t)(res | (res >> 16));
+}
+static unsigned isqrt32(unsigned v)
+{
+    unsigned r = 0, b = 1U << 30;
+    while (b > v) b >>= 2;
+    while (b) { if (v >= r + b) { v -= r + b; r = (r >> 1) + b; } else r >>= 1; b >>= 2; }
+    return r;
+}
+enum { VF_MAX_SCALE = 6 };
+static uint8_t vf_mask[(5 * VF_MAX_SCALE + 2) * BAND_H];
+static const uint8_t *vf_glyph(unsigned char c)
+{
+    if (c >= 'a' && c <= 'z') c = (unsigned char)(c - 'a' + 'A');
+    for (unsigned i = 0; vf_order[i]; ++i) if ((unsigned char)vf_order[i] == c) return vf_data + vf_off[i];
+    return NULL;
+}
+/* One glyph of the stroke font in the box 5*scale x 7*scale at x, y, clipped to the band. Every stroke segment is a capsule
+ * (a line with round ends) of a fixed width; a pixel's coverage falls from 1 to 0 across one pixel at the capsule's edge.
+ * Coordinates are in sixteenths of a pixel. The coverage of the whole glyph is collected first (the largest of the
+ * strokes' at each pixel, so joints do not double) and then blended over what is there. */
+static void px_vglyph(int x, int y, const uint8_t *g, unsigned scale, uint16_t color)
+{
+    const int top = (int)band_top, bw = 5 * (int)scale, bh = 7 * (int)scale;
+    int r0 = y - 1 < top ? top : y - 1, r1 = y + bh + 1 > top + BAND_H ? top + BAND_H : y + bh + 1;
+    int c0 = x - 1 < 0 ? 0 : x - 1, c1 = x + bw + 1 > BAND_W ? BAND_W : x + bw + 1;
+    if (r0 >= r1 || c0 >= c1) return;
+    const int mw = c1 - c0, mh = r1 - r0;
+    memset(vf_mask, 0, (size_t)(mw * mh));
+    const int hw = (int)scale * 7 + 3;                    /* half the stroke width: (14 * scale + 6) / 16 pixels */
+    const int outer = hw + 8, inner = hw - 8;             /* coverage 0 beyond outer, 1 within inner */
+    const int r2 = inner * inner, o2 = outer * outer;
+    const int rcp = (255 << 16) / (o2 - r2);
+    const int wq = bw * 16 - 2 * hw, hq = bh * 16 - 2 * hw;
+    int ax = 0, ay = 0, have = 0;
+    for (const uint8_t *p = g; *p != 0xFE; ++p) {
+        if (*p == 0xFF) { have = 0; continue; }
+        int bx = hw + (*p >> 4) * wq / 8, by = hw + (*p & 15) * hq / 12;
+        if (have) {
+            int dx = bx - ax, dy = by - ay, len = (int)isqrt32((unsigned)(dx * dx + dy * dy)), ux = 0, uy = 0;
+            if (len) { ux = dx * 16384 / len; uy = dy * 16384 / len; }
+            int minx = (ax < bx ? ax : bx) - outer, maxx = (ax > bx ? ax : bx) + outer;
+            int miny = (ay < by ? ay : by) - outer, maxy = (ay > by ? ay : by) + outer;
+            int pc0 = (minx >> 4) + x, pc1 = (maxx >> 4) + x + 1, pr0 = (miny >> 4) + y, pr1 = (maxy >> 4) + y + 1;
+            if (pc0 < c0) pc0 = c0;
+            if (pc1 > c1) pc1 = c1;
+            if (pr0 < r0) pr0 = r0;
+            if (pr1 > r1) pr1 = r1;
+            for (int row = pr0; row < pr1; ++row) {
+                int vy = (row - y) * 16 + 8 - ay;
+                uint8_t *m = vf_mask + (row - r0) * mw - c0;
+                for (int col = pc0; col < pc1; ++col) {
+                    int vx = (col - x) * 16 + 8 - ax, along = (vx * ux + vy * uy) >> 14, perp = (vy * ux - vx * uy) >> 14;
+                    int e = along < 0 ? -along : along > len ? along - len : 0;
+                    int d2 = perp * perp + e * e;
+                    if (d2 >= o2) continue;
+                    unsigned a = d2 <= r2 ? 255U : (unsigned)(((o2 - d2) * rcp) >> 16);
+                    if (a > m[col]) m[col] = (uint8_t)a;
+                }
+            }
+        }
+        ax = bx; ay = by; have = 1;
+    }
+    for (int row = r0; row < r1; ++row)
+        for (int col = c0; col < c1; ++col) px_blend(col, row, color, vf_mask[(row - r0) * mw + (col - c0)]);
+}
+/* The smallest text keeps its 5x7 pixel design but its edges are softened: every source pixel is cut into 3x3 sub-pixels
+ * with the Scale3x rule (a pixel at a corner or a staircase takes the colour of the neighbour that continues the line) and
+ * its coverage is the share of lit sub-pixels. Straight strokes stay exactly as bright as before; only corners and
+ * diagonals get partial coverage, in the pixel's own cell. Built once per character, kept in a small table. */
+static uint8_t sg_alpha[96][35];
+static uint8_t sg_ready[96 / 8];
+static const uint8_t *sg_glyph(char letter, const uint8_t shape[5])
+{
+    unsigned code = (unsigned char)letter, slot = code >= 32 && code < 128 ? code - 32U : 0U;
+    uint8_t *out = sg_alpha[slot];
+    if ((sg_ready[slot / 8U] >> (slot % 8U)) & 1U) return out;
+#define SG_LIT(c, r) ((c) >= 0 && (c) < 5 && (r) >= 0 && (r) < 7 && ((shape[c] >> (r)) & 1))
+    for (int r = 0; r < 7; ++r)
+        for (int c = 0; c < 5; ++c) {
+            int A = SG_LIT(c - 1, r - 1), B = SG_LIT(c, r - 1), C = SG_LIT(c + 1, r - 1);
+            int D = SG_LIT(c - 1, r), E = SG_LIT(c, r), F = SG_LIT(c + 1, r);
+            int G = SG_LIT(c - 1, r + 1), H = SG_LIT(c, r + 1), I = SG_LIT(c + 1, r + 1);
+            unsigned lit = E ? 9U : 0U;
+            if (B != H && D != F) {
+                lit = (unsigned)((D == B ? D : E) + ((D == B && E != C) || (B == F && E != A) ? B : E) + (B == F ? F : E) +
+                                 ((D == B && E != G) || (D == H && E != A) ? D : E) + E +
+                                 ((B == F && E != I) || (H == F && E != C) ? F : E) + (D == H ? D : E) +
+                                 ((D == H && E != I) || (H == F && E != G) ? H : E) + (H == F ? F : E));
+            }
+            out[r * 5 + c] = (uint8_t)(lit * 255U / 9U);
+        }
+#undef SG_LIT
+    sg_ready[slot / 8U] = (uint8_t)(sg_ready[slot / 8U] | (1U << (slot % 8U)));
+    return out;
+}
+/* Transparent text. Scale 1 is the 5x7 font with softened corners; larger scales draw the stroke font. Lower case is
+ * upper-cased. */
 static void px_text(int x, int y, const char *s, unsigned scale, uint16_t color)
 {
     int top = (int)band_top;
@@ -88,6 +197,11 @@ static void px_text(int x, int y, const char *s, unsigned scale, uint16_t color)
     for (; *s; ++s, x += (int)(6 * scale)) {
         if (x >= BAND_W) break;
         if (x + (int)(5 * scale) <= 0) continue;
+        if (scale >= 2 && scale <= VF_MAX_SCALE) {
+            const uint8_t *g = vf_glyph((unsigned char)*s);
+            if (g) px_vglyph(x, y, g, scale, color);
+            continue;
+        }
         char letter = *s >= 'a' && *s <= 'z' ? (char)(*s - 'a' + 'A') : *s;
         static const uint8_t blank[5] = {0};
         const uint8_t *shape = blank;
@@ -96,6 +210,14 @@ static void px_text(int x, int y, const char *s, unsigned scale, uint16_t color)
         else if (letter != ' ')
             for (unsigned i = 0; i < sizeof punctuation / sizeof punctuation[0]; ++i)
                 if ((uint8_t)letter == punctuation[i][0]) { shape = punctuation[i] + 1; break; }
+        if (shape == blank) continue;
+        if (scale == 1) {                                  /* the 5x7 font with softened corners (sg_glyph) */
+            const uint8_t *alpha = sg_glyph(letter, shape);
+            for (int r = 0; r < 7; ++r)
+                if (y + r >= top && y + r < top + BAND_H)
+                    for (int c = 0; c < 5; ++c) if (alpha[r * 5 + c]) px_blend(x + c, y + r, color, alpha[r * 5 + c]);
+            continue;
+        }
         for (unsigned col = 0; col < 5; ++col) {
             uint8_t bits = shape[col];
             for (unsigned row = 0; bits; ++row, bits >>= 1)

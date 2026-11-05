@@ -68,7 +68,7 @@ midi 1 cf 07
 run 300
 expect_part 0 1 1
 # Song Select recalls a scene too, where the engine hands it on (the simulator does; the real unit is not checked yet)
-tap btn 8
+expect_screen 1
 tap btn 4
 expect_part 0 1 2
 midi 1 f3 00

@@ -8,10 +8,14 @@
  * layer; ENV and LFO add and remove layers (and mute and solo on the mixer). */
 
 static struct fm1_controls ctl, prev_ctl;
-static uint32_t keys_playing, led_state_lo, led_state_hi;
+static uint32_t keys_playing;
+static uint8_t led_code[41];           /* what each lamp was last told: 0 idle, 1 on, 2 + n at level n (0..8) */
 static struct dx_cfg cw;               /* working copy of the router configuration */
 
-static void notice(const char *text) { ui.notice = text; ui.notice_until = fr.now + 1800U; }
+/* The overlay: a message for a moment, or a knob's new value for a shorter one. The real clock decides when it ends. */
+static void ov_show(unsigned kind, unsigned arg, uint32_t ms) { ui.ov_kind = (uint8_t)kind; ui.ov_arg = (uint8_t)arg; ui.ov_until = fm1_millis() + ms; }
+static void notice(const char *text) { ui.notice = text; ov_show(OV_TEXT, 0, 1500U); }
+static void knob(unsigned kind, unsigned arg) { ov_show(kind, arg, 900U); }
 static struct dx_cfg *cfg_begin(void) { cw = *dx_route_cfg(); return &cw; }
 static void cfg_commit(void) { dx_route_publish(&cw); }
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -37,7 +41,7 @@ static void go(unsigned screen)
 {
     if (ui.screen == screen) return;
     release_keys();
-    ui.screen = (uint8_t)screen; ui.mode = M_BROWSE; ui.learn = 0;
+    ui.screen = (uint8_t)screen; ui.mode = M_BROWSE; ui.learn = 0; ui.mixkeys = 0; ui.ov_kind = OV_NONE; /* a value shown for one screen's knob is not for the next */
 }
 
 /* ---- scenes ------------------------------------------------------------------ */
@@ -100,6 +104,7 @@ static void step_scene(int d)
 static void select_part_step(int d)
 {
     release_keys();                        /* the keys' note offs must go to the part they started on */
+    ui.learn = 0;                          /* LEARN was for the layer of the part left behind */
     dx_part_select(wrap((int)live_sel_part() + d, DX_PARTS));
 }
 static void select_layer_step(int d)
@@ -123,7 +128,7 @@ static void add_here(void)
         return;
     }
     r = dx_part_add_layer(p);
-    if (r < 0) { notice(r == DX_PART_NO_ENGINE ? "NO FREE ENGINE: 8 LAYERS IN USE" : "CANNOT ADD A LAYER"); return; }
+    if (r < 0) { notice(r == DX_PART_NO_ENGINE ? "NO FREE ENGINE\n8 LAYERS IN USE" : "CANNOT ADD A LAYER"); return; }
     uint8_t list[DX_ENGINES];
     unsigned n = dx_part_layers(LP(), p, list);
     for (unsigned i = 0; i < n; ++i) if (list[i] == (unsigned)r) { dx_part_select_layer(p, i); break; }
@@ -175,7 +180,7 @@ static void learn_poll(void)
     ui.learn_sig = sig;
     learn_note(l->d1);
 }
-static unsigned screen_learns(void) { return ui.screen == S_PART || ui.screen == S_EPLAYS; }
+static unsigned screen_learns(void) { return ui.screen == S_PART || ui.screen == S_EPLAYS || ui.screen == S_DETAIL; }
 
 /* The mixer decides what is muted (soloing an engine clears its own mute); the router's flag follows it, or an engine could
  * be soloed and never receive a note. */
@@ -225,25 +230,81 @@ static void send_pan(unsigned e)
     uint8_t m[3] = {(uint8_t)(0xb0U | c->priv[e]), 10, (uint8_t)clampi(v, 1, 127)};
     (void)fm1_midi_post(m, 3);
 }
+/* Pan and sends on the mixer belong to the whole part: every layer moves together. The pan step stops when the layer
+ * furthest out reaches the edge, so layers that were set apart stay apart. */
+static void part_pan_step(unsigned p, int d)
+{
+    uint8_t list[DX_ENGINES];
+    unsigned n = dx_part_layers(LP(), p, list);
+    struct dx_live *live = dx_live_edit();
+    int lo = 50, hi = -50;
+    for (unsigned i = 0; i < n; ++i) { int v = live->pan[list[i]]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    int step = n ? clampi(d * 2, -50 - lo, 50 - hi) : 0;
+    if (!step) return;
+    for (unsigned i = 0; i < n; ++i) { live->pan[list[i]] = (int8_t)(live->pan[list[i]] + step); send_pan(list[i]); }
+}
+static void part_sends_step(unsigned p, unsigned which, int d)
+{
+    uint8_t list[DX_ENGINES];
+    unsigned n = dx_part_layers(LP(), p, list);
+    int lo = 15, hi = 0;
+    for (unsigned i = 0; i < n; ++i) {
+        uint8_t s[2];
+        groove_sends_get(list[i], s);
+        int v = s[which] & 15;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+    }
+    int step = n ? clampi(d, -lo, 15 - hi) : 0;      /* like the pan: stop when the layer furthest out reaches the end */
+    if (step) for (unsigned i = 0; i < n; ++i) groove_sends_edit(list[i], which, step);
+}
+/* On the mixer the sixteen white keys are the mute and solo keys of the eight parts, in the order the screen shows them:
+ * part 1 mute, part 1 solo, part 2 mute and so on. Touching a part's key selects it too. */
+static void mix_key(unsigned w)
+{
+    unsigned p = w / 2U;
+    if (p != live_sel_part()) dx_part_select(p);
+    if (dx_part_used(LP(), p)) { if (w & 1U) toggle_part_solo(p); else toggle_part_mute(p); }
+    knob(dx_part_used(LP(), p) ? OV_PMIX : OV_PART, p);
+}
+static void toggle_mixkeys(void)
+{
+    release_keys();
+    ui.mixkeys ^= 1U;
+    notice(ui.mixkeys ? "KEYS MUTE AND SOLO" : "KEYS PLAY AGAIN");
+}
 
 /* ---- the panel -------------------------------------------------------------- */
 
 static unsigned screen_has_parts(void)
 {
-    return ui.screen == S_PARTS || ui.screen == S_PART || ui.screen == S_ESOUND || ui.screen == S_EPLAYS || ui.screen == S_EVEL || ui.screen == S_ESENDS;
+    return ui.screen == S_PARTS || ui.screen == S_DETAIL || ui.screen == S_PART || ui.screen == S_ESOUND || ui.screen == S_EPLAYS || ui.screen == S_EVEL || ui.screen == S_ESENDS;
 }
 static void on_button(unsigned pressed)
 {
     if (ui.screen == S_BOOT) { go(S_PARTS); return; }
     if (ui.mode != M_BROWSE) { scene_overlay_button(pressed); return; }
-    if ((ctl.buttons & BTN_BIT(BTN_HOME)) && (pressed & BTN_BIT(BTN_PLAY))) { dx_route_panic(); notice("ALL NOTES OFF"); return; }
+    if ((ctl.buttons & BTN_BIT(BTN_HOME)) && (pressed & BTN_BIT(BTN_PLAY))) {
+        /* HOME + PLAY: the HOME press that began the chord has already changed the screen; put it back */
+        if (ui.home_from != 0xff && ui.home_from != S_BOOT && ui.screen != ui.home_from) {
+            go(ui.home_from);
+            ui.learn = ui.home_learn; ui.learn_lo = ui.home_learn_lo; ui.mixkeys = ui.home_mixkeys;   /* with what it had armed */
+        }
+        dx_route_panic(); notice("ALL NOTES OFF"); return;
+    }
     if ((ctl.buttons & BTN_BIT(BTN_PLAY)) && (pressed & (BTN_BIT(BTN_OCT_DOWN) | BTN_BIT(BTN_OCT_UP)))) { /* PLAY held: step through the scenes */
         step_scene((pressed & BTN_BIT(BTN_OCT_UP)) ? 1 : -1);
         return;
     }
-    if (pressed & BTN_BIT(BTN_HOME)) go(S_PARTS);
+    if (pressed & BTN_BIT(BTN_HOME)) {
+        ui.home_from = ui.screen; ui.home_learn = ui.learn; ui.home_learn_lo = ui.learn_lo; ui.home_mixkeys = ui.mixkeys;
+        go(ui.screen == S_PARTS ? S_DETAIL : S_PARTS);
+    } /* the second press shows the part in detail */
     else if (pressed & BTN_BIT(BTN_SEQ)) go(S_PART);
-    else if (pressed & BTN_BIT(BTN_EDIT)) go(ui.screen == S_ESOUND ? S_EPLAYS : ui.screen == S_EPLAYS ? S_EVEL : ui.screen == S_EVEL ? S_ESENDS : S_ESOUND);
+    else if (pressed & BTN_BIT(BTN_EDIT)) {
+        if (ui.screen == S_MIX) toggle_mixkeys();
+        else go(ui.screen == S_ESOUND ? S_EPLAYS : ui.screen == S_EPLAYS ? S_EVEL : ui.screen == S_EVEL ? S_ESENDS : S_ESOUND);
+    }
     else if (pressed & BTN_BIT(BTN_REC)) go(S_MON);
     else if (pressed & BTN_BIT(BTN_FX)) go(ui.screen == S_FX ? S_MASTER : S_FX);
     else if (pressed & BTN_BIT(BTN_SEL)) go(S_MIX);
@@ -253,18 +314,30 @@ static void on_button(unsigned pressed)
     else if (pressed & (BTN_BIT(BTN_ENV) | BTN_BIT(BTN_LFO))) {
         unsigned add = (pressed & BTN_BIT(BTN_ENV)) != 0;
         if (screen_has_parts()) { if (add) add_here(); else remove_here(); }
-        else if (ui.screen == S_MIX) { if (dx_part_used(LP(), live_sel_part())) { if (add) toggle_part_mute(live_sel_part()); else toggle_part_solo(live_sel_part()); } }
+        else if (ui.screen == S_MIX) {
+            unsigned p = live_sel_part();
+            if (dx_part_used(LP(), p)) { if (add) toggle_part_mute(p); else toggle_part_solo(p); knob(OV_PMIX, p); }
+            else if (add) add_here();                  /* nothing to mute in an empty slot: ENV makes a part there, as the screen says */
+        }
         else if (ui.screen == S_SCENES) step_scene(add ? -1 : 1);
     }
     else if (pressed & BTN_BIT(BTN_ARP)) {
-        if (screen_learns() && !ui.learn && live_sel_engine() < 0) notice("LEARN: ADD A PART FIRST");
+        if (screen_learns() && !ui.learn && live_sel_engine() < 0) notice("LEARN: ADD\nA PART FIRST");
         else if (screen_learns()) { ui.learn = ui.learn ? 0 : 1; ui.learn_sig = fr.nlog ? fr.log[0].ms ^ fr.log[0].d1 : 0; }
         else notice("LEARN: OPEN PART OR RANGE");
     }
     else if (pressed & (BTN_BIT(BTN_OCT_DOWN) | BTN_BIT(BTN_OCT_UP))) {
+        /* The octave buttons step back and forward wherever a screen has pages, rows, banks or parts; on the screens
+         * with none of those they move the keys' octave. */
         int d = (pressed & BTN_BIT(BTN_OCT_UP)) ? 1 : -1;
-        if (ui.screen == S_SCENES) ui.scene = (uint8_t)wrap((int)ui.scene + 16 * d, DX_SCENES);
-        else { release_keys(); ui.octave = (int8_t)clampi(ui.octave + d, -2, 2); }
+        switch (ui.screen) {
+        case S_ESOUND: case S_EPLAYS: case S_EVEL: case S_ESENDS: go(S_ESOUND + wrap((int)ui.screen - S_ESOUND + d, 4)); break;
+        case S_FX: case S_MASTER: go(ui.screen == S_FX ? S_MASTER : S_FX); break;
+        case S_SCENES: ui.scene = (uint8_t)wrap((int)ui.scene + 16 * d, DX_SCENES); break;
+        case S_SYS: ui.sys_row = (uint8_t)wrap((int)ui.sys_row + d, 7); break;
+        case S_MIX: case S_DETAIL: select_part_step(d); knob(OV_PART, live_sel_part()); break;
+        default: release_keys(); ui.octave = (int8_t)clampi(ui.octave + d, -2, 2); knob(OV_OCT, 0); break;
+        }
     }
 }
 
@@ -275,7 +348,7 @@ static void on_white_key(unsigned n /* 0..15 */)
     unsigned idx = (ui.scene / 16U) * 16U + n;
     ui.scene = (uint8_t)idx;
     if (scene_exists(idx)) { int r = dx_scene_recall(idx); notice(r ? "RECALL FAILED" : "SCENE RECALLED"); }
-    else notice("EMPTY SLOT: SAVE STORES HERE");
+    else notice("EMPTY SLOT\nSAVE STORES HERE");
 }
 
 static void on_key(unsigned key, unsigned down)
@@ -287,6 +360,7 @@ static void on_key(unsigned key, unsigned down)
     if (ui.learn && ui.mode == M_BROWSE && screen_learns()) { if (down) learn_note(key_note(key)); return; }
     int w = wkey_index(key);
     if (ui.screen == S_SCENES && w >= 0) { if (down && ui.mode == M_BROWSE) on_white_key((unsigned)w); return; }
+    if (ui.screen == S_MIX && ui.mixkeys && ui.mode == M_BROWSE) { if (down && w >= 0) mix_key((unsigned)w); return; }
     if (ui.mode != M_BROWSE) return;
     dx_route_key(key_note(key), down);
     if (down) keys_playing |= 1U << key; else keys_playing &= ~(1U << key);
@@ -324,66 +398,81 @@ static void on_encoders(void)
     struct dx_live *live = dx_live_edit();
     if (ui.screen == S_BOOT) { go(S_PARTS); return; }
     /* SELECT picks the part on every screen that works on one; ALGO picks the layer where layers show */
-    if (e[0] && (screen_has_parts() || ui.screen == S_MIX || ui.screen == S_FX)) select_part_step(e[0]);
-    if (e[1] && (ui.screen == S_PART || ui.screen == S_ESOUND || ui.screen == S_EPLAYS || ui.screen == S_EVEL || ui.screen == S_ESENDS)) select_layer_step(e[1]);
+    if (e[0] && (screen_has_parts() || ui.screen == S_MIX || ui.screen == S_FX)) { select_part_step(e[0]); knob(OV_PART, live_sel_part()); }
+    if (e[1] && (ui.screen == S_PART || ui.screen == S_DETAIL || ui.screen == S_ESOUND || ui.screen == S_EPLAYS || ui.screen == S_EVEL || ui.screen == S_ESENDS)) {
+        select_layer_step(e[1]);
+        if (live_sel_engine() >= 0) knob(OV_LAYER, (unsigned)live_sel_engine());
+    }
     int se = live_sel_engine();            /* after the steps above: the selection as it is now */
-    unsigned eng = se < 0 ? 0U : (unsigned)se, p = live_sel_part();
+    unsigned eng = se < 0 ? 0U : (unsigned)se, p = live_sel_part(), used = dx_part_used(LP(), p);
+    /* PRESETS chooses the sound of the framed layer on every screen that shows a part and on every edit page */
+    if (e[6] && se >= 0 && screen_has_parts()) { groove_control_edit(eng, e[6], 0, 0); dx_bright_force_voice(eng); ov_show(OV_SOUND, eng, 1800U); } /* a new voice: BRIGHT starts from it */
     switch (ui.screen) {
     case S_PART:
-        if (e[2]) step_channel(e[2]);
-        if (e[3] && dx_part_used(LP(), p)) {
+    case S_DETAIL:
+        if (e[2] && used) { step_channel(e[2]); knob(OV_PCH, p); }
+        if (e[3] && used) {
             live->parts.part[p].level = (uint8_t)clampi(live->parts.part[p].level + e[3] * 2, 0, 127);
             dx_part_level_changed(p);
+            knob(OV_PLEVEL, p);
+        }
+        if (ui.screen == S_DETAIL && e[4] && se >= 0) {      /* the framed layer's own level, the balance inside the part */
+            live->parts.layer[eng].lvl = (uint8_t)clampi(live->parts.layer[eng].lvl + e[4] * 2, 0, 127);
+            dx_level_changed(eng);
+            knob(OV_LVL, eng);
         }
         break;
-    case S_ESOUND:
+    case S_ESOUND:                         /* K1 the layer's volume, K2 its pan, K3 BRIGHT (PRESETS: the sound, above) */
         if (se < 0) break;
-        if (e[2] || e[6]) { groove_control_edit(eng, e[2] + e[6], 0, 0); dx_bright_force_voice(eng); } /* a new voice: BRIGHT starts from it */
-        if (e[3]) { live->parts.layer[eng].lvl = (uint8_t)clampi(live->parts.layer[eng].lvl + e[3] * 2, 0, 127); dx_level_changed(eng); }
-        if (e[4]) { live->pan[eng] = (int8_t)clampi(live->pan[eng] + e[4] * 2, -50, 50); send_pan(eng); }
-        if (e[5]) { live->bright[eng] = (int8_t)clampi(live->bright[eng] + e[5], -50, 50); dx_bright_changed(eng); }
+        if (e[2]) { live->parts.layer[eng].lvl = (uint8_t)clampi(live->parts.layer[eng].lvl + e[2] * 2, 0, 127); dx_level_changed(eng); knob(OV_LVL, eng); }
+        if (e[3]) { live->pan[eng] = (int8_t)clampi(live->pan[eng] + e[3] * 2, -50, 50); send_pan(eng); knob(OV_PAN, eng); }
+        if (e[4]) { live->bright[eng] = (int8_t)clampi(live->bright[eng] + e[4], -50, 50); dx_bright_changed(eng); knob(OV_BRIGHT, eng); }
         break;
     case S_EPLAYS:
         if (se < 0) break;
-        for (unsigned i = 0; i < 4; ++i) if (e[2 + i]) edit_range(eng, (int)i, e[2 + i]);
+        for (unsigned i = 0; i < 4; ++i) if (e[2 + i]) { edit_range(eng, (int)i, e[2 + i]); knob(OV_LO + i, eng); }
         break;
     case S_EVEL:
         if (se < 0) break;
-        for (unsigned i = 0; i < 2; ++i) if (e[2 + i]) edit_velocity(eng, (int)i, e[2 + i]);
+        for (unsigned i = 0; i < 2; ++i) if (e[2 + i]) { edit_velocity(eng, (int)i, e[2 + i]); knob(OV_VLO + i, eng); }
         break;
     case S_ESENDS:
         if (se < 0) break;
-        if (e[2]) groove_sends_edit(eng, 0, e[2]);
-        if (e[3]) groove_sends_edit(eng, 1, e[3]);
+        if (e[2]) { groove_sends_edit(eng, 0, e[2]); knob(OV_REV, eng); }
+        if (e[3]) { groove_sends_edit(eng, 1, e[3]); knob(OV_DLY, eng); }
         if (e[4]) {
             struct dx_cfg *c = cfg_begin();
             c->e[eng].poly = (uint8_t)clampi(c->e[eng].poly + e[4], 1, 8);
             cfg_commit();
+            knob(OV_POLY, eng);
         }
         break;
-    case S_MIX:
-        if (e[2] && dx_part_used(LP(), p)) {
+    case S_MIX:                            /* every knob here works on the whole part */
+        if (!used) break;
+        if (e[1]) { step_channel(e[1]); knob(OV_PCH, p); }
+        if (e[2]) {
             live->parts.part[p].level = (uint8_t)clampi(live->parts.part[p].level + e[2] * 2, 0, 127);
             dx_part_level_changed(p);
+            knob(OV_PLEVEL, p);
         }
-        if (se < 0) break;
-        if (e[3]) { live->pan[eng] = (int8_t)clampi(live->pan[eng] + e[3] * 2, -50, 50); send_pan(eng); }
-        if (e[4]) groove_sends_edit(eng, 0, e[4]);
-        if (e[5]) groove_sends_edit(eng, 1, e[5]);
+        if (e[3]) { part_pan_step(p, e[3]); knob(OV_PPAN, p); }
+        if (e[4]) { part_sends_step(p, 0, e[4]); knob(OV_PREV, p); }
+        if (e[5]) { part_sends_step(p, 1, e[5]); knob(OV_PDLY, p); }
         break;
     case S_FX:
-        for (unsigned i = 0; i < 4; ++i) if (e[2 + i]) groove_effects_edit(i, e[2 + i]);
+        for (unsigned i = 0; i < 4; ++i) if (e[2 + i]) { groove_effects_edit(i, e[2 + i]); knob(OV_FX, i); }
         break;
     case S_MASTER:
-        if (e[2]) { live->filter_type = (uint8_t)wrap((int)live->filter_type + e[2], 4); apply_filter(); }
+        if (e[2]) { live->filter_type = (uint8_t)wrap((int)live->filter_type + e[2], 4); apply_filter(); knob(OV_FTYPE, 0); }
         if (e[3]) {
             unsigned hz = live->filter_hz ? live->filter_hz : 1000U;
             for (int i = 0; i < (e[3] < 0 ? -e[3] : e[3]); ++i) hz = e[3] > 0 ? hz * 1059U / 1000U + 1U : hz * 944U / 1000U;
             live->filter_hz = (uint16_t)clampi((int)hz, 20, 20000); apply_filter();
+            knob(OV_FHZ, 0);
         }
-        if (e[4]) { live->filter_res = (uint8_t)clampi(live->filter_res + e[4] * 3, 0, 127); apply_filter(); }
+        if (e[4]) { live->filter_res = (uint8_t)clampi(live->filter_res + e[4] * 3, 0, 127); apply_filter(); knob(OV_FRES, 0); }
         break;
-    case S_SCENES: if (e[0]) ui.scene = (uint8_t)wrap((int)ui.scene + e[0], DX_SCENES); break;
+    case S_SCENES: if (e[0]) { ui.scene = (uint8_t)wrap((int)ui.scene + e[0], DX_SCENES); knob(OV_SCENE, ui.scene); } break;
     case S_SYS: {
         if (e[0]) ui.sys_row = (uint8_t)wrap((int)ui.sys_row + e[0], 7);
         int d = e[2] + e[6];
@@ -398,6 +487,7 @@ static void on_encoders(void)
         default: break;
         }
         dx_settings_update(&s);
+        if (ui.sys_row >= 1 && ui.sys_row <= 4) knob(OV_SYS, ui.sys_row);
         break;
     }
     default: break;
@@ -406,19 +496,19 @@ static void on_encoders(void)
 
 /* ---- lamps ------------------------------------------------------------------ */
 
-static void led_set(unsigned index, unsigned on)
+static void led_put(unsigned index, unsigned code)
 {
-    uint32_t *word = index < 32 ? &led_state_lo : &led_state_hi;
-    uint32_t bit = 1U << (index & 31U);
-    if (!!(*word & bit) == !!on) return;
-    if (on) *word |= bit; else *word &= ~bit;
-    fm1_led_set(index, (int)on);
+    if (index >= sizeof led_code || led_code[index] == code) return;
+    led_code[index] = (uint8_t)code;
+    if (code < 2U) fm1_led_set(index, (int)code); else fm1_led_level(index, code - 2U);
 }
+static void led_set(unsigned index, unsigned on) { led_put(index, on ? 1U : 0U); }
+static void led_level(unsigned index, unsigned level) { led_put(index, 2U + level); }
 static void update_leds(void)
 {
     unsigned active_button = 99;
     switch (ui.screen) {
-    case S_PARTS: active_button = BTN_HOME; break;
+    case S_PARTS: case S_DETAIL: active_button = BTN_HOME; break;
     case S_PART: active_button = BTN_SEQ; break;
     case S_ESOUND: case S_EPLAYS: case S_EVEL: case S_ESENDS: active_button = BTN_EDIT; break;
     case S_MON: active_button = BTN_REC; break;
@@ -428,8 +518,21 @@ static void update_leds(void)
     case S_SYS: active_button = BTN_GLO; break;
     default: break;
     }
-    for (unsigned b = 0; b < 14; ++b) led_set(b, b == active_button || (b == BTN_ARP && ui.learn && fr.lit_blink));
-    uint32_t lit = 0;
-    if (ui.mode == M_BROWSE && ui.screen == S_SCENES) for (unsigned k = 0; k < 16; ++k) if (scene_exists((ui.scene / 16U) * 16U + k)) lit |= 1U << k;
-    for (unsigned i = 0; i < 16; ++i) led_set(14U + white_key[i], (lit >> i) & 1U);
+    for (unsigned b = 0; b < 14; ++b) led_set(b, b == active_button || (b == BTN_ARP && ui.learn && fr.lit_blink) || (b == BTN_EDIT && ui.screen == S_MIX && ui.mixkeys));
+    /* The white keys: scenes that exist on the Scenes screen; on the mixer in key mode the mute and solo keys, dark for a
+     * part that is not there, dim while they could be pressed and bright while the part is muted or soloed. */
+    for (unsigned i = 0; i < 16; ++i) {
+        unsigned led = 14U + white_key[i], lit = 0;
+        if (ui.mode == M_BROWSE && ui.screen == S_SCENES) lit = scene_exists((ui.scene / 16U) * 16U + i);
+        if (ui.mode == M_BROWSE && ui.screen == S_MIX && ui.mixkeys) {
+            unsigned p = i / 2U, on = (i & 1U) ? part_solo(p) : part_muted(p);
+            led_level(led, !part_used(p) ? 0U : on ? 8U : 2U);
+        } else led_set(led, lit);
+    }
+    /* In the mixer's key mode the black keys do nothing: dark, so that a key that works is never dimmer than one that does not
+     * (the idle light of the other lamps is BUTTON LIGHT, 3 by default). Otherwise they keep the idle light. */
+    for (unsigned k = 0; k < 27; ++k) {
+        if (wkey_index(k) >= 0) continue;
+        if (ui.mode == M_BROWSE && ui.screen == S_MIX && ui.mixkeys) led_level(14U + k, 0U); else led_set(14U + k, 0U);
+    }
 }

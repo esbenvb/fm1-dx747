@@ -12,9 +12,9 @@ enc 0 2
 expect_sel 2
 tap btn 6
 expect_screen 3
-enc 3 -20
+enc 2 -20
+enc 3 15
 enc 4 15
-enc 5 15
 shot 6c-layer-sound
 tap btn 6
 expect_screen 4

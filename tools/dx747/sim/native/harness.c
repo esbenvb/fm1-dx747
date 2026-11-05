@@ -16,17 +16,17 @@
  *   knob V              master potentiometer 0..1023
  *   midi SRC HEX...     one message from source 0 DIN, 1 USB, 2 BLE, e.g. "midi 1 90 3c 64"
  *   shot NAME           write OUTDIR/NAME.png
- *   leds                print the LED states as a 41 character string
+ *   leds                print the LED states as a 41 character string (. dark, # full, 1..7 a dimmer level)
  *   echo TEXT           print TEXT
  *   expect_screen N     fail unless the DX747 screen id is N (0 boot, 1 parts, 2 part, 3 layer sound, 4 range,
  *                       5 velocity, 6 sends, 7 midi in, 8 mix, 9 fx, 10 master, 11 scenes, 12 system,
- *                       13 safe boot)
+ *                       13 safe boot, 14 part details)
  *   flash_mark          remember a checksum of the whole simulated flash
  *   expect_flash_same   fail unless the flash still has the checksum flash_mark took
  *   expect_up HEXMASK   fail unless the engines the boot recipe brought up are exactly HEXMASK (bit 0 = engine 1)
  *   expect_silent_sysex fail if the unit answers a workbench capability request (transfer command 22)
  *   expect_px X Y HEX   fail unless the RGB565 pixel at X,Y (0..239) equals HEX
- *   expect_leds PATTERN fail unless the 41 LED states match PATTERN (# on, . off, ? ignore)
+ *   expect_leds PATTERN fail unless the 41 LED states match PATTERN (# full, . dark, 1..7 that brightness, ? ignore)
  *   expect_voices N     fail unless the router holds N engine-voices (one per engine a held key reaches)
  *   bank_copy SRC DST   DX7 ROM import as the workbench does it: wrap library group SRC (0..3) as a standard
  *                       4104-byte 32-voice .syx, check it like the workbench, upload it into group DST with
@@ -48,6 +48,7 @@
  *   expect_sel P        fail unless part P is the selected part (the keyboard plays it)
  *   expect_layer E P L  fail unless engine E (0..7) is a layer of part P (-1 = free) at level L (0..127; -1 = any)
  *   expect_level P V    fail unless part P has part level V (0..127)
+ *   expect_sends E W V  fail unless engine E (0..7) has send W (0 reverb, 1 delay) at V (0..15)
  *   expect_volume E V   fail unless the engine's own volume (what CC7 on its private channel set) is V (0..127)
  *   expect_vel E LO HI  fail unless engine E (0..7) has the velocity window LO..HI
  *   expect_ctl E CH     fail unless engine E (0..7) has control channel CH (0 = none): the DX7 SysEx target
@@ -96,6 +97,13 @@ enum { SIM_FLASH_BYTES = 536576 }; /* GROOVE_FLASH_BYTES */
 static uLong flash_mark_crc;
 static unsigned long long sim_ms_total;
 
+/* The 41 lamps as text: . dark, # full brightness, 1..7 a dimmer level. */
+static void led_text(char out[42])
+{
+    const uint8_t *s = sim_state();
+    for (int i = 0; i < 41; ++i) { uint8_t v = s[168 + i]; out[i] = v == 0 ? '.' : v >= 8 ? '#' : (char)('0' + v); }
+    out[41] = 0;
+}
 static void run_ms(unsigned ms)
 {
     /* one block is 128 frames = 2.9025 ms */
@@ -409,7 +417,7 @@ int main(int argc, char **argv)
             if (write_png(path, sim_pixels(), 240, 240, 2)) { fprintf(stderr, "cannot write %s\n", path); ++errors; }
             else printf("wrote %s\n", path);
         }
-        else if (!strcmp(p, "leds")) { const uint8_t *s = sim_state(); char out[42]; for (int i = 0; i < 41; ++i) out[i] = s[168 + i] ? '#' : '.'; out[41] = 0; printf("leds %s\n", out); }
+        else if (!strcmp(p, "leds")) { char out[42]; led_text(out); printf("leds %s\n", out); }
         else if (!strcmp(p, "expect_screen") && a) { int got = sim_state()[1]; if (got != atoi(a)) { fprintf(stderr, "expect_screen: wanted %s, on %d\n", a, got); ++errors; } }
         else if (!strcmp(p, "expect_px") && a && b) {
             char *c3 = strtok(NULL, " \t\r\n"); unsigned x = (unsigned)atoi(a), y = (unsigned)atoi(b), want = c3 ? (unsigned)strtoul(c3, NULL, 16) : 0;
@@ -417,9 +425,10 @@ int main(int argc, char **argv)
             if (got != want) { fprintf(stderr, "expect_px %u %u: wanted %04x, got %04x\n", x, y, want, got); ++errors; }
         }
         else if (!strcmp(p, "expect_leds") && a) {
-            const uint8_t *s = sim_state(); int bad = 0;
-            for (int i = 0; i < 41 && a[i]; ++i) if (a[i] != '?' && (a[i] == '#') != (s[168 + i] != 0)) bad = 1;
-            if (bad) { char out[42]; for (int i = 0; i < 41; ++i) out[i] = s[168 + i] ? '#' : '.'; out[41] = 0; fprintf(stderr, "expect_leds: wanted %s, got %s\n", a, out); ++errors; }
+            char out[42]; int bad = 0;
+            led_text(out);
+            for (int i = 0; i < 41 && a[i]; ++i) if (a[i] != '?' && a[i] != out[i]) bad = 1;
+            if (bad) { fprintf(stderr, "expect_leds: wanted %s, got %s\n", a, out); ++errors; }
         }
         else if (!strcmp(p, "expect_voices") && a) {
             unsigned want = (unsigned)atoi(a), got = dx_route_voices();
@@ -536,6 +545,13 @@ int main(int argc, char **argv)
             unsigned part = (unsigned)atoi(a);
             const struct dx_parts *pp = &dx_live_edit()->parts;
             if (part >= DX_PARTS || pp->part[part].level != (unsigned)atoi(b)) { fprintf(stderr, "expect_level %s: wanted %s, got %d\n", a, b, part < DX_PARTS ? pp->part[part].level : -1); ++errors; }
+        }
+        else if (!strcmp(p, "expect_sends") && a && b) {
+            char *c3 = strtok(NULL, " \t\r\n");
+            unsigned e = (unsigned)atoi(a), w = (unsigned)atoi(b), want = c3 ? (unsigned)atoi(c3) : 0;
+            uint8_t sends[2] = {0, 0};
+            if (e < 8) groove_sends_get(e, sends);
+            if (e >= 8 || w > 1 || (sends[w] & 15U) != want) { fprintf(stderr, "expect_sends %s %s: wanted %u, got %u\n", a, b, want, e < 8 && w < 2 ? sends[w] & 15U : 0U); ++errors; }
         }
         else if (!strcmp(p, "expect_volume") && a && b) {
             unsigned e = (unsigned)atoi(a);
