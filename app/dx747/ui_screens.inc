@@ -134,7 +134,7 @@ static void draw_boot(void)
     static const int16_t door[] = {38, 68, 104, 137, 182};
     static const int16_t eng[2][2] = {{80,105},{110,103}};
     const uint16_t hi = RGB(0xC4, 0xC4, 0xC8), md = RGB(0x8C, 0x8C, 0x90), lo = RGB(0x54, 0x54, 0x58), cn = RGB(0x98, 0x98, 0x9C);
-    px_text_c(120, 10, "FM-1 CUSTOM FIRMWARE", 1, C_DIM);
+    px_text_c(120, 10, "Esben von Buchwald, 2026", 1, C_DIM);
     px_poly(body, sizeof body / sizeof *body, C_TX);
     px_poly(belly, sizeof belly / sizeof *belly, RGB(0xCC, 0xCC, 0xCC));
     px_poly(fin, sizeof fin / sizeof *fin, C_AC);      /* the fin in the accent colour, a lighter line along its leading edge */
