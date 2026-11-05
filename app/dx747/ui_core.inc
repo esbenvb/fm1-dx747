@@ -253,44 +253,6 @@ static void px_poly(const int16_t (*p)[2], unsigned n, uint16_t color)
         for (int i = 0; i + 1 < count; i += 2) px_rect(xs[i], y, xs[i + 1] - xs[i], 1, color);
     }
 }
-/* The outline of a polygon as a line w16/16 pixels wide with square ends and soft edges: a pixel's coverage falls from 1 to 0 across
- * one pixel at the line's edge, so a slope has no steps. The vertices are on pixel boundaries (with an even width a horizontal or
- * vertical edge then fills whole pixels). A pixel takes the largest coverage of the edges, so corners do not double. At most 12
- * vertices. */
-static void px_outline_soft(const int16_t (*p)[2], unsigned n, int w16, uint16_t color)
-{
-    enum { MAXV = 12 };
-    int ax[MAXV], ay[MAXV], ux[MAXV], uy[MAXV], len[MAXV];
-    const int hw = w16 / 2, pad = hw / 16 + 1;
-    int minx = BAND_W, maxx = 0, miny = 1 << 14, maxy = 0;
-    if (n > MAXV) return;
-    for (unsigned i = 0; i < n; ++i) {
-        int dx = p[(i + 1) % n][0] * 16 - p[i][0] * 16, dy = p[(i + 1) % n][1] * 16 - p[i][1] * 16;
-        int l = (int)isqrt32((unsigned)(dx * dx + dy * dy));
-        ax[i] = p[i][0] * 16; ay[i] = p[i][1] * 16; len[i] = l;
-        ux[i] = l ? dx * 16384 / l : 0; uy[i] = l ? dy * 16384 / l : 0;
-        if (p[i][0] < minx) minx = p[i][0];
-        if (p[i][0] > maxx) maxx = p[i][0];
-        if (p[i][1] < miny) miny = p[i][1];
-        if (p[i][1] > maxy) maxy = p[i][1];
-    }
-    int r0 = miny - pad < (int)band_top ? (int)band_top : miny - pad;
-    int r1 = maxy + pad + 1 > (int)band_top + BAND_H ? (int)band_top + BAND_H : maxy + pad + 1;
-    int c0 = minx - pad < 0 ? 0 : minx - pad, c1 = maxx + pad + 1 > BAND_W ? BAND_W : maxx + pad + 1;
-    for (int row = r0; row < r1; ++row)
-        for (int col = c0; col < c1; ++col) {
-            unsigned best = 0;
-            for (unsigned i = 0; i < n; ++i) {
-                int vx = col * 16 + 8 - ax[i], vy = row * 16 + 8 - ay[i];
-                int along = (vx * ux[i] + vy * uy[i]) >> 14, perp = (vy * ux[i] - vx * uy[i]) >> 14;
-                int e = (along < len[i] - along ? along : len[i] - along) + hw + 8, s = hw + 8 - (perp < 0 ? -perp : perp);
-                if (s <= 0 || e <= 0) continue;
-                unsigned a = (unsigned)((s > 16 ? 16 : s) * (e > 16 ? 16 : e));
-                if (a > best) best = a;
-            }
-            if (best) px_blend(col, row, color, best > 255U ? 255U : best);
-        }
-}
 static void px_line(int x0, int y0, int x1, int y1, uint16_t color)
 {
     int dx = x1 > x0 ? x1 - x0 : x0 - x1, dy = y1 > y0 ? y0 - y1 : y1 - y0, sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, e = dx + dy;

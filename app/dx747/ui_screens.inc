@@ -120,30 +120,45 @@ static void cell_num(struct cell *c, unsigned i) { char *o = put_u(c->t, i + 1U)
 /* ---- boot ----------------------------------------------------------------- */
 
 /* The logo in the manner of the DX7's own: D and X cut into horizontal lines (the D one line in three, the X two in three) with
- * the X's notch pushed into the D's point, then 747 as an outline in the green of the DX7's buttons. The tables are the shapes
- * of Yamaha's logo scaled to 38 rows; the outlines are the centre lines of 2 pixel wide, softly edged lines (px_outline_soft). */
+ * the X's notch pushed into the D's point, then 747 as outlines in the green of the DX7's buttons. The D and X are the shapes
+ * of Yamaha's logo scaled to 38 rows. The numbers are drawn without smoothing: their slopes are exactly 45 degrees, so every
+ * slope is a clean staircase of one pixel steps, and each is a 2 pixel line round a black inside (the outline filled in green,
+ * then the same shape 2 pixels smaller, 3 along a slope, in black). The 4's diagonal runs under the first 7's leg at a constant
+ * distance of 6 pixels sideways. */
 static void px_stripes(const int16_t (*p)[2], unsigned n, uint16_t color, unsigned period, unsigned on, int top)
 {
     stripe_period = period; stripe_on = on; stripe_y0 = top;
     px_poly(p, n, color);
     stripe_period = 0;
 }
+static void px_poly_at(const int16_t (*p)[2], unsigned n, uint16_t color, int dx)   /* px_poly moved sideways by dx */
+{
+    int16_t a[10][2];
+    for (unsigned i = 0; i < n && i < 10; ++i) { a[i][0] = (int16_t)(p[i][0] + dx); a[i][1] = p[i][1]; }
+    px_poly(a, n, color);
+}
 static void draw_logo(void)
 {
-    static const int16_t d_out[][2] = {{9,148},{44,148},{63,167},{44,186},{9,186}};
-    static const int16_t d_cnt[][2] = {{18,159},{41,159},{49,167},{41,175},{18,175}};
-    static const int16_t x_out[][2] = {{48,148},{62,148},{75,161},{89,148},{103,148},{84,167},{103,186},{89,186},{75,173},{62,186},{48,186},{67,167}};
-    static const int16_t n7a[][2] = {{106,149},{145,149},{145,158},{122,185},{112,185},{135,158},{106,158}};
-    static const int16_t n4[][2] = {{174,149},{182,149},{182,171},{188,171},{188,180},{182,180},{182,185},{174,185},{174,180},{149,180},{149,171},{154,171}};
-    static const int16_t c4[][2] = {{174,160},{174,171},{164,171}};
-    static const int16_t n7b[][2] = {{192,149},{231,149},{231,158},{208,185},{198,185},{221,158},{192,158}};
+    static const int16_t d_out[][2] = {{13,148},{48,148},{67,167},{48,186},{13,186}};
+    static const int16_t d_cnt[][2] = {{22,159},{45,159},{53,167},{45,175},{22,175}};
+    static const int16_t x_out[][2] = {{52,148},{66,148},{79,161},{93,148},{107,148},{88,167},{107,186},{93,186},{79,173},{66,186},{52,186},{71,167}};
+    static const int16_t seven[][2] = {{0,148},{40,148},{40,159},{13,186},{0,186},{27,159},{0,159}};      /* 40 wide, bars 11 thick */
+    static const int16_t seven_in[][2] = {{2,150},{38,150},{38,158},{12,184},{5,184},{32,157},{2,157}};
+    static const int16_t four[][2] = {{32,148},{43,148},{43,169},{47,169},{47,180},{43,180},{43,186},{32,186},{32,180},{0,180}};
+    static const int16_t four_in[][2] = {{33,150},{41,150},{41,171},{45,171},{45,178},{41,178},{41,184},{34,184},{34,178},{5,178}};
+    static const int16_t four_ring[][2] = {{34,155},{34,171},{18,171}};   /* the triangle in the 4: a line round a black hole */
+    static const int16_t four_hole[][2] = {{32,160},{32,169},{23,169}};
     px_stripes(d_out, sizeof d_out / sizeof *d_out, C_TX, 3, 1, 148);
     px_poly(d_cnt, sizeof d_cnt / sizeof *d_cnt, C_BLACK);
     px_stripes(x_out, sizeof x_out / sizeof *x_out, C_TX, 3, 2, 148);
-    px_outline_soft(n7a, sizeof n7a / sizeof *n7a, 32, C_DXG);
-    px_outline_soft(n4, sizeof n4 / sizeof *n4, 32, C_DXG);
-    px_outline_soft(c4, sizeof c4 / sizeof *c4, 32, C_DXG);
-    px_outline_soft(n7b, sizeof n7b / sizeof *n7b, 32, C_DXG);
+    px_poly_at(seven, sizeof seven / sizeof *seven, C_DXG, 112);
+    px_poly_at(seven_in, sizeof seven_in / sizeof *seven_in, C_BLACK, 112);
+    px_poly_at(four, sizeof four / sizeof *four, C_DXG, 137);
+    px_poly_at(four_in, sizeof four_in / sizeof *four_in, C_BLACK, 137);
+    px_poly_at(four_ring, sizeof four_ring / sizeof *four_ring, C_DXG, 137);
+    px_poly_at(four_hole, sizeof four_hole / sizeof *four_hole, C_BLACK, 137);
+    px_poly_at(seven, sizeof seven / sizeof *seven, C_DXG, 185);
+    px_poly_at(seven_in, sizeof seven_in / sizeof *seven_in, C_BLACK, 185);
 }
 
 static void draw_boot(void)
