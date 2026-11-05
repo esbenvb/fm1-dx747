@@ -4,7 +4,7 @@ There are two builds, and it matters which one you want.
 
 1. **The check build** (`Build.ps1 -FirmwareOnly`). It compiles and links the
    firmware with JieLi's Windows toolchain, runs every check the SDK has, and writes
-   a firmware package, `FM1_DX747.fwsc`. It is fast and it proves the build
+   a firmware package, `FM1_OFFICIAL_OPEN.fwsc` (the SDK's name; `build.bat --package` also leaves it as `FM1_DX747.fwsc`). It is fast and it proves the build
    works. **That file cannot be flashed by itself:** the M-VAVE workbench only
    installs a firmware that was built into its own page.
 2. **The flashing page** (`build.bat --package`). It does the check build and then
@@ -14,15 +14,17 @@ There are two builds, and it matters which one you want.
 
 **Names.** DX747 is a fork of M-VAVE's open firmware (`FM1_OFFICIAL_OPEN`) and has its own identity, so its files are called
 `FM1_DX747.fwsc` and `FM1-DX747.html`. The SDK scripts (`sdk/Build.ps1`, `sdk/WebUpdate.js`) are hash-pinned and not edited, so
-they still write the upstream names `FM1_OFFICIAL_OPEN.fwsc` and `FM1-Official-Open-Source.html`: **use `build.bat`** (not
-`sdk\Build.ps1` directly) and it leaves a copy of each under DX747's name beside it, the same bytes. A copy from an earlier run is
-deleted first, so a failed build never leaves a stale one. If you do run `Build.ps1` yourself, read the upstream names for the
-DX747 names everywhere below.
+they write the upstream names `FM1_OFFICIAL_OPEN.fwsc` and `FM1-Official-Open-Source.html`. **`build.bat --package`** (and
+`./build.sh`) leaves a copy of each under DX747's name beside it, the same bytes; the copies from an earlier run are deleted
+first, so a failed build never leaves a stale one. The check build of Step 4 (`sdk\Build.ps1 -FirmwareOnly`, and plain
+`build.bat`) writes only the upstream names, and so does `Build.ps1` itself: where this guide says `FM1_DX747` for something
+that `Build.ps1` writes, read the upstream name. `SHA256SUMS.txt` on Windows names the upstream page; the DX747-named copy has
+the same bytes, so it has the same hash.
 
 Both use the SDK's own scripts and **JieLi Windows toolchain 2.5.3**, which the
-script checks file by file against hashes in `sdk/manifest.json`. Only Windows can
-do either, because the packaging step compiles `sdk/Package.cs` with PowerShell
-while the build runs.
+script checks file by file against hashes in `sdk/manifest.json`. This is the reference
+route: the packaging step compiles `sdk/Package.cs` with PowerShell while the build runs.
+On a Mac or Linux, `./build.sh` makes the same files with Docker and Node (last section).
 
 Building is not flashing. Nothing here touches a device. Read
 [FLASHING-AND-RECOVERY.md](FLASHING-AND-RECOVERY.md) before you ever flash.
@@ -153,8 +155,8 @@ Firmware: <your clone>\build\dx7\sdk.elf
 
 The numbers above are what the project's Windows PC printed for commit `2243433`. The
 limit is 453,921 bytes. JieLi's Linux toolchain, run in Docker on the Mac, produced exactly the
-same loadable content for that commit, byte for byte (see "Comparing a Windows build with the
-Docker build" below), so the Docker numbers and gates are a reliable stand-in for the
+same loadable content for that commit, byte for byte (see "How the two routes compare" in
+[BUILDING.md](BUILDING.md)), so the Docker numbers and gates are a reliable stand-in for the
 Windows ones for this tree. A result far from these numbers (say more than a few thousand
 bytes) means something is off.
 
@@ -162,15 +164,16 @@ Results are in `build\dx7\` (inside your clone):
 
 | File | What it is |
 |---|---|
-| `generated\FM1_DX747.fwsc` | the firmware package (not installable by itself, see above) |
+| `generated\FM1_OFFICIAL_OPEN.fwsc` | the firmware package, under the SDK's name (not installable by itself, see above) |
 | `sdk.elf`, `sdk.map` | the linked program and its map |
 | `firmware-report.json` | every check the build made, with sizes |
 | `package-report.json` | how the image fits the 1 MiB flash |
 
 **Every `Build.ps1` run deletes the previous output**, including a failed run and
 this check build: `sdk.elf`, `sdk.map`, the `.fwsc`, **and the flashing page
-`build\official-web\FM1-DX747.html` with its `SHA256SUMS.txt`**, which
-it replaces with a "Build incomplete" stub. All builds write to the same place. The
+`build\official-web\FM1-Official-Open-Source.html` with its `SHA256SUMS.txt`**, which
+it replaces with a "Build incomplete" stub (a `FM1-DX747.html` copy from an earlier `--package` run is not touched by
+`Build.ps1`: `build.bat` deletes it, so do not trust a `FM1-DX747.html` that is older than the build you want). All builds write to the same place. The
 page is the only thing that can install DX747 and take you back to V15, so copy it and
 its `SHA256SUMS.txt` out of `build\` before you run anything else. To build another
 version of the source, such as the unmodified upstream for comparison (next to your clone, `git clone https://github.com/m-vave/fm1_open.git fm1-upstream`, then
@@ -179,7 +182,7 @@ version of the source, such as the unmodified upstream for comparison (next to y
 Note the package's hash, so you can tell builds apart:
 
 ```powershell
-(Get-FileHash build\dx7\generated\FM1_DX747.fwsc -Algorithm SHA256).Hash
+(Get-FileHash build\dx7\generated\FM1_OFFICIAL_OPEN.fwsc -Algorithm SHA256).Hash
 ```
 
 ## Step 5: the flashing page
@@ -205,8 +208,8 @@ $env:FM1_SOURCE_URL = "https://github.com/esbenvb/fm1-dx747/archive/$(git rev-pa
   hash. Set `FM1_WASI_SDK` to an unpacked copy to reuse one. The page contains a
   copy of the instrument that runs in the browser, and this SDK compiles it.
 
-The result is `build\official-web\FM1-DX747.html` inside your clone (with
-`SHA256SUMS.txt` beside it). It contains the workbench, the browser instrument, the
+The result is `build\official-web\FM1-Official-Open-Source.html` inside your clone (with
+`SHA256SUMS.txt` beside it), and `build.bat --package` leaves the same page as `FM1-DX747.html`. It contains the workbench, the browser instrument, the
 DX747 firmware, and the original V15 firmware for going back. The firmware travels
 inside the page, so installing it downloads nothing. **Copy the page and its
 `SHA256SUMS.txt` somewhere safe now** (see the warning above), then go to Step 6.
@@ -325,7 +328,7 @@ Send these three things and I can usually say what is wrong:
 
 ## Building on a Mac or Linux, without Windows
 
-DX747 uses the portable build of the SDK it is a fork of (`m-vave/fm1_open`, the `portable-build` branch): `./build.sh` in the
+DX747 uses the portable build that its author contributed to the SDK it is a fork of (`esbenvb/fm1_open`, branch `portable-build`, proposed to `m-vave/fm1_open`): `./build.sh` in the
 repository root does what `build.bat` does, with Docker (JieLi's Linux toolchain in a container) and Node 18 or newer, and no
 PowerShell. The guide is [docs/BUILDING.md](BUILDING.md), Option B: the one-time downloads (`./build.sh --setup`), the commands,
 the checks and how the Linux toolchain was compared with the Windows one (every loadable section identical, a byte-identical

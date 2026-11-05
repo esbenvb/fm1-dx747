@@ -14,9 +14,7 @@ exit /b 0
 :build
 call :clean
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sdk\Build.ps1"
-if errorlevel 1 exit /b %errorlevel%
-call :alias
-exit /b 0
+exit /b %errorlevel%
 :invalid
 echo Use build.bat --web, build.bat or build.bat --package.
 exit /b 2

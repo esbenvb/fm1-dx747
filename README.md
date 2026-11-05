@@ -141,8 +141,8 @@ each under DX747's names, **`FM1_DX747.fwsc`** and **`FM1-DX747.html`**, and the
 contains `build.bat`); nothing depends on where it is:
 
 ~~~
-git -c core.autocrlf=false clone https://github.com/m-vave/fm1_open.git
-cd fm1_open
+git -c core.autocrlf=false clone --branch dx747 https://github.com/esbenvb/fm1-dx747.git
+cd fm1-dx747
 ~~~
 
 (`-c core.autocrlf=false` keeps Git from changing line endings: the build checks the SDK files byte for byte.) The
@@ -166,7 +166,7 @@ Then, in PowerShell from the repository root:
 $env:FM1_PI32_TOOLCHAIN = 'C:\JL\pi32'
 .\build.bat                  # firmware
 .\build.bat --web            # browser preview
-$env:FM1_SOURCE_URL = "https://github.com/<you>/fm1_open/archive/$(git rev-parse HEAD).zip"
+$env:FM1_SOURCE_URL = "https://github.com/<you>/fm1-dx747/archive/$(git rev-parse HEAD).zip"
 .\build.bat --package        # firmware and the complete workbench page
 ~~~
 
@@ -181,7 +181,7 @@ Requires Docker and Node 18 or newer. Nothing else: no PowerShell, no Windows. F
 ./build.sh --setup            # once: JieLi's Linux toolchain (26 MB) and WASI SDK 27, both hash-checked
 ./build.sh                    # firmware: build, the SDK's checks, package
 ./build.sh --web              # browser preview
-./build.sh --package --source-url "https://github.com/<you>/fm1_open/archive/$(git rev-parse HEAD).zip"
+./build.sh --package --source-url "https://github.com/<you>/fm1-dx747/archive/$(git rev-parse HEAD).zip"
 ~~~
 
 It uses the same compiler release (clang 4.0.1) and the same flags and checks as the Windows route, in a container, and takes

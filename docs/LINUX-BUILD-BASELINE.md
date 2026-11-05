@@ -1,4 +1,7 @@
-# Baseline firmware build (M0)
+# Baseline firmware build (M0, the first Linux/Docker build, 4 November 2026)
+
+This is the record of the first build and comparison. The build scripts it names have since been replaced by the portable build
+(`./build.sh`, `tools/docker`, `tools/portable`, [docs/BUILDING.md](BUILDING.md)); the results and the comparison method still hold.
 
 The unmodified `m-vave/fm1_open` tree at commit `4c7496d` ("Fix Quick Edit display and support JieLi 2.5.3",
 `FM1_RELEASE_VERSION "V14"`), exported with `git archive 4c7496d` (never the working tree), built in a
@@ -89,7 +92,7 @@ Differences from `Build.ps1` (all deliberate): tool names (`common/bin/clang`, `
 
 ## Not done in M0
 
-- No `.fwsc` packaging (`Package.cs` port): not needed for the size gate (the image bytes equal the packager's
-  input) and nothing is flashed. rfb's `build_linux.py` has a Python port if M8 wants one.
+- No `.fwsc` packaging at that time (`Package.cs` port): not needed for the size gate. It exists now as
+  `tools/portable/fwsc.mjs`, and its package is byte for byte the Windows one (docs/BUILD-WINDOWS.md).
 - The working tree was not built (sibling sessions are editing `app/`); `build.sh` takes it as an argument.
 - No download of the V14 release workbench for a cross-check, and no hardware run.

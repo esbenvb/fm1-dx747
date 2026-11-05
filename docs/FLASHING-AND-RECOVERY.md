@@ -123,8 +123,8 @@ staging area; saving a scene on the unit and agreeing to the flash setup clears 
 
 ## What the build is, and who it says it is
 
-- The check build writes `build\dx7\generated\FM1_DX747.fwsc` (the SDK script itself writes it as
-  `FM1_OFFICIAL_OPEN.fwsc`; `build.bat` copies it), but the
+- The check build (`sdk\Build.ps1 -FirmwareOnly`) writes `build\dx7\generated\FM1_OFFICIAL_OPEN.fwsc`
+  (`build.bat --package` and `./build.sh` also leave it as `FM1_DX747.fwsc`), but the
   workbench cannot load a loose file. A custom firmware is installed from the page
   that `build.bat --package` builds, `build\official-web\FM1-DX747.html`,
   which carries the firmware inside it ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 5), or

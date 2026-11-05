@@ -48,8 +48,8 @@ V13 可以升级到 V14。工作台支持刷回原厂 V15，也支持从兼容�
 **获取源码：直接克隆本仓库**，放在任意文件夹均可。下面所有命令都在仓库根目录（含 `build.bat` 的文件夹）中运行，不依赖仓库所在位置：
 
 ~~~
-git -c core.autocrlf=false clone https://github.com/m-vave/fm1_open.git
-cd fm1_open
+git -c core.autocrlf=false clone --branch dx747 https://github.com/esbenvb/fm1-dx747.git
+cd fm1-dx747
 ~~~
 
 （`-c core.autocrlf=false` 可避免 Git 改动换行符：构建会逐字节校验 SDK 文件。）详细说明、故障排查，以及两条路线如何比对，见[构建指南](docs/BUILDING.md)（英文）。

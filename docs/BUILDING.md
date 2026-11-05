@@ -19,8 +19,8 @@ same compiler release (clang 4.0.1, GNU ld 2.26.51) with the same flags and the 
 repository to any folder; paths in these instructions and in the scripts are relative to it.
 
 ```
-git -c core.autocrlf=false clone https://github.com/m-vave/fm1_open.git
-cd fm1_open
+git -c core.autocrlf=false clone --branch dx747 https://github.com/esbenvb/fm1-dx747.git
+cd fm1-dx747
 ```
 
 `-c core.autocrlf=false` keeps Git from converting line endings: the build checks the SDK files byte for byte.
@@ -39,7 +39,7 @@ cd fm1_open
 
 For a build that you distribute, the page needs the HTTPS address of an archive of the exact source it was built from
 (`FM1_SOURCE_URL`, or `--source-url` for `build.sh`). Use the archive of a commit, not of a branch, which moves:
-`https://github.com/<you>/fm1_open/archive/<full commit id>.zip`.
+`https://github.com/<you>/fm1-dx747/archive/<full commit id>.zip`.
 
 ---
 
@@ -66,7 +66,7 @@ with a pinned hash), and the Microsoft Visual C++ Redistributable for x64, versi
 $env:FM1_PI32_TOOLCHAIN = 'C:\JL\pi32'
 .\build.bat                                   # firmware
 .\build.bat --web                             # browser preview
-$env:FM1_SOURCE_URL = "https://github.com/<you>/fm1_open/archive/$(git rev-parse HEAD).zip"
+$env:FM1_SOURCE_URL = "https://github.com/<you>/fm1-dx747/archive/$(git rev-parse HEAD).zip"
 .\build.bat --package                         # firmware and the complete page
 ```
 
@@ -108,7 +108,7 @@ ever downloaded or run on your machine outside the container.
 ./build.sh --setup                            # once
 ./build.sh                                    # firmware: build, checks, package
 ./build.sh --web                              # browser preview
-./build.sh --package --source-url "https://github.com/<you>/fm1_open/archive/$(git rev-parse HEAD).zip"
+./build.sh --package --source-url "https://github.com/<you>/fm1-dx747/archive/$(git rev-parse HEAD).zip"
 ```
 
 `./build.sh --from-git <commit>` builds a clean export of a commit (nothing from your working tree) into `build/git-<commit>/`.
