@@ -126,13 +126,16 @@ The eight sample slots share about 19.55 seconds of new sample storage. Existing
 
 You can build on **Windows** or on **macOS and Linux**. The two routes make the same three builds, in the same folders:
 
-On **Windows**: requires Windows x64, PowerShell, `curl.exe` and `tar.exe`. Firmware builds require **JieLi Windows toolchain 2.5.3**, which includes PI32v2 clang 4.0.1. [Download the 2.5.3 installer from JieLi](https://jl-update.oss-cn-shenzhen.aliyuncs.com/2.5.3.exe); install Code::Blocks first, start it once and close it completely, as described in "Build DX747 on Windows" above. Set `FM1_PI32_TOOLCHAIN` to its `pi32` folder containing `bin/clang.exe` (normally `C:\JL\pi32`). FM1 continues to use the `r3` CPU target.
-
 | Build | Windows | macOS / Linux |
 |---|---|---|
 | Firmware and its package (`build/dx7/`) | `build.bat` | `./build.sh` |
 | Browser preview (`build/preview/index.html`) | `build.bat --web` | `./build.sh --web` |
 | Firmware and the complete workbench page (`build/official-web/`) | `build.bat --package` | `./build.sh --package` |
+
+DX747 is a fork of M-VAVE's open firmware (`FM1_OFFICIAL_OPEN`) and has its own file names. The SDK scripts write the upstream names,
+`build/dx7/generated/FM1_OFFICIAL_OPEN.fwsc` and `build/official-web/FM1-Official-Open-Source.html`; both routes leave a copy of
+each under DX747's names, **`FM1_DX747.fwsc`** and **`FM1-DX747.html`**, and the macOS and Linux route also builds
+**`DX747-Workbench.html`** (the configurator, simulator and updater, [DX747.md](DX747.md)) in the same folder.
 
 **Get the source by cloning the repository** into any folder, and run every command below from its root (the folder that
 contains `build.bat`); nothing depends on where it is:

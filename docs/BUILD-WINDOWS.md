@@ -4,13 +4,20 @@ There are two builds, and it matters which one you want.
 
 1. **The check build** (`Build.ps1 -FirmwareOnly`). It compiles and links the
    firmware with JieLi's Windows toolchain, runs every check the SDK has, and writes
-   a firmware package, `FM1_OFFICIAL_OPEN.fwsc`. It is fast and it proves the build
+   a firmware package, `FM1_DX747.fwsc`. It is fast and it proves the build
    works. **That file cannot be flashed by itself:** the M-VAVE workbench only
    installs a firmware that was built into its own page.
 2. **The flashing page** (`build.bat --package`). It does the check build and then
-   builds a single web page, `FM1-Official-Open-Source.html`, with the firmware
+   builds a single web page, `FM1-DX747.html`, with the firmware
    inside it. You open that page in a browser and install from it. It needs a source
    address, a one-time download of 518 MiB, and a few more minutes.
+
+**Names.** DX747 is a fork of M-VAVE's open firmware (`FM1_OFFICIAL_OPEN`) and has its own identity, so its files are called
+`FM1_DX747.fwsc` and `FM1-DX747.html`. The SDK scripts (`sdk/Build.ps1`, `sdk/WebUpdate.js`) are hash-pinned and not edited, so
+they still write the upstream names `FM1_OFFICIAL_OPEN.fwsc` and `FM1-Official-Open-Source.html`: **use `build.bat`** (not
+`sdk\Build.ps1` directly) and it leaves a copy of each under DX747's name beside it, the same bytes. A copy from an earlier run is
+deleted first, so a failed build never leaves a stale one. If you do run `Build.ps1` yourself, read the upstream names for the
+DX747 names everywhere below.
 
 Both use the SDK's own scripts and **JieLi Windows toolchain 2.5.3**, which the
 script checks file by file against hashes in `sdk/manifest.json`. Only Windows can
@@ -26,8 +33,8 @@ folder you like (see Step 1); the commands and the paths in this guide are relat
 that folder, so there is nothing to adjust.
 
 What was checked and what was not: every check and error message below is read
-from `sdk/Build.ps1` and `tools/Build-Web.ps1`, and the Mac route at the end was
-run. Steps 1 to 5 have been run on a Windows PC (the project's) and passed. Step 6,
+from `sdk/Build.ps1` and `tools/Build-Web.ps1`; the route for Mac and Linux at the end
+is described in [BUILDING.md](BUILDING.md). Steps 1 to 5 have been run on a Windows PC (the project's) and passed. Step 6,
 installing on a real FM-1, has not been run on a unit, so if a step does not match
 what you see, trust what you see and report it (see the end).
 
@@ -155,14 +162,14 @@ Results are in `build\dx7\` (inside your clone):
 
 | File | What it is |
 |---|---|
-| `generated\FM1_OFFICIAL_OPEN.fwsc` | the firmware package (not installable by itself, see above) |
+| `generated\FM1_DX747.fwsc` | the firmware package (not installable by itself, see above) |
 | `sdk.elf`, `sdk.map` | the linked program and its map |
 | `firmware-report.json` | every check the build made, with sizes |
 | `package-report.json` | how the image fits the 1 MiB flash |
 
 **Every `Build.ps1` run deletes the previous output**, including a failed run and
 this check build: `sdk.elf`, `sdk.map`, the `.fwsc`, **and the flashing page
-`build\official-web\FM1-Official-Open-Source.html` with its `SHA256SUMS.txt`**, which
+`build\official-web\FM1-DX747.html` with its `SHA256SUMS.txt`**, which
 it replaces with a "Build incomplete" stub. All builds write to the same place. The
 page is the only thing that can install DX747 and take you back to V15, so copy it and
 its `SHA256SUMS.txt` out of `build\` before you run anything else. To build another
@@ -172,7 +179,7 @@ version of the source, such as the unmodified upstream for comparison (next to y
 Note the package's hash, so you can tell builds apart:
 
 ```powershell
-(Get-FileHash build\dx7\generated\FM1_OFFICIAL_OPEN.fwsc -Algorithm SHA256).Hash
+(Get-FileHash build\dx7\generated\FM1_DX747.fwsc -Algorithm SHA256).Hash
 ```
 
 ## Step 5: the flashing page
@@ -198,7 +205,7 @@ $env:FM1_SOURCE_URL = "https://github.com/esbenvb/fm1-dx747/archive/$(git rev-pa
   hash. Set `FM1_WASI_SDK` to an unpacked copy to reuse one. The page contains a
   copy of the instrument that runs in the browser, and this SDK compiles it.
 
-The result is `build\official-web\FM1-Official-Open-Source.html` inside your clone (with
+The result is `build\official-web\FM1-DX747.html` inside your clone (with
 `SHA256SUMS.txt` beside it). It contains the workbench, the browser instrument, the
 DX747 firmware, and the original V15 firmware for going back. The firmware travels
 inside the page, so installing it downloads nothing. **Copy the page and its
@@ -209,7 +216,7 @@ the Visual C++ runtime was updated, for commit `e59e3e7`):
 
 ```
 Compile the browser application
-Integrated FM1 workbench: <your clone>\build\official-web\FM1-Official-Open-Source.html
+Integrated FM1 workbench: <your clone>\build\official-web\FM1-Official-Open-Source.html   (build.bat then copies it to FM1-DX747.html)
 Firmware: <your clone>\build\dx7\sdk.elf
 ```
 
@@ -316,155 +323,36 @@ Send these three things and I can usually say what is wrong:
 2. The last 40 lines of the build output, starting a few lines before the first red text.
 3. The output of `git log --oneline -1` in the repository root.
 
-## Quick checks on the Mac, without Windows
+## Building on a Mac or Linux, without Windows
 
-Docker can build and gate the firmware in seconds, which is how size and symbol
-problems are found early. It uses JieLi's Linux toolchain, which is close to but not
-proven identical with the Windows one, and it cannot package a `.fwsc` or make the
-flashing page. Treat it as a quick check, and treat the
-Windows build as the image that gets flashed.
-
-You need Docker Desktop running, Node on the path, and the Linux toolchain
-unpacked once:
+DX747 uses the portable build of the SDK it is a fork of (`m-vave/fm1_open`, the `portable-build` branch): `./build.sh` in the
+repository root does what `build.bat` does, with Docker (JieLi's Linux toolchain in a container) and Node 18 or newer, and no
+PowerShell. The guide is [docs/BUILDING.md](BUILDING.md), Option B: the one-time downloads (`./build.sh --setup`), the commands,
+the checks and how the Linux toolchain was compared with the Windows one (every loadable section identical, a byte-identical
+`.fwsc`, a byte-identical page).
 
 ```bash
-mkdir -p ~/.cache/dx747/jieli-toolchain && cd ~/.cache/dx747/jieli-toolchain
-curl -LO https://jl-update.oss-cn-shenzhen.aliyuncs.com/jieli-linux-toolchains-20260730.1.tar.xz
-shasum -a 256 jieli-linux-toolchains-20260730.1.tar.xz
-tar -xf jieli-linux-toolchains-20260730.1.tar.xz
+./build.sh --setup                                           # once
+./build.sh                                                   # firmware, the SDK's checks, build/dx7/generated/FM1_DX747.fwsc
+./build.sh --web                                             # build/preview/index.html and DX747-Workbench.html
+./build.sh --package --source-url "https://github.com/<you>/fm1-dx747/archive/$(git rev-parse HEAD).zip"
+./build.sh --from-git <commit> ...                           # a clean export of a commit instead of the working tree
 ```
 
-The archive is 26,027,508 bytes and its SHA-256 must be
-`a1545cddbc451a06bac43eb5cd96d831470c42a97c5c0b1f98879a20fc7647bd`; the address and
-hash are also in `tools/dx747/docker/toolchain.json`.
-Then, from the repository:
+What DX747 adds to it:
 
-```bash
-tools/dx747/docker/build.sh -o build/dx747/docker/work .
-```
+- **Names.** The SDK steps write `FM1_OFFICIAL_OPEN.fwsc` and `FM1-Official-Open-Source.html`; `build.sh` (as `build.bat` does) leaves
+  a copy of each as **`FM1_DX747.fwsc`** and **`FM1-DX747.html`**. `--package` also builds **`DX747-Workbench.html`**, the DX747
+  workbench with the configurator, simulator, keyboard and updater (`tools/dx747/workbench.mjs`, from `web/page/`), in
+  `build/official-web/`; its `SHA256SUMS.txt` lists all three pages. `--web` builds it without firmware beside the preview.
+- **One more symbol check.** `tools/docker/gates.mjs` also requires the master filter's functions (`mfx_run`, `mfx_lp`, `mfx_bp`,
+  `mfx_hp`), which run in the audio interrupt, to be in SRAM wherever they survive as symbols.
+- **Checked against the previous DX747 build scripts.** The same commit built with the old DX747-only scripts and with
+  `./build.sh --package` and the same source address gave the same application image, the same package and byte-identical
+  `FM1-DX747.html` and `DX747-Workbench.html`.
 
-It prints the app image size, the headroom under the 453,921 byte limit, the heap,
-and whether every gate passed. This tree:
-
-```
-FM1: 429544 bytes app image (cap 453921, headroom 24377); heap 231052 bytes (min 49152); SRAM/BLE/USB checks passed
-```
-
-and the unmodified upstream (commit `4c7496d`), for comparison:
-
-```
-FM1: 453576 bytes app image (cap 453921, headroom 345); heap 247340 bytes (min 49152); SRAM/BLE/USB checks passed
-```
-
-The browser build that `build.bat --package` needs can be tried on the Mac too, with
-the macOS WASI SDK 27 unpacked in `~/.cache/dx747/wasi-sdk/`:
-
-```bash
-mkdir -p ~/.cache/dx747/wasi-sdk && cd ~/.cache/dx747/wasi-sdk
-curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-arm64-macos.tar.gz
-shasum -a 256 wasi-sdk-27.0-arm64-macos.tar.gz
-tar -xzf wasi-sdk-27.0-arm64-macos.tar.gz
-cd - && tools/dx747/sim/build.sh -o build/dx747/sim/work .
-```
-
-That archive is 113,649,205 bytes with SHA-256
-`055c3dc2766772c38e71a05d353e35c322c7b2c6458a36a26a836f9808a550f8` (Apple Silicon; the
-build script's default path assumes it). It passes for this tree.
-
-The helper scripts `tools/dx747/docker/fetch-toolchain.sh` and
-`tools/dx747/sim/fetch-wasi-sdk.sh` do these two downloads and the hash checks for you
-(add `--download` to fetch; without it they only verify). `tools/dx747/docker/BASELINE.md`
-and `tools/dx747/sim/README.md` describe the baseline build and the browser build.
-
-## Comparing a Windows build with the Docker build
-
-The two toolchains are builds of the same JieLi compiler (clang 4.0.1, GNU ld 2.26.51), but nothing
-proves that they generate the same code, so check it rather than assume it. The `sdk.elf` files of two
-builds are never byte-identical (their symbol and string tables hold file names and build paths), so
-`tools/dx747/compare/elf_report.py` compares what the chip loads: every loadable section byte by byte,
-and the function and data symbols by name, address and size.
-
-1. Build the **same commit** both ways. On Windows, from the repository root, run Step 4. On the Mac, build
-   a clean export of that commit, so that no working-tree change gets in:
-
-   ```bash
-   mkdir -p /tmp/dx747-src /tmp/dx747-out
-   git archive <commit> | tar -x -C /tmp/dx747-src
-   tools/dx747/docker/build.sh -o /tmp/dx747-out /tmp/dx747-src
-   ```
-
-2. Copy these files from the Windows `build\dx7\` folder to the Mac: `sdk.elf`, `sdk.map`,
-   `build-identity.json`, `firmware-report.json` and `generated\FM1_OFFICIAL_OPEN.fwsc`. The
-   `build_id` in `build-identity.json` is a hash of the sources: it must be the same on both sides, or the
-   builds are not of the same source.
-3. Compare the two ELF files on the Mac:
-
-   ```bash
-   python3 tools/dx747/compare/elf_report.py /tmp/dx747-out/sdk.elf <folder>/sdk.elf
-   ```
-
-   It prints one line per section and ends with `loadable content: IDENTICAL` or `DIFFERENT`; for a
-   difference it gives the number of differing bytes and where the first one is. With one file
-   it prints a report of that file alone.
-
-Two controls tell a toolchain difference from a path or timing difference: build the same commit twice on
-Windows in two clones with different folder names (the sections must be identical), and compare the
-`.fwsc` hashes of those two builds.
-
-**Result, commit `2243433` (4 November 2026).** Two Windows builds, in clones named `fm1-dx747`
-and `fm1-dx747-b`, and one Docker build of a clean export of the same commit gave:
-
-- the same `build_id` (`407e4801ef4b91c7...`) and the same sizes (app image 429,544 bytes, allocated
-  image 429,596 bytes, the same heap symbols and start address);
-- **identical content in every loadable section** (`.text` 347,712 bytes, `.ram0_data`, `.boot_info`,
-  `.cache_ram_data`) between Windows and Linux, and the same 3,633 function and data symbols at the
-  same addresses and sizes;
-- ELF files that differ only in `.symtab` and `.strtab`, which hold the build paths
-  (`C:\Users\...` appears four times in each Windows file, and the two Windows files differ from each
-  other as much as from the Linux one);
-- identical `.fwsc` packages from the two Windows builds (SHA-256 `385f83e5a01a17e2...`, 471,604 bytes),
-  so the build and the packaging do not depend on the folder name.
-
-- **The package itself, made on the Mac.** `tools/dx747/compare/make_fwsc.py` is a port of the SDK's
-  packager (`sdk/Package.cs` and the image step of `Build.ps1`, which need PowerShell and .NET). Given
-  the **Linux-built** `sdk.elf` it produced a `.fwsc` of 471,604 bytes with SHA-256 `385f83e5a01a17e2...`:
-  **byte for byte the package the two Windows builds produced.** That settles the question end to
-  end, from compiler to flashable package, and it also checks the port itself.
-
-```bash
-python3 tools/dx747/compare/make_fwsc.py /tmp/dx747-out/sdk.elf /tmp/dx747.fwsc
-shasum -a 256 /tmp/dx747.fwsc
-```
-
-The flashing **page** (`build.bat --package`, [Step 5](#step-5-the-flashing-page)) is assembled by
-PowerShell (`tools/Build-Web.ps1`). `tools/dx747/compare/make_page.py` is a port of it, so the page can be
-made on the Mac too (next section). Earlier, for commit `e59e3e7`, the sizes and the build identity
-already matched; that commit was not compared byte by byte.
-
-## Building everything on a Mac, without Windows
-
-From the repository root, with Docker running, after the one-time
-`tools/dx747/docker/fetch-toolchain.sh --download` and `tools/dx747/sim/fetch-wasi-sdk.sh --download`:
-
-```bash
-tools/dx747/mac-build.sh
-```
-
-It builds a clean export of `HEAD` in about 15 seconds: the firmware and the SDK's checks in Docker, the
-`.fwsc` with `make_fwsc.py`, the browser core with the macOS WASI SDK, and the flashing page with
-`make_page.py`. Results are in `build/dx747/mac/` (`FM1_OFFICIAL_OPEN.fwsc` and
-`official-web/FM1-Official-Open-Source.html` with its `SHA256SUMS.txt`, and beside it **`DX747-Workbench.html`**, the DX747
-workbench with the configurator, simulator, keyboard and updater, made by `tools/dx747/compare/make_dx_page.py` from `web/page/`).
-That page needs only Python 3, the browser core and a `.fwsc`, so it can be made on any machine from the Windows-built package:
-`python3 tools/dx747/compare/make_dx_page.py --root . --wasm simulator.wasm --fwsc FM1_OFFICIAL_OPEN.fwsc --identity build-identity.json --source-url URL -o OUTDIR`.
-The page's source address is the
-GitHub archive of the commit, made from the `origin` remote, so push the commit first or pass
-`--source-url`. `-o DIR` changes the output folder and `--worktree` builds uncommitted changes.
-
-How far to trust it: the firmware package it makes is byte for byte the Windows one (above). The page was
-checked with the page's own code (`FM1Web.prepare` accepts the embedded firmware and the V15 recovery
-image, and every placeholder is filled), but **not compared byte for byte with a Windows-built page**, because
-the browser core (`simulator.wasm`) comes from the macOS WASI SDK and the page text from a port of the script.
-To compare, build the page on Windows (Step 5) at the same commit with the same source address and
-`shasum -a 256` both. Until that has been done, install from the Windows-built page.
-
+To compare a Windows build of your tree with a Docker build, see "Comparing your own builds" in [docs/BUILDING.md](BUILDING.md):
+`node tools/portable/elf-compare.mjs build/dx7/sdk.elf <windows folder>/sdk.elf` ends with `loadable content: IDENTICAL` or
+`DIFFERENT`. The record of the first comparison for DX747 (commit `2243433`, 4 November 2026: the same `build_id` and sizes,
+identical loadable sections, and a `.fwsc` byte for byte the Windows one, SHA-256 `385f83e5a01a17e2...`) is in
+[docs/LINUX-BUILD-BASELINE.md](LINUX-BUILD-BASELINE.md).

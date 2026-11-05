@@ -61,14 +61,14 @@ To settle it: build this tree on a Windows machine or runner (the plan's GitHub 
 ## What was built, and how
 
 ```bash
-tools/dx747/docker/fetch-toolchain.sh --download     # once: 26,027,508 B, sha256-pinned in toolchain.json
+tools/docker/fetch-toolchain.sh --download     # once: 26,027,508 B, sha256-pinned in toolchain.json
 git archive 4c7496d | tar -x -C /some/empty/dir
-tools/dx747/docker/build.sh [-o OUT_DIR] /some/empty/dir
+tools/docker/build.sh [-o OUT_DIR] /some/empty/dir
 ```
 
 `build.sh SRC_DIR` takes any tree laid out like the SDK repo (pristine export now, the working tree later). It mounts
 the source read-only at `/src`, the toolchain read-only at `/opt/jieli`, writes only `OUT_DIR`
-(default `build/dx747/docker/<name>`, gitignored), and needs Docker, Node 18+ and nothing else (no PowerShell).
+(default `<SRC_DIR>/build/dx7`, gitignored), and needs Docker, Node 18+ and nothing else (no PowerShell).
 
 | Step | Where | What |
 |---|---|---|

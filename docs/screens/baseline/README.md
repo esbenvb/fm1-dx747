@@ -1,7 +1,7 @@
 # Stock FM-1 screens (baseline)
 
 The unmodified firmware at upstream `4c7496d` (V14), rendered by the WASM simulator built from a pristine
-`git archive` export (`tools/dx747/sim/build.sh`, wasm sha256 `a62ea3c1...3c9b80`), 240×240 shown at 2×.
+`git archive` export (`tools/portable/browser-core.sh`, wasm sha256 `a62ea3c1...3c9b80`), 240×240 shown at 2×.
 Regenerate with `tools/dx747/sim/shots.mjs` (see `tools/dx747/sim/README.md`); the run is deterministic.
 
 File names are `NN-<button>[-again]-<page>` (from a fresh boot: HOME, then that button once or twice),

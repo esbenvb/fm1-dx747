@@ -4,19 +4,18 @@ Local build of the browser simulator's WebAssembly core and a dependency-free No
 (`native/`, `recipes/` and `run-recipes.sh` here belong to the native C harness; this is the WASM side.)
 
 ```bash
-tools/dx747/sim/fetch-wasi-sdk.sh --download   # once: wasi-sdk-27.0-arm64-macos.tar.gz, 113,649,205 B, sha256-pinned
-tools/dx747/sim/build.sh [-o OUT_DIR] SRC_DIR  # prints OUT_DIR/simulator.wasm
+tools/portable/fetch-wasi-sdk.sh --download    # once: wasi-sdk-27.0-arm64-macos.tar.gz, 113,649,205 B, sha256-pinned (or ./build.sh --setup)
+tools/portable/browser-core.sh [-o OUT_DIR] [SRC_DIR]   # prints OUT_DIR/simulator.wasm
 node tools/dx747/sim/shots.mjs --wasm OUT_DIR/simulator.wasm --out docs/screens/baseline [--scale 2]
 ```
 
-## build.sh
+## browser-core.sh (tools/portable)
 
 Shell port of `Build-Simulator` in `tools/Build-Web.ps1`: every `.c` under `app/` (except `app/board/`), `web/` and
 `third_party/synth/`, includes `web/engine web/synth third_party/synth sdk/include app/synth app`, flags
 `-std=c11 -O2 -fwrapv -fno-fast-math -ffp-contract=off -DFM1_HOST_TEST -DFM1_OPEN_WEB -Wall -Wextra -Werror
 -Wno-unused-function -Wno-array-parameter -mexec-model=reactor`, link `--strip-all`, 128 KiB stack, 4 MiB initial and
-32 MiB max memory. It only reads `SRC_DIR` (a `git archive` export, or the working tree), caches on a hash of
-every input, and writes `simulator.wasm` plus `simulator.json`. Baseline: 32 sources, 295,723 bytes, 5 s, `-Werror` clean
+32 MiB max memory. It only reads `SRC_DIR` (a `git archive` export, or the working tree) and writes `simulator.wasm`. Baseline: 32 sources, 295,723 bytes, 5 s, `-Werror` clean
 with clang 20.1.8 (WASI SDK 27).
 
 ## shots.mjs

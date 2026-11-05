@@ -6,7 +6,7 @@
 // needs from the unit is tested end to end: hello, the state image, every setter, the scene commands, the voice library and the
 // error messages. No browser is needed.
 //
-//   node tools/dx747/page/test-client.mjs [--wasm FILE]     (builds the browser core with tools/dx747/sim/build.sh when no file is given)
+//   node tools/dx747/page/test-client.mjs [--wasm FILE]     (builds the browser core with tools/portable/browser-core.sh when no file is given)
 import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,7 +19,7 @@ const wasmArg = process.argv.indexOf('--wasm');
 let wasmPath = wasmArg > 0 ? process.argv[wasmArg + 1] : null;
 if (!wasmPath) {
   const out = mkdtempSync(join(tmpdir(), 'dx747-core-'));
-  wasmPath = execFileSync(join(root, 'tools/dx747/sim/build.sh'), ['-o', out, root], { encoding: 'utf8' }).trim().split('\n').pop();
+  wasmPath = execFileSync(join(root, 'tools/portable/browser-core.sh'), ['-o', out, root], { encoding: 'utf8' }).trim().split('\n').pop();
 }
 for (const f of ['sdk/I18n.js', 'sdk/WebUpdate.js', 'web/page/dx747-core.js', 'web/page/dx747-device.js', 'web/page/dx747-client.js'])
   vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f });

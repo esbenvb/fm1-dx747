@@ -4,17 +4,19 @@
 # build.sh is the macOS and Linux counterpart of build.bat: the same three builds, the same output folders,
 # without Windows. It needs Docker and Node 18+. See docs/BUILDING.md.
 #
-#   ./build.sh                       firmware: build, run the SDK's checks, make build/dx7/generated/FM1_OFFICIAL_OPEN.fwsc
-#   ./build.sh --web                 browser preview: build/preview/index.html
-#   ./build.sh --package             firmware and the complete workbench page: build/official-web/
+#   ./build.sh                       firmware: build, run the SDK's checks, make build/dx7/generated/FM1_DX747.fwsc
+#   ./build.sh --web                 browser preview: build/preview/index.html and DX747-Workbench.html
+#   ./build.sh --package             firmware and the complete workbench pages: build/official-web/
 #   ./build.sh --setup               one-time downloads (JieLi's Linux toolchain, 26 MB; WASI SDK 27, 114-125 MB)
 #
 #   --source-url URL    the HTTPS address of the matching source archive (--package; or set FM1_SOURCE_URL),
 #                       for example "https://github.com/<you>/fm1_open/archive/$(git rev-parse HEAD).zip"
 #   --from-git REF      build a clean export of a commit instead of the working tree, in build/git-<commit>/
 #
-# The Windows build (build.bat, sdk/Build.ps1) stays the reference. What the checks and the comparison with
-# it cover is in docs/BUILDING.md.
+# DX747 is a fork of FM1_OFFICIAL_OPEN and has its own file names: the SDK steps write the upstream names (FM1_OFFICIAL_OPEN.fwsc,
+# FM1-Official-Open-Source.html) and this script leaves a copy of each as FM1_DX747.fwsc and FM1-DX747.html; the DX747 workbench
+# page (tools/dx747/workbench.mjs) is DX747-Workbench.html. The Windows build (build.bat, sdk/Build.ps1) stays the reference.
+# What the checks and the comparison with it cover is in docs/BUILDING.md.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,7 +24,7 @@ MODE=firmware
 REF=""
 URL="${FM1_SOURCE_URL:-}"
 
-usage() { sed -n '4,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '4,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --web) MODE=web; shift ;;
@@ -65,18 +67,21 @@ firmware() {
   echo "== firmware (JieLi Linux toolchain in Docker)"
   "$HERE/tools/docker/build.sh" -o "$BUILD/dx7" "$SRC"
   mkdir -p "$BUILD/dx7/generated"
+  rm -f "$BUILD/dx7/generated/FM1_DX747.fwsc"
   node "$HERE/tools/portable/fwsc.mjs" "$BUILD/dx7/sdk.elf" "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" --root "$SRC"
+  cp "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" "$BUILD/dx7/generated/FM1_DX747.fwsc"
 }
 
 case "$MODE" in
   firmware)
     firmware
-    echo "== done: $BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" ;;
+    echo "== done: $BUILD/dx7/generated/FM1_DX747.fwsc" ;;
   web)
     echo "== browser core"
     "$HERE/tools/portable/browser-core.sh" -o "$BUILD/web" "$SRC" >/dev/null
     node "$HERE/tools/portable/page.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview"
-    echo "== done: $BUILD/preview/index.html" ;;
+    node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview"
+    echo "== done: $BUILD/preview/index.html and $BUILD/preview/DX747-Workbench.html" ;;
   package)
     firmware
     echo "== browser core"
@@ -84,5 +89,9 @@ case "$MODE" in
     echo "== workbench page"
     node "$HERE/tools/portable/page.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
       --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web"
-    echo "== done: $BUILD/official-web/FM1-Official-Open-Source.html" ;;
+    node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
+      --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web"
+    cp "$BUILD/official-web/FM1-Official-Open-Source.html" "$BUILD/official-web/FM1-DX747.html"
+    ( cd "$BUILD/official-web" && for f in FM1-DX747.html DX747-Workbench.html; do printf '%s  %s\n' "$(shasum -a 256 "$f" | cut -d' ' -f1)" "$f"; done >> SHA256SUMS.txt )
+    echo "== done: $BUILD/official-web/DX747-Workbench.html and FM1-DX747.html" ;;
 esac

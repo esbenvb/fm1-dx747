@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-only WITH GPL-3.0-linking-exception
 //
-// Dependency-free Node harness for the FM1 WASM simulator (tools/dx747/sim/build.sh).
+// Dependency-free Node harness for the FM1 WASM simulator (tools/portable/browser-core.sh).
 // Loads simulator.wasm, presses buttons, keys and encoders through sim_control,
 // renders audio blocks so the firmware's control loop runs, reads the 240x240
 // RGB565 frame buffer (sim_pixels) and writes PNGs. Node >= 18, no packages.

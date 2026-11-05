@@ -289,6 +289,8 @@ function testFirmware(src, out) {
     ...extra];
   for (const name of [...(synth.sram_optional ?? []), ...(synth.native_sram_optional ?? [])]) if (has(name)) callbacks.push(name);
   callbacks.push('cpu_enter_sfc_critical', 'cpu_exit_sfc_critical', 'enter_spi_code', 'exit_spi_code', 'fm1_r_da3931a5b7a8', 'sfc_drop_cache');
+  // DX747's master filter runs in the audio ISR: wherever its functions survive as symbols they must be in SRAM.
+  for (const name of ['mfx_run', 'mfx_lp', 'mfx_bp', 'mfx_hp']) if (has(name)) callbacks.push(name);
   // emu2149 helpers can inline into the mandatory psg_* SRAM callbacks.
   for (const name of ['audio_app_usb_mix', 'audio_app_usb_record', 'audio_app_usb_replace_input',
     'render_stereo', 'effects_render', 'effects_sample', 'sequence_event', 'clock_publish',
