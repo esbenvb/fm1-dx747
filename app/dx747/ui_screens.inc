@@ -112,35 +112,42 @@ static void draw_boot(void)
      * the fin in one outline, a shaded belly, the stabiliser, the swept wing and two engines, then the windows. */
     static const int16_t body[][2] = {{8,99},{8,97},{13,93},{19,90},{25,86},{26,85},{30,85},{34,83},{72,83},{78,84},{96,86},{106,88},{178,88},{183,86},{195,76},{218,56},{231,56},{221,83},{220,87},{224,88},{231,88},{226,91},{223,94},{220,95},{211,97},{197,100},{181,104},{173,105},{164,107},{148,109},{128,109},{127,110},{67,110},{66,109},{40,109},{26,107},{21,106},{15,104},{11,102}};
     static const int16_t belly[][2] = {{223,94},{220,95},{211,97},{197,100},{181,104},{173,105},{164,107},{148,109},{128,109},{127,110},{67,110},{66,109},{40,109},{26,107},{21,106},{15,104},{11,102},{8,99},{8,98},{10,98},{14,100},{17,102},{26,104},{32,105},{40,106},{66,106},{67,107},{127,107},{128,106},{148,106},{164,104},{173,102},{181,101},{197,97},{220,92}};
-    static const int16_t cap[][2] = {{218,56},{231,56},{229,62},{211,62}};
+    static const int16_t fin[][2] = {{178,88},{183,86},{195,76},{218,56},{231,56},{221,83},{220,87},{220,88}};
+    static const int16_t fedge[][2] = {{183,86},{195,76},{218,56},{221,56},{198,76},{186,86}};
     static const int16_t stab[][2] = {{193,92},{197,90},{224,87},{231,88},{226,91},{222,94},{218,96},{201,99},{200,97}};
-    static const int16_t wing[][2] = {{74,103},{80,102},{100,100},{125,99},{157,98},{125,102},{110,104},{101,105},{75,105}};
-    static const int16_t wdark[][2] = {{157,98},{125,102},{110,104},{101,105},{101,103},{110,102},{125,100},{141,98}};
-    static const int16_t cone1[][2] = {{103,106},{107,108},{103,110}};
-    static const int16_t cone2[][2] = {{130,104},{134,106},{130,108}};
+    static const int16_t wlo[][2] = {{72,104},{77,101},{100,99},{125,99},{158,98},{146,101},{138,103},{132,105},{112,107},{104,107},{76,107}};
+    static const int16_t wmd[][2] = {{72,104},{77,101},{100,99},{125,99},{158,98},{146,100},{138,101},{128,103},{110,104},{104,105},{76,105}};
+    static const int16_t whi[][2] = {{77,101},{100,99},{125,99},{158,98},{146,99},{125,100},{104,102},{78,102}};
     static const int16_t door[] = {38, 68, 104, 137, 182};
+    static const int16_t eng[2][2] = {{80,105},{110,103}};
+    const uint16_t hi = RGB(0xC4, 0xC4, 0xC8), md = RGB(0x8C, 0x8C, 0x90), lo = RGB(0x54, 0x54, 0x58), cn = RGB(0x98, 0x98, 0x9C);
     px_text_c(120, 10, "FM-1 CUSTOM FIRMWARE", 1, C_DIM);
     px_poly(body, sizeof body / sizeof *body, C_TX);
     px_poly(belly, sizeof belly / sizeof *belly, RGB(0xCC, 0xCC, 0xCC));
-    px_poly(cap, sizeof cap / sizeof *cap, C_AC);
+    px_poly(fin, sizeof fin / sizeof *fin, C_AC);      /* the fin in the accent colour, a lighter line along its leading edge */
+    px_poly(fedge, sizeof fedge / sizeof *fedge, RGB(0x90, 0xF4, 0xFF));
     px_poly(stab, sizeof stab / sizeof *stab, RGB(0x70, 0x70, 0x74));
     px_line(198, 90, 224, 88, RGB(0xA4, 0xA4, 0xA8));
     for (unsigned i = 0; i < sizeof door / sizeof *door; ++i) px_frame(door[i] - 1, 93, 3, 8, RGB(0xB0, 0xB0, 0xB4));
     px_frame(55, 86, 3, 6, RGB(0xB0, 0xB0, 0xB4));
-    px_poly(wing, sizeof wing / sizeof *wing, RGB(0xC0, 0xC0, 0xC4));
-    px_poly(wdark, sizeof wdark / sizeof *wdark, RGB(0x78, 0x78, 0x7C));
-    px_rect(83, 104, 10, 8, RGB(0x8C, 0x8C, 0x90));
-    px_rect(83, 104, 10, 1, RGB(0xD4, 0xD4, 0xD4));
-    px_rect(83, 111, 10, 1, RGB(0x58, 0x58, 0x5C));
-    px_rect(93, 106, 10, 4, RGB(0x66, 0x66, 0x6A));
-    px_poly(cone1, 3, RGB(0xA8, 0xA8, 0xA8));
-    px_rect(110, 102, 10, 8, RGB(0x8C, 0x8C, 0x90));
-    px_rect(110, 102, 10, 1, RGB(0xD4, 0xD4, 0xD4));
-    px_rect(110, 109, 10, 1, RGB(0x58, 0x58, 0x5C));
-    px_rect(120, 104, 10, 4, RGB(0x66, 0x66, 0x6A));
-    px_poly(cone2, 3, RGB(0xA8, 0xA8, 0xA8));
-    px_rect(82, 105, 1, 6, C_AC);                      /* intake lips: the accent colour */
-    px_rect(109, 103, 1, 6, C_AC);
+    px_poly(wlo, sizeof wlo / sizeof *wlo, lo);        /* swept wing: dark underside, mid body, light top */
+    px_poly(wmd, sizeof wmd / sizeof *wmd, md);
+    px_poly(whi, sizeof whi / sizeof *whi, hi);
+    for (unsigned e = 0; e < 2; ++e) {                 /* engines: pylon, cowl in three tones, dark inlet, core, plug, accent lip */
+        int x = eng[e][0], y = eng[e][1];
+        px_rect(x + 12, y, 2, 1, lo);
+        px_rect(x + 14, y, 8, 3, lo);
+        px_rect(x + 1, y, 14, 10, md);
+        px_rect(x + 1, y, 14, 2, hi);
+        px_rect(x + 1, y + 7, 14, 3, lo);
+        px_rect(x + 15, y + 3, 7, 5, RGB(0x66, 0x66, 0x6A));
+        px_rect(x + 15, y + 3, 7, 1, md);
+        px_rect(x + 22, y + 3, 2, 5, cn);
+        px_rect(x + 24, y + 4, 2, 3, cn);
+        px_rect(x + 26, y + 5, 1, 1, cn);
+        px_rect(x + 1, y + 2, 2, 5, RGB(0x3C, 0x3C, 0x40));
+        px_rect(x, y + 1, 1, 8, C_AC);
+    }
     for (int x = 14; x < 178; x += 3) {                /* main deck windows, a gap at each door */
         int gap = 0;
         for (unsigned i = 0; i < sizeof door / sizeof *door; ++i) gap |= x >= door[i] - 3 && x <= door[i] + 3;
