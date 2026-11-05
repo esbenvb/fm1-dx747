@@ -6,7 +6,7 @@
   'use strict';
   const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const noteName = n => NOTE[n % 12] + (Math.floor(n / 12) - 1);        // 60 is C4, as on the panel
-  const text = (b, at, n) => String.fromCharCode(...b.subarray(at, at + n)).replace(/\s+$/, '');
+  const text = (b, at, n) => String.fromCharCode(...b.subarray(at, at + n)).replace(/[^\x20-\x7e]/g, ' ').replace(/\s+$/, '');   // as the unit shows names: anything unprintable is a space
   const pad12 = s => Array.from({ length: 12 }, (_, i) => (s[i] && s.charCodeAt(i) >= 32 && s.charCodeAt(i) <= 126) ? s.charCodeAt(i) : 32);
   const REASON = { 1: 'That slot is empty', 67: 'The unit is busy writing flash: wait a moment and try again', 71: 'The unit refused that value or that action',
                    72: 'The unit is out of memory', 95: 'No free part slot', 96: 'No free engine: remove a layer first', 97: 'No free MIDI channel', 98: 'The unit refused that change' };

@@ -64,8 +64,13 @@ eq(C.otherEnd('lo'), 'hi', 'the switch moves from lowest'); eq(C.otherEnd('hi'),
 eq(C.limitEnd(1, 127, 'lo', 40, 1, 127), [40, 127], 'lowest handle'); eq(C.limitEnd(40, 127, 'hi', 100, 1, 127), [40, 100], 'highest handle');
 eq(C.limitEnd(40, 100, 'lo', 110, 1, 127), [100, 100], 'the lowest stops at the highest'); eq(C.limitEnd(40, 100, 'hi', 10, 1, 127), [40, 40], 'the highest stops at the lowest');
 eq(C.limitEnd(40, 100, 'lo', -5, 1, 127), [1, 100], 'clamped to 1'); eq(C.limitEnd(40, 100, 'hi', 500, 1, 127), [40, 127], 'clamped to 127');
-eq(C.nearestEnd(1, 127, 20), 'lo', 'a press near the lowest'); eq(C.nearestEnd(1, 127, 100), 'hi', 'a press near the highest'); eq(C.nearestEnd(40, 40, 10), null, 'handles together: decided by the drag');
-eq(C.nearestEnd(1, 127, 64), null, 'halfway: decided by the drag');
+// a press at pixel px; the handles' centres are at pixels cl and ch, a handle is 8 px to each side
+eq(C.grab(100, 200, 105, 8), { end: 'lo', onHandle: true, offset: 5 }, 'a press on the lowest handle keeps its offset'); eq(C.grab(100, 200, 193, 8), { end: 'hi', onHandle: true, offset: -7 }, 'a press on the highest handle');
+eq(C.grab(100, 200, 140, 8), { end: 'lo', onHandle: false, offset: 0 }, 'a press on the bare track takes the nearer handle'); eq(C.grab(100, 200, 170, 8), { end: 'hi', onHandle: false, offset: 0 }, 'nearer the highest');
+eq(C.grab(100, 200, 150, 8).end, null, 'halfway: the drag decides'); eq(C.grab(100, 100, 100, 8), { end: null, onHandle: true, offset: 0 }, 'on handles that sit together the drag decides');
+eq(C.grab(100, 108, 106, 8).end, 'hi', 'overlapping handles: the nearer centre wins, not the one on top'); eq(C.grab(100, 108, 101, 8).end, 'lo', 'overlapping handles: the lower one can be picked');
+eq(C.sideEnd(40, 40, 10), 'lo', 'a click below handles that sit together takes the lowest'); eq(C.sideEnd(40, 40, 100), 'hi', 'a click above takes the highest'); eq(C.sideEnd(40, 40, 40), null, 'a click on them decides nothing');
+eq(C.sideEnd(40, 80, 60), null, 'a click between two distinct handles is left to the nearer-handle rule');
 eq(C.endByDrag(40, 40, 30), 'lo', 'dragging down from together takes the lowest'); eq(C.endByDrag(40, 40, 50), 'hi', 'dragging up from together takes the highest'); eq(C.endByDrag(40, 40, 40), null, 'no move yet');
 eq(C.endByDrag(1, 127, 20), 'lo', 'halfway drag toward the lowest'); eq(C.endByDrag(1, 127, 100), 'hi', 'halfway drag toward the highest');
 eq(C.valueAt(0, 0, 100, 1, 127), 1, 'track start'); eq(C.valueAt(100, 0, 100, 1, 127), 127, 'track end'); eq(C.valueAt(50, 0, 100, 1, 127), 64, 'track middle');

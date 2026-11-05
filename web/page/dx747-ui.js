@@ -35,10 +35,15 @@
     return v => { pending = v; if (!t) t = setTimeout(() => { t = null; fn(pending); }, ms); };
   }
   // A control the user just touched keeps what they set for a moment, so a poll of the unit does not undo it mid-adjustment.
-  const touch = el => { el._edit = Date.now(); };
-  const recent = el => el._edit && Date.now() - el._edit < 1500;
+  const HOLD = 1500;
+  // ... and once the hold has run out the control is painted again from the newest state, so what the unit really holds shows
+  // (a refused or clamped value, a change made on the panel meanwhile).
+  let resyncTimer = null;
+  function scheduleResync() { clearTimeout(resyncTimer); resyncTimer = setTimeout(() => { if (app.dx && app.state) renderCurrent(); }, HOLD + 80); }
+  const touch = el => { el._edit = Date.now(); scheduleResync(); };
+  const recent = el => el._edit && Date.now() - el._edit < HOLD;
   let releaseSlider = null;
-  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, () => { if (releaseSlider) { releaseSlider(); releaseSlider = null; } });
+  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, () => { if (releaseSlider) { releaseSlider(); releaseSlider = null; scheduleResync(); } });
   /** opts.snap = { at, within }: a drag that ends within `within` steps of `at` lands on it, and a double-click goes there (the centre
    *  of pan, BRIGHT and the octave shift). The keyboard is not snapped, so the arrow keys can still step off the centre. */
   function slider(min, max, fmt, onSet, cls, opts = {}) {
@@ -122,7 +127,10 @@
     try {
       const names = [];
       for (let b = 0; b < 4; b++) { names.push(...await dx.voiceNames(b)); if (app.dx !== dx || seq !== app.voiceSeq) return; app.voiceBanks = b + 1; updatePresetBar(); }
-      app.voices = names; app.voiceState = 'ok'; app.sig = ''; updatePresetBar(); renderCurrent();
+      const changed = !app.voices || app.voices.join('\n') !== names.join('\n');
+      app.voices = names; app.voiceState = 'ok'; updatePresetBar();
+      if (changed) { app.sig = ''; renderCurrent(); }                         // rebuild the lists only when a name is different
+      if (app.state) checkLibrary(app.state);
     } catch (error) {
       if (app.dx !== dx || seq !== app.voiceSeq) return;
       app.voiceState = 'error'; app.voiceError = error.message || String(error); updatePresetBar();
@@ -135,7 +143,7 @@
     const where = app.mode === 'unit' ? 'the FM-1' : 'the simulator', status = $('#preset-status');
     status.className = app.voiceState === 'error' ? 'err' : '';
     status.textContent = !app.dx ? '' : app.voiceState === 'loading' ? 'Reading the voice presets from ' + where + '… ' + app.voiceBanks + ' of 4 banks'
-      : app.voiceState === 'error' ? 'Could not read the presets (' + app.voiceError + '). Voices show their program numbers until this works.'
+      : app.voiceState === 'error' ? 'Could not read the presets (' + app.voiceError + '). ' + (app.voices ? 'The lists below may be out of date: press Reload presets.' : 'Voices show their program numbers until this works.')
       : app.voices ? 'Presets: the ' + app.voices.length + ' voices of banks A to D, as ' + where + ' holds them.' : '';
     $('#preset-reload').disabled = !app.dx || app.voiceState === 'loading';
   }
@@ -144,7 +152,8 @@
     const name = (x.voice || '').trim();
     return !!(x.up && name && typeof lib === 'string' && lib.trim() !== name);
   }
-  /** When a part shows a voice the library does not list, the names read earlier may be out of date: read them again, once. */
+  /** After the names were read: when a part shows a voice the library does not list, they may be out of date (the library changed while
+   *  the page was open): read them again, once per connection. Never from a poll, so it cannot start while the user is working. */
   function checkLibrary(s) {
     if (!app.voices || app.autoReread || app.voiceState !== 'ok') return;
     if (s.engines.some(x => x.owner < 8 && voiceDiffers(x, app.voices[x.program]))) { app.autoReread = true; loadVoices(true); }
@@ -152,7 +161,7 @@
   const voiceLabel = p => 'ABCD'[p >> 5] + String((p & 31) + 1).padStart(2, '0') + '  ' + ((app.voices && app.voices[p]) || 'program ' + (p + 1));
 
   // ---- state in, drawing out ------------------------------------------------------------------------------------------
-  function onState(s) { app.state = s; renderCurrent(); checkLibrary(s); }
+  function onState(s) { app.state = s; renderCurrent(); }
   function renderCurrent() {
     const fn = { configure: renderConfigure, master: renderMaster, scenes: renderScenes, sounds: renderSounds }[app.tab];
     if (fn) fn();
@@ -223,7 +232,7 @@
     const set = (f, v) => act(() => app.dx.setLayer(e, f, v)), box = h('div', 'layer');
     const chip = h('span', 'chip small', index + 1); chip.style.background = color;
     const voice = voiceSelect(v => act(() => app.dx.setLayer(e, 14, v), refresh));
-    voice.node.setAttribute('aria-label', 'Voice of layer ' + (index + 1));
+    voice.node.setAttribute('aria-label', 'Voice of part ' + (part.index + 1) + ' layer ' + (index + 1));
     const odd = h('span', 'voice-odd'); odd.hidden = true;
     const mute = h('button', 'toggle', 'Mute'), solo = h('button', 'toggle', 'Solo'), remove = h('button', 'warn', 'Remove');
     mute.onclick = () => act(() => app.dx.setLayer(e, 12, app.state.engines[e].muted ? 0 : 1), refresh);
@@ -234,11 +243,12 @@
     const level = slider(0, 127, v => v, v => set(0, v)), pan = slider(-50, 50, v => (v ? (v < 0 ? 'L' : 'R') + Math.abs(v) : 'C'), v => set(1, v + 50), '', centre),
       bright = slider(-50, 50, v => (v > 0 ? '+' : '') + v, v => set(2, v + 50), '', centre), rev = slider(0, 15, v => v, v => set(3, v)), dly = slider(0, 15, v => v, v => set(4, v));
     const row2 = h('div', 'row sliders', field('Level', level.el), field('Pan', pan.el), field('BRIGHT', bright.el), field('Reverb', rev.el), field('Delay', dly.el));
-    const keys = DxControls.keyRange((end, n) => set(end === 'lo' ? 5 : 6, n), color);
+    const where = 'part ' + (part.index + 1) + ' layer ' + (index + 1);
+    const keys = DxControls.keyRange((end, n) => set(end === 'lo' ? 5 : 6, n), color, where);
     const shift = slider(-4, 4, shiftText, v => set(7, v * 12 + 64), '', { snap: { at: 0, within: 0 } });
     const fold = select(FOLD.map((n, i) => [i, n]), v => set(8, v));
-    const vel = DxControls.dualSlider(1, 127, (end, v) => set(end === 'lo' ? 9 : 10, v), ['Lowest', 'Highest']);
-    const poly = DxControls.segmented(Array.from({ length: 8 }, (_, i) => [i + 1, String(i + 1)]), v => set(11, v), 'Polyphony of layer ' + (index + 1) + ', voices');
+    const vel = DxControls.dualSlider(1, 127, (end, v) => set(end === 'lo' ? 9 : 10, v), ['Lowest', 'Highest'], where);
+    const poly = DxControls.segmented(Array.from({ length: 8 }, (_, i) => [i + 1, String(i + 1)]), v => set(11, v), 'Polyphony in voices, ' + where);
     const row3 = h('div', 'row', field('Octave shift', shift.el), field('Fold', fold.el), field('Velocity range', vel.el), field('Polyphony (voices)', poly.el));
     const row4 = h('div', 'row', field('Key range', keys.el, 'full'));
     box.append(row1, row2, row4, row3);
@@ -373,8 +383,9 @@
       Dx747.checkRom(bytes);                                                          // refuse a bad file before asking
       if (!confirm('Replace bank ' + 'ABCD'[+target.node.value] + ' of the voice library with this file?')) return;
       app.soundBank = +target.node.value;
-      await app.dx.importRom(+target.node.value, bytes); toast('Imported and read back');
-      app.voices = null; app.sig = ''; app.autoReread = false; soundsUI.key = ''; loadVoices(true); fillSounds();   // the names changed everywhere
+      const dx = app.dx;
+      try { await dx.importRom(+target.node.value, bytes); toast('Imported and read back'); }
+      finally { app.autoReread = false; soundsUI.key = ''; loadVoices(true); fillSounds(); }   // the names changed (or may have, if the read-back failed)
     });
     root.append(banks, soundsUI.note, soundsUI.grid, h('h3', null, 'Import a DX7 ROM or bank file'), h('div', 'row', file, field('Into', target.el), go));
   }
@@ -424,6 +435,7 @@
     if (!globalThis.FM1Web) { document.body.textContent = 'The workbench script failed to load.'; return; }
     document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
     $('#btn-sim').onclick = useSimulator; $('#btn-unit').onclick = useUnit;
+    DxControls.onTouch = scheduleResync;
     $('#preset-reload').onclick = () => { app.autoReread = true; loadVoices(true); };
     $('#btn-reset').onclick = () => { if (confirm('Erase the simulator\'s saved scenes and settings and start again?')) app.sim.reset(); };
     const wasm = Uint8Array.from(atob(DX_SIMULATOR.data), c => c.charCodeAt(0));
