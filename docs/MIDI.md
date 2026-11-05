@@ -13,7 +13,8 @@ layers.
 
 - Bluetooth MIDI is a **peripheral**: the phone or computer connects to the FM-1.
 - The built-in keyboard has 27 keys and plays notes 53 and up (F3 in the standard
-  naming, where 60 is C4). **OCT-** and **OCT+** move it by up to two octaves.
+  naming, where 60 is C4). **OCT-** and **OCT+** move it by up to two octaves on the Parts, Part and MIDI in
+  screens (on the other screens they step pages, rows, banks or parts instead).
   Its velocity is fixed at 100. It plays the **selected part**, on that part's channel,
   so its channel follows the selection (nothing plays while the selected part is an
   empty slot); a scene stores which part is selected.

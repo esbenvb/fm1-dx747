@@ -38,6 +38,11 @@ serial or label.
 | All eight engines exist | an external keyboard on channel 1, then 2, up to 8 (part n is on channel n by default) | every part sounds; none says it is out of memory |
 | Memory | System screen | CPU reading is steady at idle |
 | All eight engines up | look at every screen's header | the `ENGINES` count reads 8/8 and is not amber; write down the second number if it is lower |
+| Octave buttons step | on EDIT's pages, FX, Scenes, System, Mix and the part in detail (HOME twice) press OCT- and OCT+ | each steps the page, the filter page, the bank, the row, the part; on Parts, Part and MIDI in they move the keyboard octave |
+| Part in detail | HOME twice; K1 and K2; ARP then two keys | K1 moves the MIDI channel, K2 the part level; a split and an octave shift show as bars and a small amber tag |
+| Readable text | look at every screen at arm's length, in a bright and a dim room | the text you need to read is white and legible, the large text is smooth, not blocky; write down any text that is hard to read and on which screen |
+| PRESETS | turn PRESETS on Parts, Part, the detail screen and each of the four layer pages | the framed layer's patch changes (the name shows in the overlay); K1 on the Sound page is the layer's volume |
+| Overlay | turn each knob on each screen once | a box with the label and the new value shows at the bottom for about a second after the last click, readable at arm's length; it is gone after that and the screen under it is unchanged |
 
 All eight engines at once is the biggest unknown: the firmware link leaves about
 231,000 bytes of heap, but eight real engine instances were never created together
@@ -130,6 +135,7 @@ Do not cut power during a save to test it.
 | Levels | System, BUTTON LIGHT 0 to 8 | the idle light of every button and key steps visibly from dark to bright |
 | Flicker | look at it and at a phone camera in slow motion at levels 1 to 4 | no visible flicker |
 | States | keys and buttons that light for a reason (selected, active) | clearly brighter than the idle light |
+| Mix keys | Mix screen, EDIT: the white keys are mute and solo | with part 8 empty, its two keys are dark; the other keys are dim; muting or soloing a part makes its key bright. Write down whether the dim level (2 of 8) is clearly dimmer than the bright one and still visible at BUTTON LIGHT 0 |
 | Audio unaffected | listen while changing the light level | no clicks |
 
 ## 9. Recovery and return

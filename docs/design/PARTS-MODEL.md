@@ -20,6 +20,13 @@ the firmware as built. Differences from the design as first written:
   before, so a sequencer can use them at once. Layering needs a free engine.
 - **Extra controls:** ENV and LFO add and remove layers (and mute and solo on Mix, and
   step scenes on Scenes); PLAY held with OCT- or OCT+ steps scenes anywhere.
+- **Panel changes after the first try (2026-11-05):** the chips show the *part number*
+  (the MIDI channel is written `CH n`, so the two are never confused); OCT- and OCT+ step
+  pages, rows, banks and parts wherever a screen has them (the keyboard octave only on
+  Parts, Part and MIDI in); HOME a second time shows the part in detail (channel, part
+  level, a line per layer over a keyboard ruler); every knob and message shows an overlay
+  box; Mix works on whole parts (pan and sends move all layers together, ALGO sets the
+  channel) and EDIT there turns the white keys into mute and solo keys with lamp levels.
 
 ## Why
 
@@ -149,7 +156,7 @@ shared reverb and delay tail continues.
   white key is an optional shortcut. No screen turns the keys into selectors any more (the
   Scenes screen may keep them as quick recall).
 - **Parts (home, HOME):** eight rows of 25 px under a 25 px header, one per part, always
-  the same layout: `[channel chip] NAME [mini range bar] [+N]`.
+  the same layout: `[part chip] NAME [mini range bar] [+N]` and `CH n` under the name.
   - NAME is 10 characters, the same size on every row. It is the layer with the widest key
     range, ties going to layer 1. `+N` is the number of other layers (blank when 1).
   - The range bar shows splits side by side and layers stacked, in the part's colour. The
