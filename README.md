@@ -1,5 +1,7 @@
 # DX747: an eight-part multitimbral DX7 module for the M-VAVE FM-1
 
+<p align="center"><img src="docs/screens/boot-static-logo.png" width="240" alt="The DX747 boot screen: a Boeing 747 in side view above the words DX747, 8-part multitimbral DX7 module"></p>
+
 **Eight FM engines. Eight parts. Any of sixteen MIDI channels. One compact box that plays your DX7 voices, eight parts at a time.**
 
 DX747 is custom firmware that turns the M-VAVE FM-1 into a **multitimbral, layerable, splittable 6-operator FM sound module**: the glassy electric pianos, the bell-like mallets, the growling basses and the shimmering pads of the DX7 sound world, played and controlled from your keyboard, sequencer, DAW or phone. It replaces the stock sequencer, sampler and drum machine with one job done properly: **a DX7 module that is built for MIDI**.
