@@ -31,10 +31,11 @@ expect_state 146 127
 expect_state 150 1
 expect_state 151 127
 expect_state_text 152 PIANO_1
-# the CRC command answers with the image size (344 = 0x158)
+# the CRC command answers with the image size (346 = 0x15a)
 wb 24 0
-expect_reply 5 88
+expect_reply 5 90
 expect_reply 6 1
+expect_state 7 0
 # layer settings: range, shift, velocity window, level, pan, BRIGHT, sends, polyphony
 wb 25 0 00 05 3c
 wb 25 0 00 06 48
@@ -106,6 +107,8 @@ wb 27 0 04 00 01
 expect_selayer 0 1
 wb 27 0 02 00 01
 expect_part 0 1 1
+wb 27 71 04 00 01
+wb 27 71 04 00 07
 wb 27 0 00 07 00
 expect_reply 1 7
 expect_part 7 8 1
@@ -129,6 +132,17 @@ expect_state 8 2
 expect_state 10 220
 expect_state 11 5
 expect_state 9 40
+wb 28 71 03 80 00
+wb 28 0 05 20 00
+expect_state 14 32
+wb 28 0 04 64 00
+expect_state 13 100
+wb 28 0 08 03 00
+expect_state 13 131
+wb 28 0 07 00 00
+wb 28 71 08 09 00
+wb 28 71 04 f5 00
+wb 28 71 07 02 00
 # settings: scene channel, master channel, button light
 wb 29 0 00 05
 expect_cfg scene_ch 5
@@ -139,6 +153,10 @@ wb 29 0 02 06
 expect_state 6 6
 wb 29 0 00 00
 wb 29 0 01 00
+wb 29 0 03 00
+expect_state 7 1
+wb 29 0 03 01
+expect_state 7 0
 wb 29 71 00 11
 wb 29 71 02 09
 # part names: printable only
@@ -170,10 +188,32 @@ wb 30 71 00 01
 wb 30 71 01 40
 run 1600
 wb 30 0 04 00
+expect_state 3 64
 wb 30 0 00 00
 expect_reply 1 0
 expect_reply 2 32
+# a scene with a blank name still shows as a scene
+run 1600
+wb 30 0 02 02 20 20 20 20 20 20 20 20 20 20 20 20
+wb 30 0 00 00
+expect_reply 28 40
+run 1600
+wb 30 0 04 02
+expect_state 3 64
 # a state image cannot be written, and an unknown command is refused
-wb 3 71 05 00 58 01
+wb 3 71 05 00 5a 01
 wb 32 71
 wb 22 0
+# a recall must not leave an engine soloed that the scene leaves free: part 8 gone in scene 6, then part 8 back and soloed, then the recall
+run 1600
+wb 27 0 02 07 00
+wb 30 0 02 05 53 43 45 4e 45 20 53 4f 4c 4f 20 20
+run 1600
+wb 27 0 00 07 00
+wb 25 0 07 0d 01
+expect_state 144 8
+wb 30 0 01 05
+run 300
+expect_state 144 12
+run 1600
+wb 30 0 04 05

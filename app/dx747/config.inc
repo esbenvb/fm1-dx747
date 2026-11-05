@@ -4,7 +4,7 @@
  * workbench transfer poll runs there, like the panel code, so everything the screens call may be called from here. */
 
 enum { DX_CFG_PROTOCOL = 1 };                        /* DX_CFG_STATE_BYTES is in dx747.h */
-_Static_assert(16 + 8 * 15 + 8 * 26 == DX_CFG_STATE_BYTES, "state image layout");
+_Static_assert(16 + 8 * 15 + 8 * 26 + 2 == DX_CFG_STATE_BYTES, "state image layout");
 static uint32_t cfg_last_scene_write;
 static uint8_t cfg_image[DX_CFG_STATE_BYTES];
 
@@ -20,7 +20,7 @@ int dx_config_state(uint8_t *o)
     memset(o, 0, DX_CFG_STATE_BYTES);
     const struct dx_cfg *c = dx_route_cfg();
     o[0] = 1; o[1] = live.parts.selected; o[2] = (uint8_t)booted.up; o[3] = (uint8_t)current_scene;
-    o[4] = settings.scene_ch; o[5] = settings.master_ch; o[6] = settings.backlight; o[7] = settings.radio_off;
+    o[4] = settings.scene_ch; o[5] = settings.master_ch; o[6] = settings.backlight; o[7] = (settings.radio_off & GROOVE_RADIO_AUDIO) ? 1U : 0U; /* 1: Bluetooth audio in is off */
     o[8] = live.filter_type; o[9] = live.filter_res; o[10] = (uint8_t)live.filter_hz; o[11] = (uint8_t)(live.filter_hz >> 8);
     groove_effects_get(o + 12);
     for (unsigned p = 0; p < DX_PARTS; ++p) {
@@ -45,6 +45,7 @@ int dx_config_state(uint8_t *o)
         if (groove_fm_copy(e, patch, NULL) == 0)
             for (unsigned i = 0; i < 10; ++i) q[16 + i] = patch[145 + i] >= 32 && patch[145 + i] <= 126 ? patch[145 + i] : ' ';
     }
+    o[344] = (uint8_t)dx_scene_revision(); o[345] = (uint8_t)(dx_scene_revision() >> 8);   /* changes whenever a scene is written or deleted */
     return 0;
 }
 
@@ -112,13 +113,30 @@ static int cfg_set_master(unsigned f, unsigned lo, unsigned hi)
     uint8_t fx[4];
     unsigned v = lo | hi << 8;
     switch (f) {
-    case 0: if (lo > 3) return GROOVE_PROJECT_INVALID; live.filter_type = (uint8_t)lo; dx_apply_filter(); return 0;
+    case 0: if (lo > 3 || hi) return GROOVE_PROJECT_INVALID; live.filter_type = (uint8_t)lo; dx_apply_filter(); return 0;
     case 1: if (v < 20 || v > 20000) return GROOVE_PROJECT_INVALID; live.filter_hz = (uint16_t)v; dx_apply_filter(); return 0;
-    case 2: if (lo > 127) return GROOVE_PROJECT_INVALID; live.filter_res = (uint8_t)lo; dx_apply_filter(); return 0;
-    case 3: case 4: case 5: case 6:
-        if (hi) return GROOVE_PROJECT_INVALID;
+    case 2: if (lo > 127 || hi) return GROOVE_PROJECT_INVALID; live.filter_res = (uint8_t)lo; dx_apply_filter(); return 0;
+    case 3: case 5: case 6:                                   /* decay, feedback, return: 0..127 */
+        if (lo > 127 || hi) return GROOVE_PROJECT_INVALID;
         groove_effects_get(fx);
-        groove_effects_edit(f - 3U, (int)lo - (int)fx[f - 3U]);
+        groove_effects_edit(f == 3 ? 0U : f == 5 ? 2U : 3U, (int)lo - (int)fx[f == 3 ? 0U : f == 5 ? 2U : 3U]);
+        return 0;
+    case 4:                                                   /* delay time in free mode, position 0..244 (the stored value skips the nine synced codes) */
+        if (v > GROOVE_DELAY_FREE_LAST - 9 || hi > 1) return GROOVE_PROJECT_INVALID;
+        groove_effects_get(fx);
+        if (groove_delay_synced(fx[1])) { groove_effects_edit(4, -1); groove_effects_get(fx); }
+        groove_effects_edit(1, (int)v - (int)(fx[1] > GROOVE_DELAY_LAST ? fx[1] - 9U : fx[1]));
+        return 0;
+    case 7:                                                   /* delay mode: 0 free, 1 synchronised */
+        if (lo > 1 || hi) return GROOVE_PROJECT_INVALID;
+        groove_effects_get(fx);
+        if (!!groove_delay_synced(fx[1]) != !!lo) groove_effects_edit(4, lo ? 1 : -1);
+        return 0;
+    case 8:                                                   /* synchronised division 0..8 (switches to synchronised mode) */
+        if (lo > GROOVE_DELAY_LAST - GROOVE_DELAY_SYNC || hi) return GROOVE_PROJECT_INVALID;
+        groove_effects_get(fx);
+        if (!groove_delay_synced(fx[1])) { groove_effects_edit(4, 1); groove_effects_get(fx); }
+        groove_effects_edit(1, (int)(GROOVE_DELAY_SYNC + lo) - (int)fx[1]);
         return 0;
     default: return GROOVE_PROJECT_INVALID;
     }
@@ -135,7 +153,10 @@ static int cfg_scene(const uint8_t *d, unsigned n, uint8_t *out, unsigned *count
             uint8_t used = 0, *q = out + 13U * i;
             memset(q, 0, 13);
             memset(q + 1, ' ', 12);
-            if (!dx_scene_info(index + i, name, &used)) { q[0] = used; memcpy(q + 1, name, 12); }
+            if (!dx_scene_info(index + i, name, &used)) {
+                q[0] = used; memcpy(q + 1, name, 12);
+                if (!cfg_printable((const uint8_t *)name, 12) || !memcmp(name, "            ", 12)) memcpy(q + 1, "(NO NAME)   ", 12);   /* a scene that exists never looks like an empty slot */
+            }
         }
         *count = 52;
         return 0;
@@ -155,7 +176,10 @@ static int cfg_scene(const uint8_t *d, unsigned n, uint8_t *out, unsigned *count
         if (!r) { memcpy(s->name, d + 2, 12); r = dx_scene_write(index, s); }
         free(s);
     }
-    cfg_last_scene_write = fm1_millis();
+    if (!r) {
+        cfg_last_scene_write = fm1_millis();
+        if (op == 4 && current_scene == index) { current_scene = DX_NO_SCENE; settings.flags &= (uint8_t)~1U; settings_mark(); }   /* the deleted scene is no longer the current one */
+    }
     return r;
 }
 
@@ -196,7 +220,12 @@ int dx_config_command(unsigned cmd, const uint8_t *d, unsigned n, uint8_t *out, 
         case 1: r = dx_part_used(&live.parts, d[1]) ? dx_part_add_layer(d[1]) : GROOVE_PROJECT_INVALID; break;
         case 2: r = dx_part_used(&live.parts, d[1]) ? dx_part_remove_layer(d[1], d[2]) : GROOVE_PROJECT_INVALID; break;
         case 3: dx_part_select(d[1]); return 0;
-        case 4: dx_part_select_layer(d[1], d[2]); return 0;
+        case 4: {
+            uint8_t list[DX_ENGINES];
+            if (!dx_part_layers(&live.parts, d[1], list) || d[2] >= dx_part_layers(&live.parts, d[1], list)) return GROOVE_PROJECT_INVALID;
+            dx_part_select_layer(d[1], d[2]);
+            return 0;
+        }
         default: return GROOVE_PROJECT_INVALID;
         }
         if (r < 0) return r == GROOVE_PROJECT_INVALID ? r : r - 30;   /* a part code: -1 no slot, -2 no engine, -3 no channel, -4 refused: status 95 to 98 */

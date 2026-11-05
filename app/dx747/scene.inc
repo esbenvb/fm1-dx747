@@ -429,7 +429,7 @@ static int dx_sector_put(unsigned sector, const uint8_t *payload, unsigned n)
     r = dx_program(sector, img, nh.crc);
     fm1_engine_resume();
     free(img);
-    if (!r && sector < DX_SCENE_SECTORS) { (void)dx_scene_scan(); ++scene_revision; }
+    if (!r && sector < DX_SCENE_SECTORS) (void)dx_scene_scan();
     return r;
 }
 
@@ -514,6 +514,7 @@ int dx_scene_scan(void)
         fresh.parts[sector] = head[SO_PARTS];
     }
     dx_catalog = fresh;
+    ++scene_revision;                                      /* the boot scan, a claim and every scene write: screens list the scenes again */
     return 0;
 }
 

@@ -29,7 +29,7 @@ out-of-range value is refused with `GROOVE_PROJECT_INVALID`.
 | Cmd | Name | Request data | Reply data |
 |---|---|---|---|
 | 23 | HELLO | none | `'D' 'X' proto(=1) flags engines_up parts(=8) layers(=8) scenes(=64) 'V' n n` (the release string, 3 characters) |
-| 24 | STATE_CRC | none | `crc32(4) size(u16)`: the CRC of the state image as it is now, and its size |
+| 24 | STATE_CRC | none | `crc32(4) size(u16)`: the CRC of the state image as it is now, and its size (346) |
 | 1, 2 | read (existing) | `1: kind=5 target=0`, then `2: at(u16) n` | `1:` size (u16); `2:` up to 64 bytes of the **state image** |
 | 25 | SET_LAYER | `engine field value` | none |
 | 26 | SET_PART | `part field value` | none |
@@ -62,24 +62,30 @@ library banks kind 4), or DX7 SysEx at the framed layer. Names of the library's 
 ### SET_PART fields: 0 part level 0..127; 1 MIDI channel 1..16 (refused if another part or the scene channel has it).
 
 ### PART_OP: 0 add a part in slot `a` (one layer, lowest free channel); 1 add a layer to part `a`; 2 remove layer `b` of part `a`
-(the last layer removes the part); 3 select part `a` (the part the keyboard plays); 4 select layer `b` of part `a`. Add and remove
+(the last layer removes the part); 3 select part `a` (the part the keyboard plays); 4 select layer `b` of part `a` (refused for an unused
+part or a layer that does not exist). Add and remove
 return the part or the freed engine in the first reply byte. A refused add or remove answers with status 95 (no free slot), 96 (no free
 engine), 97 (no free channel) or 98 (refused); other refusals answer 71. Held notes of the built-in keys are ended first.
 
-### SET_MASTER: 0 filter type 0..3 (off, low, high, band pass); 1 cutoff Hz 20..20000 (`lo hi`); 2 resonance 0..127;
-3 to 6 effects (decay, delay time, feedback, return) 0..255 as the unit stores them.
+### SET_MASTER (`lo hi` is the value, little endian; out-of-range values are refused)
+0 filter type 0..3 (off, low, high, band pass); 1 cutoff Hz 20..20000; 2 resonance 0..127; 3 reverb decay 0..127; 4 delay time
+in free mode, position 0..244 (the stored value skips the nine synchronised codes; setting it switches to free mode); 5 delay
+feedback 0..127; 6 effects return 0..127; 7 delay mode 0 free, 1 synchronised; 8 synchronised division 0..8 (1/32T, 1/32, 1/16T, 1/16,
+1/8T, 1/16D, 1/8, 1/8D, 1/4; setting it switches to synchronised mode). The state image carries the stored delay value:
+128..136 is a synchronised division, otherwise 0..127 is position 0..127 and 137..253 is position 128..244.
 
 ### SET_SETTING: 0 scene channel 0..16; 1 master channel 0..16; 2 button light 0..8; 3 Bluetooth audio in 0 off, 1 on.
 
 ### SCENE ops: 0 list four scenes from `index` (a multiple of 4; `used` is the mask of parts the scene holds; an empty slot has `used` 0 and a blank name);
 1 recall; 2 save the live state to `index` with the 12-character `name` (printable ASCII, space padded); 3 rename (the stored
 scene is read and written again); 4 delete. A save, rename or delete writes a flash sector: a second one inside 1.5 s answers
-`FM1_FLASH_BUSY` (status 67). A recall of an empty slot answers status 1. **The storage claim (`dx_storage_claim`, which erases the stock sample bank) is never available here**; when
+`FM1_FLASH_BUSY` (status 67; only a write that succeeded starts the wait). A recall of an empty slot answers status 1. Deleting the current
+scene leaves no current scene. A scene whose name is blank is listed as `(NO NAME)`, so it never looks like an empty slot. **The storage claim (`dx_storage_claim`, which erases the stock sample bank) is never available here**; when
 the store is not ready the commands answer `GROOVE_PROJECT_INVALID` and the page says to use the panel.
 
-## State image (transfer kind 5, read only, 344 bytes)
+## State image (transfer kind 5, read only, 346 bytes)
 
-Read with `1` (kind 5, target 0) and `2` in chunks of 64. Built fresh on every `1`, so the chunks of one read are consistent.
+Read with `1` (kind 5, target 0) and `2` in chunks of 64 (six reads). Built fresh on every `1`, so the chunks of one read are consistent.
 
 | Offset | Size | Contents |
 |---|---|---|
@@ -87,19 +93,21 @@ Read with `1` (kind 5, target 0) and `2` in chunks of 64. Built fresh on every `
 | 1 | 1 | selected part |
 | 2 | 1 | engines up (bit e) |
 | 3 | 1 | current scene, 64 = none |
-| 4 | 4 | scene channel, master channel, button light, radio-off bits |
+| 4 | 4 | scene channel, master channel, button light, Bluetooth audio in is off (1) or on (0) |
 | 8 | 8 | filter type, resonance, cutoff (u16), effects decay, time, feedback, return |
 | 16 | 8 x 15 | per part: channel (0 = slot unused), level, selected layer, name(12) |
 | 136 | 8 x 26 | per engine: owner part (255 = free), layer level, pan+50, expression, BRIGHT+50, reverb, delay, program, flags (bit 0 muted, bit 1 soloed, bit 2 audible, bit 3 up), low, high, shift+64, fold, poly, velocity low, velocity high, voice name(10) |
+| 344 | 2 | scene revision (u16): changes whenever a scene is written or deleted, by the panel, MIDI or this protocol |
 
 ## Polling
 
-Every 400 ms while the configurator is visible: `24`. If the CRC differs from the last one, read the image (`1`, then 6 times
-`2`) and redraw. A panel edit, a MIDI program change or a scene recall all show up this way. After the client's own setter it
+Every 400 ms while the configurator is connected: `24`. If the CRC differs from the last one, read the image (`1`, then 6 times
+`2`) and redraw; if the scene revision changed, read the scene list again. A panel edit, a MIDI program change or a scene recall all show up this way. After the client's own setter it
 reads again at once. Do not poll while a library or firmware operation is running.
 
 ## Cost and tests
 
-Measured code: 2.5 KB (445,800 bytes, headroom 8.1 KB; it was 10.6 KB before). Tests: host suite for the handlers, the native harness
-(`wb_query` / `wbserve`), recipes per command group, and `tools/dx747/sim/page-flow.mjs` running the real page client against the
-harness.
+Measured code: about 2.5 KB (the app image is 446,280 bytes with 7.6 KB of headroom; it was 10.6 KB before). Tests: recipe 18
+(`tools/dx747/sim/recipes/18-config-protocol.txt`: every command, the error codes, the state image, through the harness commands `wb`,
+`expect_reply`, `expect_state`, `expect_state_text`) and `tools/dx747/page/test-client.mjs` (the page's own client against the firmware in
+WebAssembly, through the virtual MIDI port the page uses for its simulator).

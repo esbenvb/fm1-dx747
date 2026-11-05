@@ -133,6 +133,7 @@ int dx_storage_claim(void)
     return r;
 }
 
+static unsigned engine_solo(unsigned e);
 int dx_scene_recall(unsigned index)
 {
     struct dx_scene *s = malloc(sizeof *s);
@@ -141,6 +142,8 @@ int dx_scene_recall(unsigned index)
     if (!r) {
         struct dx_cfg c = *dx_route_cfg();
         r = dx_scene_apply(&dx_device_port, s, &c, &live);
+        for (unsigned e = 0; e < DX_ENGINES; ++e)       /* solo is not part of a scene: an engine the scene left free must not stay soloed, it would silence every part */
+            if (live.parts.layer[e].owner >= DX_PARTS && engine_solo(e)) groove_mix_toggle(e, 1);
         current_scene = index;
         settings.last_scene = (uint8_t)index; settings.flags |= 1;
         settings_mark();

@@ -10,11 +10,13 @@
   const status = (message, progress) => { text('up-status', message); if (progress !== undefined) $('up-progress').value = progress; };
   const fail = error => { text('up-error', error.message || String(error)); };
 
+  const lock = on => { u.busy = on; if (window.DxApp && DxApp.setLocked) DxApp.setLocked(on); };
   function enable() {
+    if (u.connected && !u.busy && u.updater && u.updater.link && u.updater.link.lost) { u.connected = false; u.same = false; u.migration = false; text('up-identity', ''); status('The unit was unplugged. Connect again.'); }
     const locked = u.busy;
     $('up-connect').disabled = locked || !u.pkg;
     $('up-restore-connect').disabled = locked || !u.stock;
-    $('up-install').disabled = locked || !u.connected || u.same || u.kind !== 'open' || !$('up-backup').checked;
+    $('up-install').disabled = locked || !u.connected || u.same || u.migration || u.kind !== 'open' || !$('up-backup').checked;
     $('up-restore').disabled = locked || !u.connected || u.kind !== 'stock' || !$('up-backup').checked;
     $('up-force-note').hidden = !(u.migration && u.kind === 'open');
   }
@@ -22,14 +24,16 @@
 
   async function connect(kind) {
     if (u.busy) return;
-    u.busy = true; u.kind = kind; text('up-error', ''); enable();
+    lock(true); u.kind = kind; text('up-error', ''); $('up-details').hidden = true; enable();
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(new Error('Connecting took too long: check the USB cable and the MIDI permission, close other MIDI programs and try again.')), 15000);
     try {
-      if (window.DxApp && DxApp.dx) { DxApp.dx.stopPolling(); await DxApp.dx.disconnect().catch(() => {}); }   // the configurator must let go of the ports
+      if (window.DxApp && DxApp.release) await DxApp.release();                       // the configurator must let go of the ports (its status shows it)
       await disconnect();
       status('Asking the browser for MIDI access…', 0);
+      if (!window.isSecureContext || !crypto.subtle) throw new Error('Open this page from disk in Chrome or from an https:// or localhost address: the update needs a secure page.');
       const access = await DxDevice.requestUnitAccess();
       if (!access.sysexEnabled) throw new Error('Allow this page to use MIDI with SysEx.');
+      access.onstatechange = () => enable();
       u.updater = new FM1Web.Updater(access, kind === 'stock' ? u.stock : u.pkg, status);
       const device = await u.updater.connect({ force: kind === 'stock' || $('up-force').checked, signal: controller.signal });
       u.connected = true; u.same = !!device.same; u.migration = !!device.migration;
@@ -41,20 +45,20 @@
       if (error.code === 'FIRMWARE_MISMATCH') u.migration = true;
       const d = u.updater && u.updater.diagnostics;
       if (d) { const box = $('up-details'); box.hidden = false; box.querySelector('pre').textContent = JSON.stringify(d, null, 1); }
-    } finally { clearTimeout(timer); u.busy = false; enable(); }
+    } finally { clearTimeout(timer); lock(false); enable(); }
   }
 
   async function install() {
     if (u.busy || !u.connected) return;
     const stock = u.kind === 'stock', force = stock || $('up-force').checked;
-    if (stock && !confirm('Put the original FM-1 V15 firmware and its 128 factory voices back? The four voice banks are overwritten, DX747 and its saved scenes are removed.\nUnit: ' + u.updater.identity)) return;
+    if (stock && !confirm((u.updater.identity === 'FM-1_015' ? 'The unit already runs V15: this puts its 128 factory voices back. The four voice banks are overwritten.' : 'Put the original FM-1 V15 firmware and its 128 factory voices back? The four voice banks are overwritten, DX747 and its saved scenes are removed.') + '\nUnit: ' + u.updater.identity)) return;
     if (!stock && force && !confirm('Force the update? The unit runs another firmware (' + u.updater.identity + '). A forced update can leave a unit that does not start; only go on if this is an FM-1 and you can restore it with the programmer.')) return;
-    u.busy = true; enable(); text('up-error', '');
+    lock(true); enable(); text('up-error', '');
     let done = false;
     try { await u.updater.install({ force: stock ? true : force }); done = true; }
     catch (error) { fail(error); status('The update did not finish. Keep this page open, check the cable and try again.'); }
     finally {
-      u.busy = false; u.connected = false;
+      lock(false); u.connected = false;
       if (done) { text('up-identity', (stock ? u.stock : u.pkg).product); status(stock ? 'The original V15 firmware is back. Switch voices to hear them.' : 'DX747 is installed. The unit restarts: press Connect FM-1 at the top to configure it.', 100); }
       enable();
     }

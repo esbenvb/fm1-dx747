@@ -21,7 +21,7 @@ if (!wasmPath) {
   const out = mkdtempSync(join(tmpdir(), 'dx747-core-'));
   wasmPath = execFileSync(join(root, 'tools/dx747/sim/build.sh'), ['-o', out, root], { encoding: 'utf8' }).trim().split('\n').pop();
 }
-for (const f of ['sdk/WebUpdate.js', 'web/page/dx747-core.js', 'web/page/dx747-device.js', 'web/page/dx747-client.js'])
+for (const f of ['sdk/I18n.js', 'sdk/WebUpdate.js', 'web/page/dx747-core.js', 'web/page/dx747-device.js', 'web/page/dx747-client.js'])
   vm.runInThisContext(readFileSync(join(root, f), 'utf8'), { filename: f });
 const { DxCore, DxDevice, Dx747 } = globalThis;
 
@@ -46,6 +46,7 @@ eq(hello.enginesUp, 255, 'engines up'); eq(hello.release, 'V01', 'release');
 let s = await dx.readState();
 eq(s.selected, 0, 'selected part'); eq(s.scene, 64, 'no current scene');
 for (let p = 0; p < 8; p++) { eq(s.parts[p].channel, p + 1, 'part ' + p + ' channel'); eq(s.parts[p].layers.length, 1, 'part ' + p + ' layers'); eq(s.parts[p].layers[0].engine, p, 'part ' + p + ' engine'); }
+check(s.settings.bluetoothAudio === true, 'Bluetooth audio in is on at power-on'); check(typeof s.sceneRevision === 'number', 'scene revision in the image');
 eq(s.engines[0].voice, 'PIANO 1', 'voice name'); eq(s.engines[0].low, 0, 'low'); eq(s.engines[0].high, 127, 'high'); eq(s.engines[0].shift, 0, 'shift');
 eq(s.engines[0].velLow, 1, 'velocity low'); eq(s.parts[0].level, 127, 'part level');
 const crc0 = (await dx.crc()).crc;
@@ -77,19 +78,27 @@ s = await dx.readState(); eq(s.parts[0].layers.length, 2, 'two layers'); eq(s.pa
 await dx.partOp(4, 0, 1); s = await dx.readState(); eq(s.parts[0].selectedLayer, 1, 'framed layer');
 await dx.partOp(2, 0, 1); await dx.partOp(0, 7); s = await dx.readState(); eq(s.parts[0].layers.length, 1, 'one layer again'); eq(s.parts[7].channel, 8, 'part 8 back');
 await dx.partOp(3, 2); s = await dx.readState(); eq(s.selected, 2, 'selected part');  await dx.partOp(3, 0);
+await refused(dx.partOp(4, 0, 5), /refused/, 'a layer that does not exist');
 await refused(dx.partOp(0, 0), /No free part slot/, 'a part in an occupied slot');
 await dx.partName(0, 'BASS LINE'); s = await dx.readState(); eq(s.parts[0].name, 'BASS LINE', 'part name');
 
 // ---- filter, effects, settings -----------------------------------------------------------------
 await dx.setMaster(0, 2); await dx.setMaster(1, 1500); await dx.setMaster(2, 40); await dx.setMaster(3, 50);
 s = await dx.readState(); eq(s.filter.type, 2, 'filter type'); eq(s.filter.hz, 1500, 'cutoff'); eq(s.filter.resonance, 40, 'resonance'); eq(s.effects.decay, 50, 'decay');
-await refused(dx.setMaster(1, 10), /refused/, 'cutoff below 20 Hz');
+await refused(dx.setMaster(1, 10), /refused/, 'cutoff below 20 Hz'); await refused(dx.setMaster(3, 200), /refused/, 'decay above 127');
+await dx.setMaster(5, 32); await dx.setMaster(6, 90); await dx.setMaster(4, 100);
+s = await dx.readState(); eq(s.effects.feedback, 32, 'feedback'); eq(s.effects.ret, 90, 'return'); eq(s.effects.delay, 100, 'free delay position 100');
+await dx.setMaster(8, 3); s = await dx.readState(); eq(s.effects.delay, 131, 'synchronised division 3');
+await dx.setMaster(7, 0); s = await dx.readState(); check(s.effects.delay < 128 || s.effects.delay > 136, 'free mode again');
+await refused(dx.setMaster(8, 9), /refused/, 'division 9'); await refused(dx.setMaster(4, 245), /refused/, 'free position 245');
 await dx.setSetting(0, 5); await dx.setSetting(1, 10); await dx.setSetting(2, 6);
 s = await dx.readState(); eq(s.settings.sceneChannel, 5, 'scene channel'); eq(s.settings.masterChannel, 10, 'master channel'); eq(s.settings.backlight, 6, 'button light');
+await dx.setSetting(3, 0); s = await dx.readState(); eq(s.settings.bluetoothAudio, false, 'Bluetooth audio in off'); await dx.setSetting(3, 1);
 await dx.setSetting(0, 0); await dx.setSetting(1, 0);
 
 // ---- scenes --------------------------------------------------------------------------------------
-await dx.sceneSave(0, 'CFG TEST'); s = await dx.readState(); eq(s.scene, 0, 'current scene after a save');
+const rev0 = (await dx.readState()).sceneRevision;
+await dx.sceneSave(0, 'CFG TEST'); s = await dx.readState(); eq(s.scene, 0, 'current scene after a save'); check(s.sceneRevision !== rev0, 'the scene revision changes with a save');
 let list = await dx.scenes(); eq(list[0].name, 'CFG TEST', 'scene name in the list'); eq(list[0].parts, 255, 'parts in the scene'); eq(list[1].name, '', 'an empty slot');
 await refused(dx.sceneSave(1, 'TOO SOON'), /busy/, 'a second flash write inside 1.5 s');
 core.advance(1600);
@@ -98,7 +107,8 @@ core.advance(1600);
 await dx.setLayer(0, 0, 32); await dx.sceneRecall(0); core.advance(300); s = await dx.readState(); eq(s.engines[0].level, 64, 'a recall restores the level');
 await refused(dx.sceneRecall(1), /empty/, 'recalling an empty slot');
 core.advance(1600);
-await dx.sceneDelete(0); list = await dx.scenes(); eq(list[0].name, '', 'deleted');
+await dx.sceneDelete(0); list = await dx.scenes(); eq(list[0].name, '', 'deleted'); s = await dx.readState(); eq(s.scene, 64, 'no current scene after deleting it');
+core.advance(1600); await dx.sceneSave(2, ''); list = await dx.scenes(); eq(list[2].name, '(NO NAME)', 'a blank-named scene is not an empty slot'); core.advance(1600); await dx.sceneDelete(2);
 
 // ---- the voice library and ROM import ----------------------------------------------------------
 const names = await dx.voiceNames(0);
@@ -112,5 +122,6 @@ file[100] ^= 1;
 try { dx.importRom(3, file); check(false, 'a corrupt bank file must be refused'); } catch (error) { check(/checksum/.test(error.message), 'checksum message'); }
 
 await dx.disconnect();
+try { await dx.setLayer(0, 0, 1); check(false, 'a call on a closed connection must fail'); } catch (error) { check(!/[\u3400-\u9fff]/.test(error.message), 'SDK messages reach the page in English: ' + error.message); }
 console.log(`${checks} checks, ${failures} failures`);
 process.exit(failures ? 1 : 0);

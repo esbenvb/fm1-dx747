@@ -50,7 +50,7 @@
       const blockMs = this.core.blockFrames * 1000 / this.core.sampleRate;
       for (let n = 0; this.debt >= blockMs && n < 40; n++) {
         const block = this.core.render(); this.debt -= blockMs;
-        if (this.audio && this.produced - this.audio.played < 8192) { const copy = block.slice(); this.audio.node.port.postMessage(copy, [copy.buffer]); this.produced += this.core.blockFrames; }
+        if (this.audio && this.produced - this.audio.played < 8192) { this.audio.push(block); this.produced += this.core.blockFrames; }
         else if (this.audio) this.produced = Math.max(this.produced, this.audio.played);
       }
       if (this.core.frameRevision !== this.lastRevision) { this.lastRevision = this.core.frameRevision; this.drawScreen(); this.drawLamps(); }
@@ -61,19 +61,45 @@
       try { let s = ''; const f = this.core.flash(); for (let i = 0; i < f.length; i += 8192) s += String.fromCharCode(...f.subarray(i, i + 8192)); localStorage.setItem(STORE, btoa(s)); } catch (e) { /* quota or blocked: the simulator still works */ }
     }
     reset() { try { localStorage.removeItem(STORE); } catch (e) { /* ignore */ } location.reload(); }
-    async startAudio() {
-      if (this.audio) { await this.audio.ctx.resume(); return true; }
+    /** Switch the sound on (needs a user gesture). Safe to call from every click: it starts once. */
+    startAudio() {
+      if (!this.audioStart) this.audioStart = this.openAudio();
+      return this.audioStart;
+    }
+    async openAudio() {
       try {
         const ctx = new AudioContext({ sampleRate: this.core.sampleRate, latencyHint: 'interactive' });
-        const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
-        await ctx.audioWorklet.addModule(url); URL.revokeObjectURL(url);
-        const node = new AudioWorkletNode(ctx, 'dx-out', { outputChannelCount: [2] });
-        this.audio = { ctx, node, played: 0 }; this.produced = 0;
-        node.port.onmessage = e => { this.audio.played = e.data; };
-        node.connect(ctx.destination); await ctx.resume();
+        let sink;
+        try {
+          const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
+          try { await ctx.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+          const node = new AudioWorkletNode(ctx, 'dx-out', { outputChannelCount: [2] });
+          sink = { ctx, node, played: 0, push(block) { const copy = block.slice(); node.port.postMessage(copy, [copy.buffer]); } };
+          node.port.onmessage = e => { sink.played = e.data; };
+          node.connect(ctx.destination);
+        } catch (workletError) { sink = this.scriptSink(ctx); }      // a page opened from disk cannot load a worklet from a blob: use the older node
+        await ctx.resume();
+        this.audio = sink; this.produced = 0;
         this.listeners.forEach(fn => fn('audio', true));
         return true;
-      } catch (error) { this.listeners.forEach(fn => fn('audio-error', error)); return false; }
+      } catch (error) { this.audioStart = null; this.listeners.forEach(fn => fn('audio-error', error)); return false; }
+    }
+    /** The fallback sink: a ScriptProcessorNode that plays the same blocks, on the main thread. */
+    scriptSink(ctx) {
+      const queue = []; let at = 0;
+      const sink = { ctx, played: 0, push(block) { queue.push(block.slice()); } };
+      const node = ctx.createScriptProcessor(1024, 0, 2);
+      node.onaudioprocess = e => {
+        const left = e.outputBuffer.getChannelData(0), right = e.outputBuffer.getChannelData(1);
+        for (let i = 0; i < left.length; i++) {
+          const b = queue[0];
+          if (!b) { left[i] = right[i] = 0; continue; }
+          left[i] = b[at * 2]; right[i] = b[at * 2 + 1]; at++; sink.played++;
+          if (at * 2 >= b.length) { queue.shift(); at = 0; }
+        }
+      };
+      node.connect(ctx.destination); sink.node = node;
+      return sink;
     }
     drawScreen() {
       const px = this.core.pixels(), img = this.image.data;
@@ -98,6 +124,7 @@
       const enc = el('div', 'sim-encoders');
       ENCODERS.forEach((name, i) => {
         const box = el('div', 'sim-encoder'); const minus = el('button', 'sim-step', '−'), plus = el('button', 'sim-step', '+'), label = el('span', null, name);
+        minus.setAttribute('aria-label', name + ' down'); plus.setAttribute('aria-label', name + ' up');
         minus.onclick = () => this.core.encoder(i, -1); plus.onclick = () => this.core.encoder(i, 1);
         box.addEventListener('wheel', e => { e.preventDefault(); this.core.encoder(i, e.deltaY < 0 ? 1 : -1); }, { passive: false });
         box.append(label, el('div', 'sim-pm')); box.lastChild.append(minus, plus); enc.append(box);

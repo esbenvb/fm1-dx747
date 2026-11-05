@@ -11,14 +11,28 @@
   const REASON = { 1: 'That slot is empty', 67: 'The unit is busy writing flash: wait a moment and try again', 71: 'The unit refused that value or that action',
                    72: 'The unit is out of memory', 95: 'No free part slot', 96: 'No free engine: remove a layer first', 97: 'No free MIDI channel', 98: 'The unit refused that change' };
 
-  /** The 344-byte state image as an object (layout: docs/CONFIG-PROTOCOL.md). */
+  /** The SDK's own messages are Chinese: put them in English (sdk/I18n.js has the table when the page carries it). */
+  function translate(error) {
+    if (error && typeof error.message === 'string' && globalThis.FM1I18n) error.message = FM1I18n.t(error.message, 'en');
+    return error;
+  }
+  const checkRom = file => {
+    if (!(file instanceof Uint8Array) || file.length !== 4104 || file[0] !== 0xf0 || file[1] !== 0x43 || file[3] !== 0x09 || file[4] !== 0x20 || file[5] !== 0x00 || file[4103] !== 0xf7)
+      throw new Error('That is not a 32-voice DX7 bank file (4,104 bytes, F0 43 0n 09 20 00 ... F7)');
+    let sum = 0; for (let i = 6; i < 4102; i++) sum = (sum + file[i]) & 127;
+    if (((128 - sum) & 127) !== file[4102]) throw new Error('The bank file fails its checksum');
+    return file.slice(6, 4102);
+  };
+
+  /** The 346-byte state image as an object (layout: docs/CONFIG-PROTOCOL.md). */
   function parseState(b) {
-    if (b.length !== 344 || b[0] !== 1) throw new Error('The unit sent a state image this page does not understand (version ' + b[0] + ')');
+    if (b.length !== 346 || b[0] !== 1) throw new Error('The unit sent a state image this page does not understand (version ' + b[0] + ')');
     const s = {
       selected: b[1], up: b[2], scene: b[3],
-      settings: { sceneChannel: b[4], masterChannel: b[5], backlight: b[6], radioOff: b[7], bluetoothAudio: !(b[7] & 1) },
+      settings: { sceneChannel: b[4], masterChannel: b[5], backlight: b[6], bluetoothAudio: !(b[7] & 1) },
+      sceneRevision: b[344] | b[345] << 8,
       filter: { type: b[8], resonance: b[9], hz: b[10] | b[11] << 8 },
-      effects: { decay: b[12], delay: b[13], feedback: b[14], ret: b[15] },
+      effects: { decay: b[12], delay: b[13], feedback: b[14], ret: b[15] },        // delay: the unit's stored value (128..136 is a synchronised division)
       parts: [], engines: [],
     };
     for (let p = 0; p < 8; p++) {
@@ -42,7 +56,11 @@
       this.access = access; this.lib = new FM1Web.Library(access); this.chain = Promise.resolve();
       this.state = null; this.lastCrc = null; this.timer = null; this.polling = false; this.bankNames = {};
     }
-    run(fn) { const p = this.chain.then(fn, fn); this.chain = p.catch(() => {}); return p; }
+    run(fn) {
+      const p = this.chain.then(fn, fn).catch(error => { throw translate(error); });
+      this.chain = p.catch(() => {});
+      return p;
+    }
     async q(command, payload = [], emptyOK = false) {
       try { return await this.lib.query(command, payload, emptyOK); }
       catch (error) {
@@ -75,7 +93,7 @@
     readState() {
       return this.run(async () => {
         const head = await this.q(1, [5, 0]), size = head[0] | head[1] << 8;
-        if (size !== 344) throw new Error('The unit announced a state image of ' + size + ' bytes');
+        if (size !== 346) throw new Error('The unit announced a state image of ' + size + ' bytes');
         const bytes = new Uint8Array(size);
         try { for (let at = 0; at < size; at += 64) { const n = Math.min(64, size - at); bytes.set(await this.q(2, [at & 255, at >> 8, n]), at); } }
         finally { await this.q(6).catch(() => {}); }
@@ -84,13 +102,14 @@
       });
     }
     /** Poll the unit: when the state image changes (a panel edit, MIDI, a scene), read it and call onState(state). */
-    startPolling(onState, onError, ms = 400) {
+    startPolling(onState, onError, ms = 400, onOk) {
       this.stopPolling(); this.polling = true;
       const tick = async () => {
         if (!this.polling) return;
         try {
           const h = await this.crc();
           if (h.crc !== this.lastCrc) { const s = await this.readState(); this.lastCrc = h.crc; onState(s); }
+          if (onOk) onOk();
         } catch (error) { if (this.polling && onError) onError(error); }
         if (this.polling) this.timer = setTimeout(tick, ms);
       };
@@ -132,11 +151,7 @@
     async allVoiceNames() { const out = []; for (let b = 0; b < 4; b++) out.push(...await this.voiceNames(b)); return out; }
     /** Import a 32-voice DX7 bank file (4,104 bytes of SysEx) into library bank 0..3; the library reads it back and checks it. */
     importRom(bank, file) {
-      if (!(file instanceof Uint8Array) || file.length !== 4104 || file[0] !== 0xf0 || file[1] !== 0x43 || file[3] !== 0x09 || file[4] !== 0x20 || file[5] !== 0x00 || file[4103] !== 0xf7)
-        throw new Error('That is not a 32-voice DX7 bank file (4,104 bytes, F0 43 0n 09 20 00 ... F7)');
-      const raw = file.slice(6, 4102);
-      let sum = 0; for (const v of raw) sum = (sum + v) & 127;
-      if (((128 - sum) & 127) !== file[4102]) throw new Error('The bank file fails its checksum');
+      const raw = checkRom(file);
       this.bankNames = {};
       return this.run(() => this.lib.writeBank(bank, raw));
     }
@@ -144,4 +159,5 @@
   globalThis.Dx747 = Dx747;
   globalThis.Dx747.parseState = parseState;
   globalThis.Dx747.noteName = noteName;
+  globalThis.Dx747.checkRom = checkRom;
 })();
