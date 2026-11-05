@@ -52,13 +52,18 @@ enc 6 4
 run 200
 expect_patch 7 151 50
 expect_patch 0 151 49
-# the sound overlay is a list of the programs around the current one, in the middle of the screen, and stays longer than the others
-expect_px 100 57 073F
+# the sound overlay is a list of the programs around the current one (three before, three after), in the middle of the screen,
+# and stays longer than the others: its box runs from row 37 to row 202
+expect_px 100 37 073F
+expect_px 100 202 073F
+expect_px 100 36 0000
+expect_px 100 203 0000
 shot 17q-sound-list
 run 1300
-expect_px 100 57 073F
+expect_px 100 37 073F
 run 700
-expect_px 100 57 0000
+expect_px 100 37 0000
+expect_px 100 202 0000
 enc 6 -4
 run 200
 expect_patch 7 151 49
@@ -148,6 +153,11 @@ expect_screen 9
 tap btn 1
 expect_screen 10
 shot 17h-filter-tabs
+# the filter curve is anti-aliased: a flat stretch is one full row with a faint fringe on the rows above and below
+expect_px 50 68 073F
+expect_px 50 67 00E3
+expect_px 50 69 00E3
+expect_px 50 66 0000
 # scenes: the octave buttons step the banks
 tap btn 12
 expect_screen 11

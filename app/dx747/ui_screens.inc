@@ -723,18 +723,17 @@ static void draw_master(void)
     px_rect(9, 68, 222, 1, C_GD);
     int xc = axis_x(l->filter_hz ? l->filter_hz : 1000U);
     int bump = (int)l->filter_res * 18 / 127;
-    int py = -1, ppx = 0;
-    for (int x = 9; x < 231; ++x) {
-        int d = x - xc, db = 0, ad = d < 0 ? -d : d;
-        if (l->filter_type == DX_FILTER_LP) db = d > 0 ? -d * 534 / 1000 : 0;
-        else if (l->filter_type == DX_FILTER_HP) db = d < 0 ? d * 534 / 1000 : 0;
-        else if (l->filter_type == DX_FILTER_BP) db = -ad * 267 / 1000;
-        if (l->filter_type != DX_FILTER_OFF && ad < 10) db += bump * (10 - ad) / 10;
-        int y = 68 - db * 5 / 3;
-        y = y < 50 ? 50 : y > 126 ? 126 : y;
-        if (py >= 0) px_line(ppx, py, x, y, C_AC);
-        ppx = x; py = y;
+    static int16_t curve[222];                                  /* the response at each column, in sixteenths of a pixel (centre of row r: 16 r + 8) */
+    for (int i = 0; i < 222; ++i) {
+        int d = 9 + i - xc, db = 0, ad = d < 0 ? -d : d;   /* db: sixteenths of the 0.534 px per column the old integer plot used */
+        if (l->filter_type == DX_FILTER_LP) db = d > 0 ? -d * 8544 / 1000 : 0;
+        else if (l->filter_type == DX_FILTER_HP) db = d < 0 ? d * 8544 / 1000 : 0;
+        else if (l->filter_type == DX_FILTER_BP) db = -ad * 4272 / 1000;
+        if (l->filter_type != DX_FILTER_OFF && ad < 10) db += bump * (10 - ad) * 8 / 5;
+        int y = 68 * 16 + 8 - db * 5 / 3;
+        curve[i] = (int16_t)(y < 51 * 16 + 8 ? 51 * 16 + 8 : y > 125 * 16 + 8 ? 125 * 16 + 8 : y);
     }
+    px_curve(curve, 222, 9, 49, 126, C_AC);
     if (l->filter_type != DX_FILTER_OFF) for (int y = 50; y < 127; y += 4) px_rect(xc, y, 1, 2, C_AM);
     px_text_c(axis_x(100), 131, "100", 1, C_DIM); px_text_c(axis_x(1000), 131, "1K", 1, C_DIM); px_text_c(axis_x(10000), 131, "10K", 1, C_DIM);
     px_text(8, 146, "USB OUT TAP", 1, C_TX); px_text(8, 158, "AFTER FILTER, BEFORE VOLUME", 1, C_GR);
@@ -963,24 +962,24 @@ static unsigned ov_wrap(const char *s, char lines[3][20])
     }
     return n + 1U;
 }
-/* The sound overlay (PRESETS): the current program and the two before and two after it, in the middle of the screen. */
+/* The sound overlay (PRESETS): the current program and the three before and three after it, in the middle of the screen. */
 static void draw_sound_list(void)
 {
     unsigned a = ui.ov_arg;
     if (a >= DX_ENGINES || fr.live.parts.layer[a].owner >= DX_PARTS) return;
-    const int x = 8, w = 224, y = 57, h = 126;
+    const int x = 8, w = 224, h = 26 + 20 * (int)SL_ROWS, y = (240 - h) / 2, mid = (int)(SL_ROWS / 2U);
     px_rect(x, y, w, h, C_BLACK); px_frame(x, y, w, h, C_AC); px_frame(x + 1, y + 1, w - 2, h - 2, C_AC);
     char *l = put_s(tb, "LAYER "); l = put_u(l, layer_index(a) + 1U); put_s(l, " SOUND");
     px_text(x + 10, y + 7, tb, 1, C_TX);
     l = put_u(tb, fr.pprog + 1U); put_s(l, " / 128");
     px_text_r(x + w - 10, y + 7, tb, 1, C_TX);
-    for (int k = 0; k < 5; ++k) {
-        int ry = y + 20 + 20 * k;
+    for (int k = 0; k < (int)SL_ROWS; ++k) {
+        int ry = y + 20 + 20 * k, dist = k < mid ? mid - k : k - mid;
         char num[4], name[11];
-        put_u(num, (fr.pprog + FM1_FM_PROGRAMS + (unsigned)k - 2U) % FM1_FM_PROGRAMS + 1U);
+        put_u(num, (fr.pprog + FM1_FM_PROGRAMS + (unsigned)k - SL_ROWS / 2U) % FM1_FM_PROGRAMS + 1U);
         trim_name(name, fr.pname[k], 10);
-        if (k == 2) { px_rect(x + 4, ry, w - 8, 20, C_SEL); px_rect(x + 4, ry, 2, 20, C_TX); }
-        uint16_t tc = k == 2 ? C_TX : k == 1 || k == 3 ? RGB(0xC0, 0xC0, 0xC0) : RGB(0x88, 0x88, 0x88);
+        if (!dist) { px_rect(x + 4, ry, w - 8, 20, C_SEL); px_rect(x + 4, ry, 2, 20, C_TX); }
+        uint16_t tc = !dist ? C_TX : dist == 1 ? RGB(0xC0, 0xC0, 0xC0) : dist == 2 ? RGB(0x98, 0x98, 0x98) : RGB(0x78, 0x78, 0x78);
         px_text_r(x + 50, ry + 7, num, 1, tc);
         px_text(x + 60, ry + 3, name, 2, tc);
     }

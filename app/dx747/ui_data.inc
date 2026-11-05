@@ -17,6 +17,7 @@ enum { OV_NONE, OV_TEXT, OV_PART, OV_LAYER, OV_SOUND, OV_LVL, OV_PAN, OV_BRIGHT,
        OV_REV, OV_DLY, OV_POLY, OV_PLEVEL, OV_PCH, OV_PPAN, OV_PREV, OV_PDLY, OV_PMIX, OV_FX, OV_FTYPE, OV_FHZ, OV_FRES, OV_SCENE,
        OV_OCT, OV_SYS };
 
+#define SL_ROWS 7U                  /* programs in the sound overlay: the current one in the middle, three before and three after */
 static struct ui {
     uint8_t screen, scene, mode, sys_row, learn, learn_lo, name_pos;
     uint8_t mixkeys;                 /* Mix: the white keys mute and solo (EDIT toggles it) */
@@ -101,8 +102,8 @@ static struct frame {
     uint8_t src[16];
     uint8_t lit_blink;               /* 2 Hz phase for flashing cues */
     uint8_t ov_on;                   /* the overlay is showing (decided on the real clock; now below is coarser) */
-    uint8_t pprog;                   /* the sound overlay: the program in the middle of its list, and the names of the five around it */
-    char pname[5][11];
+    uint8_t pprog;                   /* the sound overlay: the program in the middle of its list, and the names of the seven around it */
+    char pname[SL_ROWS][11];
     uint32_t now;
     uint8_t scene_used[DX_SCENES / 8];
     char scene_name[DX_SCENES][12];
@@ -139,12 +140,12 @@ static void frame_collect(uint32_t now)
                 e->name[i] = c >= 32 && c <= 126 ? c : ' ';
             }
     }
-    if (ui.ov_kind == OV_SOUND && ui.ov_arg < DX_ENGINES) {      /* the sound overlay lists the two programs before and after the current one */
+    if (ui.ov_kind == OV_SOUND && ui.ov_arg < DX_ENGINES) {      /* the sound overlay lists the three programs before and after the current one */
         unsigned prog = fr.e[ui.ov_arg].program % FM1_FM_PROGRAMS;
         fr.pprog = (uint8_t)prog;
-        for (unsigned k = 0; k < 5; ++k) {
+        for (unsigned k = 0; k < SL_ROWS; ++k) {
             uint8_t patch[156];
-            groove_fm_program(patch, (prog + FM1_FM_PROGRAMS + k - 2U) % FM1_FM_PROGRAMS);
+            groove_fm_program(patch, (prog + FM1_FM_PROGRAMS + k - SL_ROWS / 2U) % FM1_FM_PROGRAMS);
             for (unsigned i = 0; i < 10; ++i) { char c = (char)patch[145 + i]; fr.pname[k][i] = c >= 32 && c <= 126 ? c : ' '; }
             fr.pname[k][10] = 0;
         }

@@ -265,6 +265,39 @@ static void px_line(int x0, int y0, int x1, int y1, uint16_t color)
     }
 }
 
+/* Squared distance, in sixteenths of a pixel squared, from the point (px, py) to the segment (ax, ay)-(bx, by); bx > ax. */
+static int seg_dist2(int ax, int ay, int bx, int by, int px, int py)
+{
+    int dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy, t = (px - ax) * dx + (py - ay) * dy;
+    if (t <= 0) return (px - ax) * (px - ax) + (py - ay) * (py - ay);
+    if (t >= len2) return (px - bx) * (px - bx) + (py - by) * (py - by);
+    int cross = (px - ax) * dy - (py - ay) * dx;
+    return cross * cross / len2;
+}
+/* An anti-aliased curve through the points (x0 + i, y16[i]), i < n, about 1.25 pixels wide, drawn only on rows top..bottom. y is in
+ * sixteenths of a pixel with the centre of row r at 16 * r + 8. A pixel's coverage falls from 1 to 0 across one pixel of its distance to
+ * the nearest of the two segments that meet in its column. */
+static void px_curve(const int16_t *y16, unsigned n, int x0, int top, int bottom, uint16_t color)
+{
+    enum { HALF = 10, REACH = HALF + 8 };                  /* half the line width, and how far a pixel can still be touched (1/16 px) */
+    int r_min = top > (int)band_top ? top : (int)band_top, r_max = bottom < (int)band_top + BAND_H - 1 ? bottom : (int)band_top + BAND_H - 1;
+    for (unsigned i = 0; i < n; ++i) {
+        int cx = (x0 + (int)i) * 16 + 8, ya = y16[i ? i - 1 : 0], yb = y16[i], yc = y16[i + 1 < n ? i + 1 : n - 1];
+        int lo = ya < yb ? ya : yb, hi = ya > yb ? ya : yb;
+        if (yc < lo) lo = yc;
+        if (yc > hi) hi = yc;
+        int r0 = (lo - REACH - 8) / 16, r1 = (hi + REACH - 8) / 16 + 1;
+        if (r0 < r_min) r0 = r_min;
+        if (r1 > r_max) r1 = r_max;
+        for (int r = r0; r <= r1; ++r) {
+            int py = r * 16 + 8, d2a = seg_dist2(cx - 16, ya, cx, yb, cx, py), d2b = seg_dist2(cx, yb, cx + 16, yc, cx, py);
+            int cov = REACH - (int)isqrt32((unsigned)(d2a < d2b ? d2a : d2b));
+            if (cov > 16) cov = 16;
+            if (cov > 0) px_blend(x0 + (int)i, r, color, (unsigned)cov * 255U / 16U);
+        }
+    }
+}
+
 /* Draws one frame, band by band, through the callback. */
 static void band_begin(unsigned b)
 {
