@@ -240,8 +240,7 @@ SMK-37 SDK are never in one tree: the FM-1 engine library is licensed for FM-1 d
 What differs from the FM-1 build, all in `tools/docker/gates.mjs` (`TARGETS`) and the scripts it feeds: the update identity
 (`SMK-37 Pro_8747747`, `SMK-37 Elite_8747747`), the update family (8 Pro, 9 Elite), the panel symbols that must be in SRAM (the SMK-37
 scanner's), the model define (`-DSMK37_MODEL_PRO=1` or `_ELITE`), and `ported-from.smk37.json` (the pinned hashes of M-VAVE's SMK-37 `Build.ps1`,
-`Package.cs` and `Build-Web.ps1`). The package is `SMK37_DX747_PRO.fwsc` / `SMK37_DX747_ELITE.fwsc`. A good Pro build prints `FM1: 444912 bytes app image
-(cap 453921, headroom 9009)`. There is no Windows route and no `--web` or `--package` for these targets yet; M-VAVE's own `Build.ps1` for
+`Package.cs` and `Build-Web.ps1`). The package is `SMK37_DX747_PRO.fwsc` / `SMK37_DX747_ELITE.fwsc`. A good Pro build prints `FM1: 4449xx bytes app image` (limit 453,921: under 9 KB of headroom). There is no Windows route and no `--web` or `--package` for these targets yet; M-VAVE's own `Build.ps1` for
 that SDK refuses this firmware (it ties the identity's digits to the release number). The FM-1 firmware built from the same tree is the same
 as before: same symbols, and the ELF differs from an earlier build only in its 32-byte build id.
 
