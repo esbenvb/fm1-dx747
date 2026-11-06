@@ -31,11 +31,22 @@ static int live_sel_engine(void) { return dx_part_sel_engine(LP(), LP()->selecte
 /* ---- keys that play ---------------------------------------------------- */
 
 static unsigned key_note(unsigned key) { return (unsigned)clampi(53 + (int)key + 12 * ui.octave, 0, 127); }
+#ifdef DX_SMK37
+static uint32_t smk_held[4];                           /* the notes the SMK-37's keys hold, one bit per note */
+static void smk_release_notes(void)
+{
+    for (unsigned n = 0; n < 128; ++n) if ((smk_held[n >> 5] >> (n & 31U)) & 1U) dx_route_key_v(n, 0, 0);
+    memset(smk_held, 0, sizeof smk_held);
+}
+#endif
 /* Held keys are released before anything changes where they play (another screen's keys, another part). */
 static void release_keys(void)
 {
     for (unsigned k = 0; k < 27; ++k) if ((keys_playing >> k) & 1U) dx_route_key(key_note(k), 0);
     keys_playing = 0;
+#ifdef DX_SMK37
+    smk_release_notes();
+#endif
 }
 static void go(unsigned screen)
 {
@@ -500,6 +511,62 @@ static void on_encoders(void)
     default: break;
     }
 }
+
+#ifdef DX_SMK37
+/* ---- the SMK-37: keys with velocity, pads, faders, wheels, pedal ------------------------------------------------------
+ * targets/smk37/app/smk37_controls.c turns the board's events into these calls; the FM-1 never makes them. The 37 keys always play
+ * the selected part, at the velocity they are struck with. The 16 pads are what the FM-1's 16 white keys are on Scenes and on Mix
+ * (EDIT): scene n of the bank, or mute and solo; the four faders are part levels, the wheels bend and modulate, the pedal sustains. */
+void dx_ui_note(unsigned note, unsigned velocity, unsigned down)
+{
+    if (note > 127) return;
+    if (ui.screen == S_BOOT) { if (down) go(S_PARTS); return; }
+    uint32_t bit = 1U << (note & 31U);
+    if (!down) { if (smk_held[note >> 5] & bit) { dx_route_key_v(note, 0, 0); smk_held[note >> 5] &= ~bit; } return; }
+    if (ui.learn && ui.mode == M_BROWSE && screen_learns()) { learn_note(note); return; }     /* while LEARN waits, the keys are the notes */
+    if (ui.mode != M_BROWSE) return;
+    dx_route_key_v(note, velocity, 1);
+    smk_held[note >> 5] |= bit;
+}
+void dx_ui_pad(unsigned pad, unsigned down)
+{
+    if (!down || pad > 15) return;
+    if (ui.screen == S_BOOT) { go(S_PARTS); return; }
+    if (ui.mode != M_BROWSE) return;
+    if (ui.screen == S_MIX && ui.mixkeys) { mix_key(pad); return; }
+    unsigned idx = (ui.scene / 16U) * 16U + pad;              /* the bank on screen (bank A at power-on) */
+    ui.scene = (uint8_t)idx;
+    if (scene_exists(idx)) { int r = dx_scene_recall(idx); notice(r ? "RECALL FAILED" : "SCENE RECALLED"); }
+    else notice("EMPTY SLOT\nSAVE STORES HERE");
+}
+int dx_ui_octave(void) { return ui.octave; }
+unsigned dx_ui_part_level(unsigned part) { return part < DX_PARTS ? LP()->part[part].level : 0U; }
+void dx_ui_fader(unsigned part, unsigned value)
+{
+    if (part >= DX_PARTS || !dx_part_used(LP(), part)) return;
+    dx_live_edit()->parts.part[part].level = (uint8_t)(value > 127U ? 127U : value);
+    dx_part_level_changed(part);
+    knob(OV_PLEVEL, part);
+}
+void dx_ui_wheel(unsigned wheel, unsigned value) { if (wheel) dx_route_ctl(0xb0, 1, value); else dx_route_ctl(0xe0, 0, value); }
+void dx_ui_pedal(unsigned down) { dx_route_ctl(0xb0, 64, down ? 127U : 0U); }
+static uint32_t rgb888(uint16_t c) { return ((uint32_t)(c >> 11) * 255U / 31U) << 16 | ((uint32_t)((c >> 5) & 63U) * 255U / 63U) << 8 | ((uint32_t)(c & 31U) * 255U / 31U); }
+static uint32_t scaled(uint32_t rgb, unsigned num, unsigned den)
+{ return (((rgb >> 16) & 255U) * num / den) << 16 | (((rgb >> 8) & 255U) * num / den) << 8 | ((rgb & 255U) * num / den); }
+uint32_t dx_ui_pad_color(unsigned pad)
+{
+    if (pad > 15) return 0;
+    if (ui.screen == S_MIX && ui.mixkeys) {                    /* two pads a part: mute, solo; lit in the part's colour, red and amber when on */
+        unsigned p = pad / 2U;
+        if (!part_used(p)) return 0x040404U;
+        if (pad & 1U) return part_solo(p) ? 0x302000U : scaled(rgb888(EC[p & 7U]), 1, 8);
+        return part_muted(p) ? 0x300800U : scaled(rgb888(EC[p & 7U]), 1, 8);
+    }
+    unsigned idx = (ui.scene / 16U) * 16U + pad;
+    if (!scene_exists(idx)) return 0x040404U;
+    return idx == fr.current_scene ? 0x203020U : 0x081008U;
+}
+#endif
 
 /* ---- lamps ------------------------------------------------------------------ */
 

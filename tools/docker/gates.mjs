@@ -17,8 +17,6 @@ import { fileURLToPath } from 'node:url';
 import { portedFromProblem } from '../portable/guard.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PROFILE = 'dx7';
-const VARIANT = { userBytes: 536576, frozen: 'sdk/lib/libfm1_engine.a', updateFamily: 7 };
 
 class GateError extends Error {}
 const fail = (message) => { throw new GateError(message); };
@@ -26,6 +24,24 @@ const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 const sha256File = (file) => sha256(readFileSync(file));
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8').replace(/^﻿/, ''));
 const readText = (file) => readFileSync(file, 'utf8').replace(/^﻿/, '');
+
+// The targets this script builds. fm1 is the FM-1 (the default, as Build.ps1); the SMK-37 targets use M-VAVE's smk37_open SDK, which
+// differs from the FM-1 SDK in exactly these ways (its Build.ps1 and Package.cs): the model, the update family, the identity shape,
+// and the panel scanner that must live in SRAM. DX747's own SMK-37 target: targets/smk37.
+const TARGETS = {
+  fm1: { profile: 'dx7', updateFamily: 7, macro: 'FM1_UPDATE_PRODUCT', product: 'FM-1_8[0-9]{6}',
+    panelSymbols: ['fm1_input_tick', 'fm1_panel_irq', 'fm1_scan_decode', 'fm1_key_pin', 'fm1_encoder_pin', 'fm1_quadrature'] },
+  'smk37-pro': { profile: 'pro', updateFamily: 8, macro: 'FM1_UPDATE_PRODUCT_PRO', product: 'SMK-37 Pro_8[0-9]{6}', panelSymbols: null },
+  'smk37-elite': { profile: 'elite', updateFamily: 9, macro: 'FM1_UPDATE_PRODUCT_ELITE', product: 'SMK-37 Elite_8[0-9]{6}', panelSymbols: null },
+};
+const SMK_PANEL_SYMBOLS = ['scan_isr', 'scan_soft_isr', 'smk37_adc_irq', 'key_scan', 'encoder_scan', 'pad_prc', 'keymap', 'encodermap', 'encoder_delta',
+  'pad_velocity', 'smk37_pad_history_step'];
+const TARGET = process.env.FM1_TARGET || 'fm1';
+if (!(TARGET in TARGETS)) fail(`Unknown FM1_TARGET ${TARGET}: use ${Object.keys(TARGETS).join(', ')}.`);
+const T = TARGETS[TARGET];
+T.panelSymbols = T.panelSymbols ?? SMK_PANEL_SYMBOLS;
+const PROFILE = T.profile;
+const VARIANT = { userBytes: 536576, frozen: 'sdk/lib/libfm1_engine.a', updateFamily: T.updateFamily };
 
 // Get-ChildItem -Recurse -File; hidden (dot) names are skipped unless `force`.
 function walk(dir, { force = false } = {}) {
@@ -52,8 +68,8 @@ function readVersion(src) {
   const text = readText(join(src, 'app/version.h'));
   const version = /^#define FM1_RELEASE_VERSION "(V(?:0[1-9]|[1-9][0-9]{1,2}))"\s*$/m.exec(text);
   if (!version) fail('Set FM1_RELEASE_VERSION in app/version.h.');
-  const product = /^#define FM1_UPDATE_PRODUCT "(FM-1_8[0-9]{6})"\s*$/m.exec(text);
-  if (!product) fail('Set a compatible FM1_UPDATE_PRODUCT in app/version.h.');
+  const product = new RegExp(`^#define ${T.macro} "(${T.product})"\\s*$`, 'm').exec(text);
+  if (!product) fail(`Set a compatible ${T.macro} in app/version.h.`);
   return { release: version[1], product: product[1] };
 }
 
@@ -152,7 +168,7 @@ function prepare(src, out) {
   const identityInputs = [PROFILE, manifestHash, ...appFiles.map((rel) => `${rel}:${sha256File(join(src, rel))}`)];
   const buildId = sha256(Buffer.from(identityInputs.join('\n'), 'utf8'));
   const idBytes = Array.from({ length: 32 }, (_, i) => '0x' + buildId.slice(i * 2, i * 2 + 2)).join(',');
-  if (VARIANT.updateFamily !== 7 || VARIANT.userBytes < 4096 || VARIANT.userBytes % 4096) fail('Invalid fixed firmware layout.');
+  if (![7, 8, 9].includes(VARIANT.updateFamily) || VARIANT.userBytes < 4096 || VARIANT.userBytes % 4096) fail('Invalid fixed firmware layout.');
   writeFileSync(join(out, 'generated/build_identity.c'),
     '#include "layout.h"\n' +
     `const struct fm1_firmware_layout fm1_layout = {${VARIANT.userBytes}U,${VARIANT.updateFamily}U};\n` +
@@ -305,7 +321,7 @@ function testFirmware(src, out) {
     if (!has(name)) fail(`Audio callback absent: ${name}`);
     if (!inSram(name)) fail(`Audio callback is outside internal SRAM: ${name}`);
   }
-  for (const name of ['fm1_input_tick', 'fm1_panel_irq', 'fm1_scan_decode', 'fm1_key_pin', 'fm1_encoder_pin', 'fm1_quadrature']) {
+  for (const name of T.panelSymbols) {
     if (!has(name) || !inSram(name)) fail(`Panel scan code or wiring table is outside internal SRAM: ${name}`);
   }
 

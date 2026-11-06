@@ -381,6 +381,25 @@ DX_FN void dx_router_key(struct dx_router *r, unsigned note, unsigned on, uint32
     dx_router_event(r, DX_SRC_KEYS, m, 3, now);
 }
 
+#ifdef DX_SMK37
+/* The SMK-37's keys: a note on the keyboard channel at the velocity the key was struck. */
+DX_FN void dx_router_key_v(struct dx_router *r, unsigned note, unsigned velocity, unsigned on, uint32_t now)
+{
+    const struct dx_cfg *c = *r->cfg;
+    if (!c || note > 127 || c->kbd_ch > 15) return;
+    uint8_t m[3] = {(uint8_t)((on ? 0x90U : 0x80U) | (c->kbd_ch & 15U)), (uint8_t)note, (uint8_t)(on ? (velocity < 1 ? 1 : velocity > 127 ? 127 : velocity) : 0)};
+    dx_router_event(r, DX_SRC_KEYS, m, 3, now);
+}
+/* The wheels (pitch bend 0xE0, mod wheel CC1) and the pedal (CC64): a message on the keyboard's channel. */
+DX_FN void dx_router_ctl(struct dx_router *r, unsigned status, unsigned d1, unsigned d2, uint32_t now)
+{
+    const struct dx_cfg *c = *r->cfg;
+    if (!c || c->kbd_ch > 15) return;
+    uint8_t m[3] = {(uint8_t)(status | (c->kbd_ch & 15U)), (uint8_t)(d1 & 127U), (uint8_t)(d2 & 127U)};
+    dx_router_event(r, DX_SRC_KEYS, m, 3, now);
+}
+#endif
+
 /* Song Select (F3 nn) from source src: logged, and a scene request for the control task, like a program change on the
  * scene channel. It only happens when the engine hands the message to the app. */
 DX_FN void dx_router_song_select(struct dx_router *r, unsigned src, unsigned song, uint32_t now)

@@ -64,6 +64,11 @@ while IFS= read -r source; do
     app/screen.c | app/transfer.c | app/midi_router.c) options+=(-fno-lto) ;;
   esac
   [ "$source" = app/board/panel.c ] && options+=(-fno-lto -fno-pic)
+  # SMK-37 (smk37_open's Build.ps1): the scanner is native too, and the model is a define.
+  case "${FM1_TARGET:-fm1}" in
+    smk37-*) [ "$source" = app/board/scan.c ] && options+=(-fno-lto -fno-pic)
+             options+=("-DSMK37_MODEL_$(echo "${FM1_TARGET#smk37-}" | tr a-z A-Z)=1") ;;
+  esac
   options+=(-fwrapv -fno-fast-math -ffp-contract=off)
   # Storage and screen run only from control; audio DSP stays on -O2.
   case "$source" in

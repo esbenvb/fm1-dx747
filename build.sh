@@ -21,6 +21,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODE=firmware
+TARGET=fm1
 REF=""
 URL="${FM1_SOURCE_URL:-}"
 
@@ -32,6 +33,7 @@ while [ $# -gt 0 ]; do
     --setup) MODE=setup; shift ;;
     --source-url) URL="${2:?--source-url needs a value}"; shift 2 ;;
     --from-git) REF="${2:?--from-git needs a commit}"; shift 2 ;;
+    --target) TARGET="${2:?--target needs fm1, smk37-pro or smk37-elite}"; shift 2 ;;
     -h | --help) usage; exit 0 ;;
     *) echo "Use ./build.sh, ./build.sh --web, ./build.sh --package or ./build.sh --setup (./build.sh --help)." >&2; exit 2 ;;
   esac
@@ -63,21 +65,41 @@ else
   SRC="$HERE"
 fi
 
+# Another device: DX747's source tree with that device's SDK, board layer and application files laid over it (tools/dx747/target.mjs,
+# targets/<device>/). The FM-1's SDK and sealed engine never go into it (THIRD_PARTY.md: FM-1 devices only).
+case "$TARGET" in
+  fm1) ;;
+  smk37-pro | smk37-elite)
+    [ -z "$REF" ] || { echo "error: --from-git is not supported with --target $TARGET" >&2; exit 2; }
+    [ "$MODE" = firmware ] || { echo "error: for --target $TARGET only the firmware is built so far (./build.sh --target $TARGET)" >&2; exit 2; }
+    BUILD="$HERE/build/$TARGET"; SRC="$BUILD/src"
+    export FM1_TARGET="$TARGET"
+    node "$HERE/tools/dx747/target.mjs" --target "$TARGET" --out "$SRC" ;;
+  *) echo "error: unknown target $TARGET: use fm1, smk37-pro or smk37-elite" >&2; exit 2 ;;
+esac
+
 # A failed build must not leave the previous build's DX747-named files looking like the result of this one.
 rm -f "$BUILD/dx7/generated/FM1_DX747.fwsc" "$BUILD/official-web/FM1-DX747.html" "$BUILD/official-web/DX747-Workbench.html" "$BUILD/preview/DX747-Workbench.html"
+
+PACKAGE=FM1_DX747.fwsc
+[ "$TARGET" = fm1 ] || PACKAGE="SMK37_DX747_$(echo "${TARGET#smk37-}" | tr a-z A-Z).fwsc"
 
 firmware() {
   echo "== firmware (JieLi Linux toolchain in Docker)"
   "$HERE/tools/docker/build.sh" -o "$BUILD/dx7" "$SRC"
   mkdir -p "$BUILD/dx7/generated"
-  node "$HERE/tools/portable/fwsc.mjs" "$BUILD/dx7/sdk.elf" "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" --root "$SRC"
-  cp "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" "$BUILD/dx7/generated/FM1_DX747.fwsc"
+  if [ "$TARGET" = fm1 ]; then
+    node "$HERE/tools/portable/fwsc.mjs" "$BUILD/dx7/sdk.elf" "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" --root "$SRC"
+    cp "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" "$BUILD/dx7/generated/FM1_DX747.fwsc"
+  else
+    node "$HERE/tools/portable/fwsc.mjs" "$BUILD/dx7/sdk.elf" "$BUILD/dx7/generated/$PACKAGE" --root "$SRC"
+  fi
 }
 
 case "$MODE" in
   firmware)
     firmware
-    echo "== done: $BUILD/dx7/generated/FM1_DX747.fwsc" ;;
+    echo "== done: $BUILD/dx7/generated/$PACKAGE" ;;
   web)
     echo "== browser core"
     "$HERE/tools/portable/browser-core.sh" -o "$BUILD/web" "$SRC" >/dev/null

@@ -21,6 +21,11 @@ import { fileURLToPath } from 'node:url';
 import { Elf } from './elf.mjs';
 import { portedFromProblem } from './guard.mjs';
 
+// The target's identity shape (docs/BUILDING.md): the FM-1's, or an SMK-37 model's (FM1_TARGET=smk37-pro or smk37-elite, as for gates.mjs).
+const TARGET = process.env.FM1_TARGET || 'fm1';
+const IDENTITY = { fm1: /^FM-1_8[0-9]{6}$/, 'smk37-pro': /^SMK-37 Pro_8[0-9]{6}$/, 'smk37-elite': /^SMK-37 Elite_8[0-9]{6}$/ }[TARGET];
+const MACRO = { fm1: 'FM1_UPDATE_PRODUCT', 'smk37-pro': 'FM1_UPDATE_PRODUCT_PRO', 'smk37-elite': 'FM1_UPDATE_PRODUCT_ELITE' }[TARGET];
+if (!IDENTITY) { console.error(`error: unknown FM1_TARGET ${TARGET}`); process.exit(2); }
 const AREA = 0x4000, ENTRY = 0x02000120, APP_DATA = 0x120;
 const FLASH_LIMIT = 0xff000, USER_SIZE = 536576, BT_SIZE = 4096, MIN_VM = 32768;
 const PUBLIC_CODE = 0x980f;
@@ -180,7 +185,7 @@ function wrap(flash, loader, product) {
 
 /** Make the package from an application image (the sections of sdk.elf that Build.ps1 hands to the packager). */
 export function createPackage(application, resources, product) {
-  if (!/^FM-1_8[0-9]{6}$/.test(product)) fail('Invalid FM1 update identity.');
+  if (!IDENTITY.test(product)) fail('Invalid update identity.');
   if (!application.length || application.length > FLASH_LIMIT - USER_SIZE - BT_SIZE - MIN_VM - AREA - APP_DATA - 383 - 64) {
     fail('Application does not fit the FM1 layout.');
   }
@@ -219,8 +224,8 @@ function main(argv) {
   if (problem) fail(problem);
   resources = resources ?? join(root, 'sdk', 'tools', 'pack');
   if (!product) {
-    const m = /^#define FM1_UPDATE_PRODUCT "(FM-1_8[0-9]{6})"[ \t]*$/m.exec(readFileSync(join(root, 'app', 'version.h'), 'utf8'));
-    if (!m) fail('Set a compatible FM1_UPDATE_PRODUCT in app/version.h.');
+    const m = new RegExp(`^#define ${MACRO} "(${IDENTITY.source.slice(1, -1)})"[ \\t]*$`, 'm').exec(readFileSync(join(root, 'app', 'version.h'), 'utf8'));
+    if (!m) fail(`Set a compatible ${MACRO} in app/version.h.`);
     product = m[1];
   }
   const { package: pkg, layout } = createPackage(applicationImage(args[0]), resources, product);
