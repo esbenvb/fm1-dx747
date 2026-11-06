@@ -83,22 +83,18 @@ over it). One entry, in Open source."
 ### fm1-editor.com firmware directory (issue)
 
 The page says "Know of a firmware missing here? Open an issue", and the issues are those of
-<https://github.com/benny-sparra/fm1-dx7-patch-importer/issues> (earlier requests are titled like *Add Miku-FM*). Title and text:
+<https://github.com/benny-sparra/fm1-dx7-patch-importer/issues> (earlier requests are titled like *Add Miku-FM* and give the install link, the
+try-it link, the source, a cheat sheet and the picture). Title and text, in the same shape:
 
 ```
-Add DX747 to the firmware page
+Add DX747
 
-Name: DX747
-Maker: Esben von Buchwald
-Repository: https://github.com/esbenvb/fm1-dx747 (GPL-3.0 with the FM1 SDK linking exception)
-Release: v0.1 (beta), FM1_DX747.fwsc attached and signed by the Firmware Hub's build workflow:
-  https://github.com/esbenvb/fm1-dx747/releases/tag/v0.1
-Identity: FM-1_8747747. It brings M-VAVE's update loader and installs over V15 and over other firmwares.
-Try and install in the browser: https://esbenvb.github.io/fm1-dx747/ (simulator, web editor, installer)
-Manual: https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/DX747-Manual.pdf
-Picture: https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/card.png (240 x 240, the boot screen)
+DX747, by Esben von Buchwald (esbenvb): an eight-part multitimbral DX7 module for the FM-1. Every part has its own MIDI channel and up to eight layered DX7 voices, with key splits, velocity windows, 64 scenes, a master filter, shared reverb and delay, and DX7 ROM import. It has no sequencer, sampler or projects.
 
-An eight-part multitimbral DX7 module: each part has its own MIDI channel and up to eight layered DX7 voices,
-with key splits, velocity windows, 64 scenes, a master filter and shared reverb and delay. It has no sequencer,
-sampler or projects.
+    Install (Web MIDI, Chrome/Edge): https://esbenvb.github.io/fm1-dx747/ (Update tab)
+    Try it in a browser: https://esbenvb.github.io/fm1-dx747/ (the firmware itself, with a web editor)
+    Source: https://github.com/esbenvb/fm1-dx747 (GPL-3.0 with the FM1 SDK linking exception; a fork of FM1 Open, identity FM-1_8747747, brings M-VAVE's update loader)
+    Release: v0.1 (beta), signed build: https://github.com/esbenvb/fm1-dx747/releases/tag/v0.1
+    Manual: https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/DX747-Manual.pdf
+    Picture: https://raw.githubusercontent.com/esbenvb/fm1-dx747/dx747/docs/card.png (240 x 240 screen capture)
 ```
