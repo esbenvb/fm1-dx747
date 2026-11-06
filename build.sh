@@ -79,7 +79,7 @@ case "$TARGET" in
 esac
 
 # A failed build must not leave the previous build's DX747-named files looking like the result of this one.
-rm -f "$BUILD/dx7/generated/FM1_DX747.fwsc" "$BUILD/official-web/FM1-DX747.html" "$BUILD/official-web/DX747-Workbench.html" "$BUILD/preview/DX747-Workbench.html"
+rm -f "$BUILD"/dx7/generated/SMK37_DX747_*.fwsc "$BUILD/dx7/generated/FM1_DX747.fwsc" "$BUILD/official-web/FM1-DX747.html" "$BUILD/official-web/DX747-Workbench.html" "$BUILD/preview/DX747-Workbench.html"
 
 PACKAGE=FM1_DX747.fwsc
 [ "$TARGET" = fm1 ] || PACKAGE="SMK37_DX747_$(echo "${TARGET#smk37-}" | tr a-z A-Z).fwsc"

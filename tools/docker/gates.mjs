@@ -128,6 +128,8 @@ function checkInputs(src, toolchain) {
       synth.native_sha256 !== sha256File(join(src, 'sdk/lib/libfm1_engine.a'))) {
     fail('Native DSP kernels and SDK audio contracts do not match. Install a matching SDK package.');
   }
+  // The SMK-37 SDK also ties synth.json to the compiler (its Build.ps1 checks pi32_compiler_sha256 against the manifest's bin/clang.exe).
+  if (TARGET.startsWith('smk37') && synth.pi32_compiler_sha256 !== external.files['bin/clang.exe']) fail('Native DSP kernels and SDK audio contracts do not match (compiler).');
   if (!/^#define FM1_DSP_ABI 3U\s*$/m.test(readText(join(src, 'app/synth/engine.h')))) fail('Unsupported native DSP ABI.');
   for (const [name, expected] of Object.entries(synth.portable_contracts ?? {})) {
     if (!/^[A-Za-z0-9_]+\.inc$/.test(name) || expected !== sha256File(join(src, 'app/synth', name))) {

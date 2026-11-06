@@ -33,10 +33,16 @@ static int live_sel_engine(void) { return dx_part_sel_engine(LP(), LP()->selecte
 static unsigned key_note(unsigned key) { return (unsigned)clampi(53 + (int)key + 12 * ui.octave, 0, 127); }
 #ifdef DX_SMK37
 static uint32_t smk_held[4];                           /* the notes the SMK-37's keys hold, one bit per note */
+static uint8_t smk_pedal, smk_bend = 64, smk_mod;      /* what the pedal and the wheels have sent to the part the keys play: 0 / 64 / 0 is neutral */
+/* Before the keys' channel moves to another part (or the screen changes): let go of the notes, lift the pedal and centre the wheels
+ * where they went, so that nothing stays sustained, bent or modulated on the part that is no longer played. */
 static void smk_release_notes(void)
 {
     for (unsigned n = 0; n < 128; ++n) if ((smk_held[n >> 5] >> (n & 31U)) & 1U) dx_route_key_v(n, 0, 0);
     memset(smk_held, 0, sizeof smk_held);
+    if (smk_pedal) { dx_route_ctl(0xb0, 64, 0); smk_pedal = 0; }
+    if (smk_bend != 64) { dx_route_ctl(0xe0, 0, 64); smk_bend = 64; }
+    if (smk_mod) { dx_route_ctl(0xb0, 1, 0); smk_mod = 0; }
 }
 #endif
 /* Held keys are released before anything changes where they play (another screen's keys, another part). */
@@ -274,6 +280,9 @@ static void part_sends_step(unsigned p, unsigned which, int d)
 static void mix_key(unsigned w)
 {
     unsigned p = w / 2U;
+#ifdef DX_SMK37
+    if (p != live_sel_part()) release_keys();             /* a key held on another part must be let go on that part */
+#endif
     if (p != live_sel_part()) dx_part_select(p);
     if (dx_part_used(LP(), p)) { if (w & 1U) toggle_part_solo(p); else toggle_part_mute(p); }
     knob(dx_part_used(LP(), p) ? OV_PMIX : OV_PART, p);
@@ -519,7 +528,7 @@ static void on_encoders(void)
  * (EDIT): scene n of the bank, or mute and solo; the four faders are part levels, the wheels bend and modulate, the pedal sustains. */
 void dx_ui_note(unsigned note, unsigned velocity, unsigned down)
 {
-    if (note > 127) return;
+    if (note > 127 || ui.screen == S_SAFE) return;
     if (ui.screen == S_BOOT) { if (down) go(S_PARTS); return; }
     uint32_t bit = 1U << (note & 31U);
     if (!down) { if (smk_held[note >> 5] & bit) { dx_route_key_v(note, 0, 0); smk_held[note >> 5] &= ~bit; } return; }
@@ -530,7 +539,7 @@ void dx_ui_note(unsigned note, unsigned velocity, unsigned down)
 }
 void dx_ui_pad(unsigned pad, unsigned down)
 {
-    if (!down || pad > 15) return;
+    if (!down || pad > 15 || ui.screen == S_SAFE) return;
     if (ui.screen == S_BOOT) { go(S_PARTS); return; }
     if (ui.mode != M_BROWSE) return;
     if (ui.screen == S_MIX && ui.mixkeys) { mix_key(pad); return; }
@@ -543,13 +552,22 @@ int dx_ui_octave(void) { return ui.octave; }
 unsigned dx_ui_part_level(unsigned part) { return part < DX_PARTS ? LP()->part[part].level : 0U; }
 void dx_ui_fader(unsigned part, unsigned value)
 {
-    if (part >= DX_PARTS || !dx_part_used(LP(), part)) return;
+    if (part >= DX_PARTS || !dx_part_used(LP(), part) || ui.screen == S_SAFE) return;
     dx_live_edit()->parts.part[part].level = (uint8_t)(value > 127U ? 127U : value);
     dx_part_level_changed(part);
     knob(OV_PLEVEL, part);
 }
-void dx_ui_wheel(unsigned wheel, unsigned value) { if (wheel) dx_route_ctl(0xb0, 1, value); else dx_route_ctl(0xe0, 0, value); }
-void dx_ui_pedal(unsigned down) { dx_route_ctl(0xb0, 64, down ? 127U : 0U); }
+void dx_ui_wheel(unsigned wheel, unsigned value)
+{
+    if (ui.screen == S_SAFE) return;                           /* safe boot: no routing, no panel input */
+    if (value > 127U) value = 127U;
+    if (wheel) { smk_mod = (uint8_t)value; dx_route_ctl(0xb0, 1, value); } else { smk_bend = (uint8_t)value; dx_route_ctl(0xe0, 0, value); }
+}
+void dx_ui_pedal(unsigned down)
+{
+    if (ui.screen == S_SAFE || (!down && !smk_pedal)) return;   /* an up without a down: nothing to lift */
+    smk_pedal = down ? 1U : 0U; dx_route_ctl(0xb0, 64, down ? 127U : 0U);
+}
 static uint32_t rgb888(uint16_t c) { return ((uint32_t)(c >> 11) * 255U / 31U) << 16 | ((uint32_t)((c >> 5) & 63U) * 255U / 63U) << 8 | ((uint32_t)(c & 31U) * 255U / 31U); }
 static uint32_t scaled(uint32_t rgb, unsigned num, unsigned den)
 { return (((rgb >> 16) & 255U) * num / den) << 16 | (((rgb >> 8) & 255U) * num / den) << 8 | ((rgb & 255U) * num / den); }

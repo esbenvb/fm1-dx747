@@ -29,6 +29,7 @@ static struct fm1_controls panel;
 static uint32_t physical;                      /* the 18 buttons held */
 static uint32_t shifted;                       /* buttons that went down with SHIFT held */
 static uint8_t bank, pickup, last[4], seen;    /* fader bank, faders that have not yet taken over, their last readings */
+static uint8_t owned[8];                       /* the level this layer last gave each part: when it differs, the level changed elsewhere (a scene, MIDI, the panel) */
 static uint8_t master = 100;                   /* the master level, 0..127: encoder 8 */
 
 static void set_master(int level)
@@ -41,6 +42,7 @@ void smk37_controls_reset(void)
 {
     memset(&panel, 0, sizeof panel);
     physical = shifted = 0; bank = 0; pickup = 15; seen = 0;
+    memset(owned, 255, sizeof owned);
     set_master(master);
 }
 
@@ -61,14 +63,16 @@ static void fader(unsigned id, unsigned value)
     if (value > 127U) value = 127U;
     unsigned previous = last[id], known = (seen >> id) & 1U;
     last[id] = (uint8_t)value; seen |= (uint8_t)bit;
-    if (pickup & bit) {                                     /* after a bank change or at power-on: the fader takes over where the part is */
-        int target = (int)dx_ui_part_level(part), v = (int)value;
+    int target = (int)dx_ui_part_level(part), v = (int)value;
+    if (!(pickup & bit) && owned[part] != 255U && owned[part] != target) pickup |= (uint8_t)bit;   /* the level moved elsewhere: pick it up again */
+    if (pickup & bit) {                                     /* after a bank change, at power-on or a level changed elsewhere: take over where the part is */
         if (!(known && ((previous <= (unsigned)target && value >= (unsigned)target) || (previous >= (unsigned)target && value <= (unsigned)target)))
             && (v - target > 2 || target - v > 2)) return;
         pickup &= (uint8_t)~bit;
-    }
-    if (known && value == previous) return;
+        if (known && value == previous) { owned[part] = (uint8_t)target; return; }
+    } else if (known && value == previous) return;
     dx_ui_fader(part, value);
+    owned[part] = (uint8_t)dx_ui_part_level(part);
 }
 
 void smk37_control_event(unsigned kind, unsigned id, int value)
@@ -119,11 +123,15 @@ void smk37_controls_snapshot(struct fm1_controls *out)
     memset(panel.encoders, 0, sizeof panel.encoders);
 }
 
-/* Everything held is let go: the board calls this when it loses events (an overflow), DX747 when the part the keys play changes. */
+/* Everything held is let go: the board calls this when it loses events (an overflow); DX747 lets go of keys, pedal and wheels itself when
+ * the part they play changes. The buttons and encoders are forgotten too: a lost release must not leave SHIFT or ENV held. */
 void smk37_controls_panic(void)
 {
     dx_ui_release_keys();
     for (unsigned i = 0; i < 16; ++i) smk37_control_event(SMK37_PAD, i, 0);
+    physical = shifted = 0;
+    panel.buttons = 0;
+    memset(panel.encoders, 0, sizeof panel.encoders);
 }
 void smk37_controls_release(void)
 {
@@ -146,6 +154,7 @@ void fm1_led_idle_level(unsigned level) { (void)level; }                      /*
 unsigned fm1_panel_safe_boot(void)
 {
     unsigned held = 0;
+    smk37_controls_reset();                                /* the panel starts from nothing: the master level, the fader pickup */
     for (unsigned i = 0; i < 40U; ++i) {                   /* about 400 ms of scanning: the scanner needs a few passes to see the chord */
         smk37_scan_read();
         if ((physical & (1U << SHIFT)) && (physical & (1U << ENV_BUTTON))) held = 1;

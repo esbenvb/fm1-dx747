@@ -73,9 +73,10 @@ while IFS= read -r source; do
   # Storage and screen run only from control; audio DSP stays on -O2.
   case "$source" in
     app/project.c | app/transfer.c | app/samples.c | app/screen.c | app/presets.c | \
-      app/midi_router.c | app/fm_factory.c | app/fm_library.c) options+=(-Oz) ;;
+      app/midi_router.c | app/fm_factory.c | app/fm_library.c | app/smk37_controls.c) options+=(-Oz) ;;
   esac
-  [ "$source" = app/screen.c ] && options+=(-fno-inline-functions)
+  # (smk37_open's Build.ps1 does not pass -fno-inline-functions for screen.c; the FM-1 one does)
+  [ "$source" = app/screen.c ] && [ "${FM1_TARGET:-fm1}" = fm1 ] && options+=(-fno-inline-functions)
   echo "Compile $source"
   run "$CLANG" "${options[@]}" -c "$SRC/$source" -o "$object"
   objects+=("$object")
