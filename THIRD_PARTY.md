@@ -2934,3 +2934,9 @@ Source: https://raw.githubusercontent.com/WebAssembly/wasi-libc/3f7eb4c7d6ed/dlm
 ```
 
 </details>
+
+## SMK-37 target
+
+`targets/smk37/` holds a byte-for-byte copy of the SDK and board layer of M-VAVE's [smk37_open](https://github.com/m-vave/smk37_open) (commit `b2d6bcbcd724adb13bcf85e44cfa16bb2c8153a8`) with its own licence and third-party terms,
+`targets/smk37/LICENSE.smk37_open.md` and `targets/smk37/THIRD_PARTY.smk37_open.md`. Its engine library is licensed for SMK-37 Pro and Elite devices and is used only in the SMK-37
+builds; the FM-1 engine library in `sdk/` is licensed for FM-1 devices only and is never linked into them. The "FM1-only" condition above is about `sdk/`.
