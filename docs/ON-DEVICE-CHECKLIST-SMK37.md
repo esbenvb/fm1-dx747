@@ -23,7 +23,7 @@ Controls (the scanner, `smk37_controls.c`)
 
 Sound and system
 - [ ] Eight parts, sixteen voices, scenes, the filter and effects: no dropouts (the SMK-37 library renders 625 frames per second against
-      the FM-1's 909; CPU headroom is unknown); the app image has 9,009 bytes of headroom.
+      the FM-1's 909; CPU headroom is unknown); the app image has under 9 KB of headroom.
 - [ ] Scene and settings storage: save, power-cycle, recall. Never touches the protected ranges (boot 0 to 0x3FFF, BTIF 0xC0000,
       USRTRIM 0xC1000, key_mac 0xFF000).
 - [ ] USB and Bluetooth MIDI in, MIDI out on the TRS jack (the SMK-37 has no TRS MIDI input); the workbench configuration page connects.
