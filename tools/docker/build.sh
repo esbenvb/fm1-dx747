@@ -60,6 +60,7 @@ start=$SECONDS
 docker run --rm --platform linux/amd64 \
   --user "$(id -u):$(id -g)" \
   --ulimit nofile=8192:8192 \
+  -e FM1_TARGET="${FM1_TARGET:-fm1}" \
   -v "$SRC:/src:ro" \
   -v "$OUT:/out" \
   -v "$TOOLCHAIN:/opt/jieli:ro" \

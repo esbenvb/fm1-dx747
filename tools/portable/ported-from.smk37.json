@@ -1,0 +1,8 @@
+{
+  "note": "SHA-256 of the files the Docker and Node ports are checked against for the SMK-37 targets (FM1_TARGET=smk37-pro or smk37-elite): the Build.ps1 and Package.cs of M-VAVE's smk37_open SDK (targets/smk37/sdk), which differ from the FM-1's only in the model, the update family, the identity shape and the panel symbols. The same rules as ported-from.json apply.",
+  "files": {
+    "sdk/Build.ps1": "3feed890adb6e1b0e8480ed0d45d93b2432bf20c5c932af9cba8b49fa00643d8",
+    "sdk/Package.cs": "1830bd7a3a0043f9d1df42d3903561601fa1618416e75448d2b721209af5b04d",
+    "tools/Build-Web.ps1": "d69cb0b9ea9f6a8bc05600b0f376760aabba19d8d4b9c0f5410e7a8662fc9997"
+  }
+}

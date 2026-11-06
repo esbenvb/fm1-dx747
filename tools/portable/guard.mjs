@@ -11,7 +11,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** Returns an error message when one of `names` (paths relative to `root`) differs from the version the
  *  ports were written against, or null. FM1_ALLOW_UNSYNCED=1 turns the error into a warning. */
 export function portedFromProblem(root, names) {
-  const pinned = JSON.parse(readFileSync(join(HERE, 'ported-from.json'), 'utf8')).files;
+  const pinnedFile = (process.env.FM1_TARGET || 'fm1').startsWith('smk37') ? 'ported-from.smk37.json' : 'ported-from.json';   // each SDK has its own Build.ps1 and Package.cs
+  const pinned = JSON.parse(readFileSync(join(HERE, pinnedFile), 'utf8')).files;
   const changed = [];
   for (const name of names) {
     const file = join(root, name);

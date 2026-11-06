@@ -47,6 +47,10 @@ void dx_route_publish(const struct dx_cfg *c)
     cfg_flip = next; cfg_active = &cfg_store[next];
 }
 void dx_route_key(unsigned note, unsigned on) { dx_router_key(&loc, note, on, fm1_millis()); }
+#ifdef DX_SMK37
+void dx_route_key_v(unsigned note, unsigned velocity, unsigned on) { dx_router_key_v(&loc, note, velocity, on, fm1_millis()); }
+void dx_route_ctl(unsigned status, unsigned d1, unsigned d2) { dx_router_ctl(&loc, status, d1, d2, fm1_millis()); }
+#endif
 void dx_route_panic(void)
 {
     ++panic_epoch;
@@ -113,6 +117,10 @@ void groove_midi_clock_reset(void) {}
 FM1_AUDIO_CODE unsigned groove_midi_mode(unsigned track) { (void)track; return 0; }
 FM1_AUDIO_CODE void groove_midi_note(unsigned track, unsigned note, unsigned velocity) { (void)track; (void)note; (void)velocity; }
 FM1_AUDIO_CODE void groove_midi_track_reset(unsigned track) { (void)track; }
+#ifdef DX_SMK37
+/* The SMK-37 library calls the arpeggiator's note hook too (the FM-1 library does not): DX747 has no arpeggiator. */
+FM1_AUDIO_CODE void groove_midi_arp_note(unsigned track, unsigned note, unsigned velocity) { (void)track; (void)note; (void)velocity; }
+#endif
 FM1_AUDIO_CODE void groove_midi_transport(unsigned owner, uint8_t status) { (void)owner; (void)status; }
 FM1_AUDIO_CODE void groove_midi_clock(unsigned owner, unsigned tempo) { (void)owner; (void)tempo; }
 

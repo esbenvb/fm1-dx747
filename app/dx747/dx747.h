@@ -6,6 +6,7 @@
  * the scene store in dx747/scene.h; both are pulled in here. */
 #include <stddef.h>
 #include <stdint.h>
+#include "target.h"
 #include "route.h"
 #include "scene.h"
 
@@ -46,6 +47,18 @@ int dx_storage_claim(void);                            /* erases the stock sampl
 void fm1_led_level(unsigned key, unsigned level);      /* 0..8 */
 void fm1_led_idle_level(unsigned level);               /* every LED not set on or to a level */
 unsigned fm1_panel_safe_boot(void);                    /* 1 when the safe-boot chord was held at power-on; valid after fm1_controls_init */
+
+/* ---- the SMK-37's controls (targets/smk37/app/smk37_controls.c call these; the FM-1 has none of it) ---- */
+#ifdef DX_SMK37
+void dx_ui_note(unsigned note, unsigned velocity, unsigned down);   /* a key struck at a velocity: the part's notes, or LEARN */
+void dx_ui_pad(unsigned pad, unsigned down);                         /* pad 1..16: scene n of the bank, or mute and solo on Mix */
+int dx_ui_octave(void);                                              /* the keys' octave shift, -2..2 */
+unsigned dx_ui_part_level(unsigned part);                            /* 0..127, for the faders' pickup */
+void dx_ui_fader(unsigned part, unsigned value);                     /* a fader moved a part's level */
+void dx_ui_wheel(unsigned wheel, unsigned value);                    /* 0 pitch bend (64 centre), 1 mod wheel */
+void dx_ui_pedal(unsigned down);                                     /* the sustain pedal */
+uint32_t dx_ui_pad_color(unsigned pad);                              /* 0xRRGGBB for the pad's light */
+#endif
 
 /* ---- safe boot (app/project.c) ----
  * The chord latches in panel.c; groove_screen_init enters it. While it is on, DX747 runs none of its optional

@@ -21,6 +21,7 @@
  * (producer: control task). */
 #include <stdint.h>
 #include <string.h>
+#include "target.h"
 
 #ifdef FM1_HOST_TEST
 #include <stdatomic.h>
@@ -163,6 +164,10 @@ void dx_route_init(void);
 const struct dx_cfg *dx_route_cfg(void);           /* active configuration, read only */
 void dx_route_publish(const struct dx_cfg *c);     /* copy and activate; affects new notes only */
 void dx_route_key(unsigned note, unsigned on);     /* built-in keyboard */
+#ifdef DX_SMK37
+void dx_route_key_v(unsigned note, unsigned velocity, unsigned on);   /* the SMK-37's keys carry their velocity */
+void dx_route_ctl(unsigned status, unsigned d1, unsigned d2);          /* wheels and pedal: a message on the keyboard's channel */
+#endif
 void dx_route_panic(void);                         /* cut every engine; any task */
 int dx_route_active(unsigned channel);             /* notes seen on 0..15 in the last 1.2 s */
 unsigned dx_route_source(unsigned channel);        /* DX_SRC_* that last used it */

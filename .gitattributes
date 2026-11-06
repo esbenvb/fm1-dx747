@@ -2,6 +2,8 @@
 *.bat text eol=crlf
 # Preserve SDK source bytes for integrity checks.
 sdk/** -text
+targets/smk37/sdk/** -text
+targets/smk37/board/** -text
 *.a binary
 *.bin binary
 *.exe binary
@@ -13,4 +15,6 @@ sdk/** -text
 *.boot binary
 # Keep reviewed vendor/header bytes, including their original whitespace.
 sdk/include/libc/** whitespace=-blank-at-eof
+targets/smk37/sdk/include/libc/** whitespace=-blank-at-eof
 sdk/synth.json whitespace=cr-at-eol
+targets/smk37/sdk/synth.json whitespace=cr-at-eol
