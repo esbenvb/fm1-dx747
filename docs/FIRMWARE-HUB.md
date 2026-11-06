@@ -73,12 +73,16 @@ pull request; not a bare fork with no changes. Fork it, add this line to **Custo
 other DX7 firmware), and open a pull request titled *Add DX747, an eight-part multitimbral DX7 module*:
 
 ```
-- [DX747](https://github.com/esbenvb/fm1-dx747) - Eight-part multitimbral DX7 module by Esben von Buchwald: up to eight parts on their own MIDI channels, each with up to eight layered DX7 voices, key splits, velocity windows, 64 scenes, a master filter, USB audio, and a web configurator with a browser simulator and installer ([try it](https://esbenvb.github.io/fm1-dx747/)). A fork of FM1 Open with its own identity (FM-1_8747747). GPL-3.0 with the FM1 SDK linking exception.
+- [DX747](https://github.com/esbenvb/fm1-dx747) - Eight-part multitimbral DX7 module by Esben von Buchwald: up to eight parts on their own MIDI channels, each with up to eight layered DX7 voices, key splits, velocity windows, 64 scenes, a master filter and USB audio. [Web installer](https://esbenvb.github.io/fm1-dx747/#update), [web editor (workbench)](https://esbenvb.github.io/fm1-dx747/#configure) and [browser emulator](https://esbenvb.github.io/fm1-dx747/#device), plus a [PDF manual](https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/DX747-Manual.pdf). A fork of FM1 Open with its own identity (FM-1_8747747). GPL-3.0 with the FM1 SDK linking exception.
 ```
 
-Pull request text: "Adds DX747, an open-source firmware that turns the FM-1 into an eight-part multitimbral, layerable DX7 module (the
-release is v0.1, a beta; the source is public; it installs from the web page and brings M-VAVE's update loader, so other firmwares install
-over it). One entry, in Open source."
+Pull request text:
+
+> Adds DX747, an open-source firmware that turns the FM-1 into an eight-part multitimbral, layerable DX7 module. The release is v0.1 (a beta), and
+> the source is public. It comes with a **web installer** (<https://esbenvb.github.io/fm1-dx747/#update>), a **web editor / workbench** for parts, layers,
+> scenes, filter and effects (<https://esbenvb.github.io/fm1-dx747/#configure>) and a **browser emulator** of the firmware itself
+> (<https://esbenvb.github.io/fm1-dx747/#device>), all on one page for Chrome or Edge, plus a [PDF manual](https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/DX747-Manual.pdf).
+> It brings M-VAVE's update loader, so other firmwares can be installed over it. One entry, in Open source.
 
 ### fm1-editor.com firmware directory (issue)
 
