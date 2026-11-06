@@ -1,0 +1,98 @@
+# Recipe 20: clean screens for the manual (docs/manual): every picture is taken after the overlay of the last knob turn has gone
+# (1.5 s), and shows what the manual's text describes: names on the Parts list, a two-layer part split by velocity, a muted and a
+# soloed part on Mix, stored scenes. Buttons: 0 OCT-, 1 OCT+, 2 FX, 3 SEL(MIX), 4 ENV, 5 LFO, 6 EDIT, 7 GLO, 8 HOME, 9 SAVE, 12 PLAY.
+boot
+wipe
+run 400
+# part names, as the workbench gives them
+wb 31 0 00 42 41 53 53 20 4c 49 4e 45 20 20 20
+wb 31 0 02 4c 45 41 44 20 50 41 44 20 20 20 20
+run 1500
+expect_screen 1
+shot 20a-parts-named
+# a second layer on part 1 (part 8 makes room)
+enc 0 -1
+tap btn 5
+tap btn 4
+expect_part 0 1 2
+run 1500
+shot 20b-part
+tap btn 11
+run 300
+shot 20c-part-page
+expect_screen 2
+# the layer pages
+tap btn 6
+enc 2 -8
+enc 3 14
+enc 4 10
+run 1500
+expect_screen 3
+shot 20d-sound
+tap btn 1
+enc 2 12
+enc 3 -20
+enc 4 12
+run 1500
+expect_screen 4
+shot 20e-range
+tap btn 1
+expect_screen 5
+enc 1 -1
+enc 3 -64
+enc 1 1
+enc 2 63
+run 1500
+shot 20f-velocity
+tap btn 1
+enc 2 4
+enc 3 3
+enc 4 2
+run 1500
+expect_screen 6
+shot 20g-sends
+# the mixer: part 1 muted, part 2 soloed
+tap btn 3
+tap btn 4
+enc 0 1
+tap btn 5
+run 1500
+expect_screen 8
+shot 20h-mix
+tap btn 6
+run 1500
+shot 20i-mix-keys
+tap btn 6
+# effects and the master filter
+tap btn 2
+run 300
+expect_screen 9
+shot 20j-fx
+tap btn 2
+enc 2 1
+enc 3 -30
+enc 4 12
+run 1500
+expect_screen 10
+shot 20k-filter
+# scenes: three stored
+tap btn 12
+tap btn 9
+tap btn 9
+run 300
+enc 0 2
+tap btn 9
+tap btn 9
+run 300
+enc 0 3
+tap btn 9
+tap btn 9
+run 1800
+tap btn 12
+run 300
+expect_screen 11
+shot 20l-scenes
+tap btn 7
+run 300
+expect_screen 12
+shot 20m-system

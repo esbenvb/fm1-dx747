@@ -290,7 +290,7 @@
     root.append(h('h3', null, 'Shared reverb and delay'),
       h('div', 'row', field('Reverb decay', decay.el), field('Effects return', ret.el)),
       h('div', 'row', field('Delay mode', mode.el), field('Delay time (free)', freeTime.el), field('Delay division (synchronised)', division.el), field('Delay feedback', feedback.el)),
-      h('p', 'hint', 'Each layer\'s own reverb and delay amounts are on the Configure tab. In synchronised mode the delay follows the tempo of incoming MIDI clock.'));
+      h('p', 'hint', 'Each layer\'s own reverb and delay amounts are on the Configure tab. In synchronised mode the delay is a note value at a fixed tempo: DX747 does not follow MIDI clock.'));
     const chans = [[0, 'Off'], ...Array.from({ length: 16 }, (_, i) => [i + 1, 'Channel ' + (i + 1)])];
     const sc = select(chans, v => act(() => app.dx.setSetting(0, v), refresh)), mc = select(chans, v => act(() => app.dx.setSetting(1, v), refresh));
     const light = slider(0, 8, v => v, v => act(() => app.dx.setSetting(2, v)));

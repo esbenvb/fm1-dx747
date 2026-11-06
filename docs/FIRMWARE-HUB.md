@@ -60,3 +60,45 @@ To **zven@thefirmwarehub.com**, short, with no card text in it (that comes from 
 
 New version: tag it (`git tag v0.2 && git push origin v0.2`). The same asset name and identity is fine. Card, picture and links: edit
 `fmhub.json` and `docs/card.png`, push, wait up to three hours; never mail text changes.
+
+## Other lists
+
+Both take a short submission from the maker's own GitHub account (`esbenvb`); texts checked against their rules on 6 November 2026.
+
+### awesome-fm-1 (pull request)
+
+<https://github.com/cicloid/awesome-fm-1>. Its [contribution guidelines](https://github.com/cicloid/awesome-fm-1/blob/main/CONTRIBUTING.md): one line
+`- [Name](url) - Description.` ending in a full stop; say what it does and who made it and name the licence; right section; one entry per
+pull request; not a bare fork with no changes. Fork it, add this line to **Custom firmware > Open source** (after the sloopDX line, the
+other DX7 firmware), and open a pull request titled *Add DX747, an eight-part multitimbral DX7 module*:
+
+```
+- [DX747](https://github.com/esbenvb/fm1-dx747) - Eight-part multitimbral DX7 module by Esben von Buchwald: up to eight parts on their own MIDI channels, each with up to eight layered DX7 voices, key splits, velocity windows, 64 scenes, a master filter, USB audio, and a web configurator with a browser simulator and installer ([try it](https://esbenvb.github.io/fm1-dx747/)). A fork of FM1 Open with its own identity (FM-1_8747747). GPL-3.0 with the FM1 SDK linking exception.
+```
+
+Pull request text: "Adds DX747, an open-source firmware that turns the FM-1 into an eight-part multitimbral, layerable DX7 module (the
+release is v0.1, a beta; the source is public; it installs from the web page and brings M-VAVE's update loader, so other firmwares install
+over it). One entry, in Open source."
+
+### fm1-editor.com firmware directory (issue)
+
+The page says "Know of a firmware missing here? Open an issue", and the issues are those of
+<https://github.com/benny-sparra/fm1-dx7-patch-importer/issues> (earlier requests are titled like *Add Miku-FM*). Title and text:
+
+```
+Add DX747 to the firmware page
+
+Name: DX747
+Maker: Esben von Buchwald
+Repository: https://github.com/esbenvb/fm1-dx747 (GPL-3.0 with the FM1 SDK linking exception)
+Release: v0.1 (beta), FM1_DX747.fwsc attached and signed by the Firmware Hub's build workflow:
+  https://github.com/esbenvb/fm1-dx747/releases/tag/v0.1
+Identity: FM-1_8747747. It brings M-VAVE's update loader and installs over V15 and over other firmwares.
+Try and install in the browser: https://esbenvb.github.io/fm1-dx747/ (simulator, web editor, installer)
+Manual: https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/DX747-Manual.pdf
+Picture: https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/card.png (240 x 240, the boot screen)
+
+An eight-part multitimbral DX7 module: each part has its own MIDI channel and up to eight layered DX7 voices,
+with key splits, velocity windows, 64 scenes, a master filter and shared reverb and delay. It has no sequencer,
+sampler or projects.
+```

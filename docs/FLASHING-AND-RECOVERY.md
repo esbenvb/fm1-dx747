@@ -1,10 +1,10 @@
 # Flashing DX747 and getting back
 
-**Nothing in this repository has been flashed to a real FM-1.** The firmware builds
-and passes the SDK's checks, and its behaviour has been tested in the simulator and
-on the host. Flashing the first build is the first time it runs on hardware, and a
-firmware that does not start can leave a unit that needs more than the workbench to
-recover. Read this before you do it.
+**The author has flashed DX747 to a real FM-1 and it works**, installing from the
+stock firmware and from another firmware, and installing another firmware over it. The
+caution stands: much of the firmware's behaviour is proven only in the simulator and on
+the host, and a firmware that does not start can leave a unit that needs more than the
+workbench to recover. Read this before you do it.
 
 ## The rule: a way back first, then the first flash
 

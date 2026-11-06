@@ -2,6 +2,13 @@
 
 <p align="center"><img src="docs/screens/boot-static-logo.png" width="240" alt="The DX747 boot screen: a Boeing 747 in side view above the words DX747, 8-part multitimbral DX7 module"></p>
 
+<p align="center">
+<a href="https://esbenvb.github.io/fm1-dx747/"><b>Try it in your browser and install it on your FM-1 &rarr; esbenvb.github.io/fm1-dx747</b></a><br>
+<a href="docs/DX747-Manual.pdf"><b>Manual (PDF)</b></a> &middot; <a href="https://github.com/esbenvb/fm1-dx747/releases">Releases</a> &middot; <a href="docs/FLASHING-AND-RECOVERY.md">Flashing and recovery</a>
+</p>
+
+> **Try it, then install it.** Open **<https://esbenvb.github.io/fm1-dx747/>** in Chrome or Edge on a computer. The page runs the DX747 firmware itself in your browser, with the panel's screen, buttons and keys, so you can play it and build sounds without an FM-1. It is also the **configurator** for a connected unit (parts, layers, scenes, filter) and the **installer**: its Update tab puts DX747 on your FM-1, and the original firmware back. Read [docs/FLASHING-AND-RECOVERY.md](docs/FLASHING-AND-RECOVERY.md) before you install, and the [PDF manual](docs/DX747-Manual.pdf) for everything else.
+
 > **DX747 does for micro synths what the jumbo jet did for air travel half a century ago.**
 >
 > For the price of a dinner, you get a box in the spirit of the **Yamaha TX816**: eight DX7s in a rack, which cost about as much as a small car in 1984.
