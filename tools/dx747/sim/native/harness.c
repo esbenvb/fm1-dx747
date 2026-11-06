@@ -15,6 +15,12 @@
  *   encq N DELTA        the same, but no time passes: detents in quick succession
  *   knob V              master potentiometer 0..1023
  *   midi SRC HEX...     one message from source 0 DIN, 1 USB, 2 BLE, e.g. "midi 1 90 3c 64"
+ *   SMK-37 build only (make dx747-sim-smk37; recipes in recipes-smk37/), events as the board's scanner reports them:
+ *   skey N VEL          key N (0..36, C3 + N) goes down with velocity VEL (1..127), or up with 0
+ *   spad N V            pad N (0..15) down (1) or up (0)       sfader N V   fader 0..3 (parts) or wheel 4/5, V 0..127
+ *   spedal V            sustain pedal (>= 64 down)             sbtn N V     physical button N (0..17) down/up
+ *   senc N D            encoder 0..6 turned D counts; 7 is the master level
+ *   expect_pad_color N HEX  fail unless pad N is lit RRGGBB
  *   shot NAME           write OUTDIR/NAME.png
  *   leds                print the LED states as a 41 character string (. dark, # full, 1..7 a dimmer level)
  *   echo TEXT           print TEXT
@@ -78,12 +84,19 @@
 #include "instrument.h"
 #include "dx747/scene.h"
 #include "dx747/dx747.h"
+#ifdef DX_SMK37
+#include "smk37_controls.h"
+#endif
 extern unsigned dx_route_voices(void);
 extern unsigned dx_engines_up(void);
 extern void sim_safe_boot(unsigned);
 extern struct dx_live *dx_live_edit(void);
 extern const struct dx_cfg *dx_route_cfg(void);
 extern void sim_boot(unsigned);
+#ifdef DX_SMK37
+extern void sim_smk(unsigned, unsigned, int);
+extern uint32_t sim_pad_color(unsigned);
+#endif
 extern void sim_control(unsigned, unsigned, int);
 extern const float *sim_render(void);
 extern const uint16_t *sim_pixels(void);
@@ -400,6 +413,18 @@ int main(int argc, char **argv)
             for (unsigned i = 0; !bad && i < 8; ++i) bad |= wb_data[7 + i] != 0;
             if (bad || dx_engines_up() != 0xffU) { fprintf(stderr, "expect_timbre_refused: a track no longer reports the DX7 source (or an engine went down)\n"); ++errors; }
         }
+#ifdef DX_SMK37
+        else if (!strcmp(p, "skey") && a && b) { sim_smk(SMK37_KEY, (unsigned)atoi(a), atoi(b)); run_ms(30); }
+        else if (!strcmp(p, "spad") && a && b) { sim_smk(SMK37_PAD, (unsigned)atoi(a), atoi(b)); run_ms(30); }
+        else if (!strcmp(p, "sfader") && a && b) { sim_smk(SMK37_FADER, (unsigned)atoi(a), atoi(b)); run_ms(30); }
+        else if (!strcmp(p, "spedal") && a) { sim_smk(SMK37_PEDAL, 0, atoi(a)); run_ms(30); }
+        else if (!strcmp(p, "sbtn") && a && b) { sim_smk(SMK37_BUTTON, (unsigned)atoi(a), atoi(b)); run_ms(60); }
+        else if (!strcmp(p, "senc") && a && b) { sim_smk(SMK37_ENCODER, (unsigned)atoi(a), atoi(b)); run_ms(60); }
+        else if (!strcmp(p, "expect_pad_color") && a && b) {
+            uint32_t got = sim_pad_color((unsigned)atoi(a)), want = (uint32_t)strtoul(b, NULL, 16);
+            if (got != want) { fprintf(stderr, "expect_pad_color: pad %s is %06x, expected %06x\n", a, (unsigned)got, (unsigned)want); ++errors; }
+        }
+#endif
         else if (!strcmp(p, "wipe")) { memset(sim_flash() + 65536, 0xff, 4096U * 66U); }
         else if (!strcmp(p, "run") && a) run_ms((unsigned)atoi(a));
         else if ((!strcmp(p, "tap") || !strcmp(p, "press") || !strcmp(p, "release")) && a && b) {

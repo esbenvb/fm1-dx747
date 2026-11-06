@@ -1,0 +1,101 @@
+# SMK-37 recipe 1: DX747's SMK-37 controls layer (targets/smk37/app/smk37_controls.c) on the events the board's scanner reports:
+# keys with velocity, faders with pickup and the fader bank, pads as scenes and as mute and solo, the pedal, safe boot.
+# Physical buttons: 0 SHIFT, 1 FADER BANK, 2 HOME, 3 SAVE, 8 SEL, 9 ENV, 13 EDIT (see button_map in smk37_controls.c).
+boot
+wipe
+run 400
+# the master level (encoder 8) starts at 100 of 127: full, so that the peaks compare with FM-1 recipe 9
+senc 7 27
+# keys: the velocity they are struck with reaches the engine (soft 10, firm 80: the thresholds of FM-1 recipe 9); key 12 is middle C
+skey 12 10
+run 60
+expect_voices 1
+expect_below 300 0.16
+skey 12 0
+run 100
+expect_voices 0
+skey 12 80
+expect_peak 300 0.19
+skey 12 0
+run 100
+expect_voices 0
+# a key held while the octave changes lets go of the note it started
+skey 12 90
+run 60
+expect_voices 1
+sbtn 5 1
+sbtn 5 0
+skey 12 0
+run 100
+expect_voices 0
+# faders: part levels with pickup. Parts start at 127; a reading far from the part's level does nothing until it takes over
+expect_level 0 127
+sfader 0 64
+expect_level 0 127
+sfader 0 126
+expect_level 0 126
+sfader 0 40
+expect_level 0 40
+# FADER BANK: faders 1 to 4 become parts 5 to 8, and take over only where those parts are
+sbtn 1 1
+sbtn 1 0
+sfader 0 100
+expect_level 4 127
+expect_level 0 40
+sfader 0 127
+sfader 0 50
+expect_level 4 50
+expect_level 0 40
+sbtn 1 1
+sbtn 1 0
+sfader 1 20
+expect_level 1 127
+# pads: scene recall on the Scenes screen. Save the setup as scene 1, change a level, recall it with pad 1
+sbtn 2 1
+sbtn 2 0
+sbtn 3 1
+sbtn 3 0
+run 100
+expect_screen 11
+sbtn 3 1
+sbtn 3 0
+run 300
+sfader 0 20
+expect_level 0 20
+spad 0 1
+spad 0 0
+run 300
+expect_level 0 40
+# the mixer in key mode: pads are mute and solo, two to a part, and light in their part's colour
+sbtn 8 1
+sbtn 8 0
+run 100
+expect_screen 8
+sbtn 13 1
+sbtn 13 0
+run 100
+spad 0 1
+spad 0 0
+run 100
+expect_pad_color 0 300800
+skey 12 90
+run 100
+expect_voices 0
+skey 12 0
+spad 0 1
+spad 0 0
+run 100
+skey 12 90
+run 100
+expect_voices 1
+skey 12 0
+run 100
+# the pedal and the wheels must not disturb anything
+spedal 127
+sfader 4 100
+sfader 5 90
+spedal 0
+run 100
+# safe boot: SHIFT and ENV held at power-on
+boot safe
+expect_screen 13
