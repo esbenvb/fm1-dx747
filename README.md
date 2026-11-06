@@ -1,6 +1,6 @@
 # DX747: an eight-part multitimbral DX7 module for the M-VAVE FM-1
 
-<p align="center"><img src="docs/screens/boot-static-logo.png" width="240" alt="The DX747 boot screen: a Boeing 747 in side view above the words DX747, 8-part multitimbral DX7 module"></p>
+<p align="center"><img src="docs/screens-overview-4x2.png" alt="DX747 screens: boot logo, parts, keysplit range, velocity window, mixer, master filter, scenes and MIDI monitor"></p>
 
 <p align="center">
 <a href="https://esbenvb.github.io/fm1-dx747/"><b>Try it in your browser and install it on your FM-1 &rarr; esbenvb.github.io/fm1-dx747</b></a><br>
