@@ -63,7 +63,7 @@ New version: tag it (`git tag v0.2 && git push origin v0.2`). The same asset nam
 
 ## Other lists
 
-Both take a short submission from the maker's own GitHub account (`esbenvb`); texts checked against their rules on 6 November 2026.
+All three take a short submission from the maker's own GitHub account (`esbenvb`); texts checked against their rules on 6 November 2026.
 
 ### awesome-fm-1 (pull request)
 
@@ -102,3 +102,14 @@ DX747, by Esben von Buchwald (esbenvb): an eight-part multitimbral DX7 module fo
     Manual: https://github.com/esbenvb/fm1-dx747/blob/dx747/docs/DX747-Manual.pdf
     Picture: https://raw.githubusercontent.com/esbenvb/fm1-dx747/dx747/docs/card.png (240 x 240 screen capture)
 ```
+
+### FM-1 Firmware Atlas (pull request)
+
+<https://github.com/wero1414/atlas-fm-1>, a map of every known FM-1 firmware (<https://wero1414.github.io/atlas-fm-1/>). Its README says to add one
+object to `data/firmwares.json` (fields: name, author, family, purpose, emulates, engines, sounds, sequencer, midi, clock, why, features, status,
+license, repo, install) and run `build.py`. Opened on 6 November 2026 from the fork `esbenvb/atlas-fm-1`, branch `add-dx747`:
+**<https://github.com/wero1414/atlas-fm-1/pull/5>**, *Add DX747, an eight-part multitimbral DX7 module*. It adds the DX747 object (Independent, Classic
+synth, status "Web installer", licence "GPL-3.0 (app) + vendor blobs", the value the atlas gives M-VAVE's own open firmware) and the repository's
+line in `data/github-meta.json`. It does not include the rebuilt `index.html`, `FIRMWARES.md` and `dist/artifact.html`: the activity data of the
+other repositories is from 14 October and could not be refreshed without a token, so the maintainer rebuilds after merging. To change the entry
+later, push another commit to the branch (or open a new pull request after this one is merged).
