@@ -104,8 +104,6 @@ To build the page that installs it on a unit, see [docs/BUILDING.md](docs/BUILDI
 
 # FM1 Open V14
 
-English · [简体中文](README.zh-CN.md)
-
 8 tracks, 8 sample slots, 16 FX demos; binary SDK included.
 
 [Workbench and development kit](https://open.m-vave.com/fm1-workbench) · [Official forum](https://forum.m-vave.com)
