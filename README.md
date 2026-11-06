@@ -49,6 +49,8 @@ The built-in 27-key keyboard plays the part you have selected on every screen, t
 - a **compact studio sound module** with USB audio and MIDI
 
 > **Status.** DX747 has been flashed to a real FM-1 and tested by its author, and it works great. It is still a young hobby project, so read [DX747.md](DX747.md) and [docs/ON-DEVICE-CHECKLIST.md](docs/ON-DEVICE-CHECKLIST.md) before you trust it with a gig, and [docs/FLASHING-AND-RECOVERY.md](docs/FLASHING-AND-RECOVERY.md) before you flash it.
+>
+> **Switching firmware.** DX747 has its own identity, `FM-1_8747747`, and brings M-VAVE's update loader, so another firmware can be installed over it and the official V15 can be put back. It has no sequencer, sampler or projects, so **it cannot read the projects or samples of another firmware**, and DX747 ignores the ones on the unit. Back up what you want to keep before you install, and see [docs/FIRMWARE-HUB.md](docs/FIRMWARE-HUB.md) for how it is listed on The Firmware Hub.
 
 ---
 
