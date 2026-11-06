@@ -195,7 +195,7 @@
         card.append(head); root.append(card); continue;
       }
       const chan = select(Array.from({ length: 16 }, (_, i) => [i + 1, 'Channel ' + (i + 1)]), v => act(() => app.dx.setPart(p, 1, v), refresh));
-      const name = h('input', 'name'); name.maxLength = 12; name.placeholder = 'Part name'; name.setAttribute('aria-label', 'Name of part ' + (p + 1));
+      const name = h('input', 'name'); name.maxLength = 12; name.placeholder = 'Part name'; name.title = 'The unit shows the first 10 letters; without a name it shows the voice of the main layer'; name.setAttribute('aria-label', 'Name of part ' + (p + 1));
       name.addEventListener('change', () => { touch(name); act(() => app.dx.partName(p, name.value.toUpperCase()), refresh); });
       const level = slider(0, 127, v => v, v => act(() => app.dx.setPart(p, 0, v)), 'wide');
       const play = h('button', null, 'Play this part'); play.onclick = () => act(() => app.dx.partOp(3, p), refresh);

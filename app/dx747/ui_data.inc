@@ -218,6 +218,15 @@ static int part_main(unsigned p)
     }
     return n ? list[best] : -1;
 }
+/* What a part is called in lists: the name it was given (the workbench sets it), the voice of its main layer when it has none.
+ * Ten letters fit at double size. */
+static void part_title(char *out, unsigned p)
+{
+    const char *given = fr.live.parts.part[p].name;
+    unsigned named = 0;
+    for (unsigned i = 0; i < sizeof fr.live.parts.part[p].name; ++i) named |= given[i] != ' ';
+    if (named) trim_name(out, given, 10); else trim_name(out, fr.e[part_main(p)].name, 10);
+}
 static uint16_t part_color(unsigned p) { return part_muted(p) ? C_MU : EC[p & 7U]; }
 /* The colour of an engine: its part's, or dim when the engine is free. */
 static uint16_t engine_color(unsigned e)

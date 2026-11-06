@@ -162,6 +162,10 @@ wb 29 71 02 09
 # part names: printable only
 wb 31 0 00 42 41 53 53 20 4c 49 4e 45 20 20 20
 expect_state_text 19 BASS_LINE
+# the parts list shows the name the workbench gave the part (the E of BASS LINE is out of reach of the voice name PIANO 1)
+run 200
+expect_screen 1
+expect_px 136 28 FFFF
 wb 31 71 00 42 41 53 53 20 4c 49 4e 45 20 20 01
 wb 31 71 08 42 41 53 53 20 4c 49 4e 45 20 20 20
 # scenes: save with a name, list it, a second write inside 1.5 s is busy, rename, recall, delete

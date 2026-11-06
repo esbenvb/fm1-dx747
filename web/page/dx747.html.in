@@ -9,7 +9,7 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
-.logo{font-size:20px;letter-spacing:.04em}.logo b{color:var(--tx)}.logo i{color:var(--ac);font-style:normal;font-weight:700}.logo span{color:var(--dim);font-size:13px;margin-left:8px}
+.logo{display:flex;align-items:center;gap:10px}.logo-mark{height:30px;width:auto;display:block}.logo span{color:var(--dim);font-size:13px;letter-spacing:.04em}
 .pill{padding:4px 12px;border-radius:99px;background:var(--panel2);color:var(--dim);font-size:13px}.pill.ok{color:var(--gr)}
 header .actions{margin-left:auto;display:flex;gap:8px}
 button,select,input[type=number],input.name{font:inherit;color:var(--tx);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 12px}
@@ -86,7 +86,7 @@ details{margin-top:40px;color:var(--dim)}details pre{white-space:pre-wrap;font-s
 </head>
 <body>
 <header>
-  <div class="logo"><b>DX</b><i>747</i><span>workbench</span></div>
+  <div class="logo"><svg class="logo-mark" viewBox="8 146 219 42" role="img" aria-label="DX747" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="lg1" width="4" height="3" patternUnits="userSpaceOnUse" y="148"><rect width="4" height="1" fill="#fff"/></pattern><pattern id="lg2" width="4" height="3" patternUnits="userSpaceOnUse" y="148"><rect width="4" height="2" fill="#fff"/></pattern></defs><path d="M10,148 L45,148 L64,167 L45,186 L10,186ZM19,159 L42,159 L50,167 L42,175 L19,175Z" fill="url(#lg1)" fill-rule="evenodd"/><path d="M52,148 L66,148 L79,161 L93,148 L107,148 L88,167 L107,186 L93,186 L79,173 L66,186 L52,186 L71,167Z" fill="url(#lg2)"/><g style="fill:var(--ac)" fill-rule="evenodd"><path d="M112,148 L152,148 L152,159 L125,186 L112,186 L139,159 L112,159ZM114,150 L150,150 L150,158 L124,184 L117,184 L144,157 L114,157Z"/><path d="M169,148 L180,148 L180,169 L184,169 L184,180 L180,180 L180,186 L169,186 L169,180 L137,180ZM170,150 L178,150 L178,171 L182,171 L182,178 L178,178 L178,184 L171,184 L171,178 L142,178Z"/><path d="M171,155 L171,171 L155,171ZM169,160 L169,169 L160,169Z"/><path d="M185,148 L225,148 L225,159 L198,186 L185,186 L212,159 L185,159ZM187,150 L223,150 L223,158 L197,184 L190,184 L217,157 L187,157Z"/></g></svg><span>workbench</span></div>
   <span id="conn" class="pill">Not connected</span>
   <div class="actions"><button id="btn-sim">Simulator</button><button id="btn-unit">Connect FM-1 (USB)</button></div>
 </header>

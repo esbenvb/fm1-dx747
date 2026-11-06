@@ -315,7 +315,7 @@ static void draw_parts(void)
         unsigned n = part_layers(p, list), muted = part_muted(p);
         if ((fr.active >> (pt->channel - 1U)) & 1U) px_rect(25, y + 3, 4, 4, C_AM);
         char name[11];
-        trim_name(name, fr.e[part_main(p)].name, 10);
+        part_title(name, p);
         px_text(36, y + 1, name, 2, muted ? C_DIM : C_TX);
         px_rect(158, y + 3, 58, 19, RGB(0x10, 0x10, 0x10));
         draw_lanes(p, 158, y + 3, 58, 19);
@@ -921,7 +921,7 @@ static unsigned ov_describe(struct ov *o)
         switch (k) {
         case OV_PART: {
             char *l = put_s(o->label, "PART "); l = put_u(l, a + 1U);
-            if (used) { l = put_s(l, "  CH "); put_u(l, fr.live.parts.part[a].channel); trim_name(v, fr.e[part_main(a)].name, 10); }
+            if (used) { l = put_s(l, "  CH "); put_u(l, fr.live.parts.part[a].channel); part_title(v, a); }
             else { put_s(v, "EMPTY"); o->color = C_DIM; }
             break; }
         case OV_PLEVEL: ov_part_label(o, a, "LEVEL"); put_u(v, fr.live.parts.part[a].level); o->bar = 1; o->num = fr.live.parts.part[a].level; o->den = 127; break;
