@@ -15,8 +15,8 @@
 #define C_GD RGB(0x26, 0x26, 0x26)
 #define C_SEL RGB(0x30, 0x30, 0x34)  /* the selected row's background: its marker is a white bar at the left edge */
 #define C_MU RGB(0x5B, 0x5B, 0x5B)
-#define C_AC RGB(0x00, 0xE5, 0xFF)
-#define C_DXG RGB(0x04, 0xDF, 0xBF)  /* the green of the DX7's buttons (boot screen) */
+#define C_DXG RGB(0x04, 0xDF, 0xBF)  /* the green of the DX7's buttons */
+#define C_AC C_DXG                   /* the accent of the whole panel: scene number, titles, tabs, overlay frames, control names in the tips */
 #define C_AM RGB(0xFF, 0xB0, 0x00)
 #define C_GR RGB(0x44, 0xFF, 0x6E)
 #define C_RD RGB(0xFF, 0x4D, 0x4D)

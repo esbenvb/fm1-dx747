@@ -39,7 +39,28 @@ static void draw_title(const char *t, const char *right)
     px_text(4, 29, t, 2, C_AC);
     if (right) px_text_r(236, 33, right, 1, C_TX);
 }
-static void draw_hint(const char *s) { px_text_c(120, 230, s, 1, C_TX); }
+/* A tip line: the names of controls are written in braces, {K1} LAYER VOL, and drawn in the DX7 green, the rest in white.
+ * align: -1 the text starts at x, 0 it is centred on x, 1 it ends at x. */
+static void px_tip(int x, int y, const char *s, int align)
+{
+    unsigned n = 0;
+    for (const char *p = s; *p; ++p) n += *p != '{' && *p != '}';
+    int w = n ? (int)n * 6 - 1 : 0;
+    x -= align > 0 ? w : align < 0 ? 0 : w / 2;
+    char run[40];
+    unsigned len = 0;
+    uint16_t col = C_TX;
+    for (const char *p = s;; ++p) {
+        if (*p == '{' || *p == '}' || !*p) {
+            run[len] = 0;
+            if (len) { px_text(x, y, run, 1, col); x += (int)len * 6; }
+            len = 0;
+            col = *p == '{' ? C_DXG : C_TX;
+            if (!*p) break;
+        } else if (len < sizeof run - 1U) run[len++] = *p;
+    }
+}
+static void draw_hint(const char *s) { px_tip(120, 230, s, 0); }
 /* Page tabs: the current one filled. */
 static void draw_tabs(int x, int y, const char *const *names, unsigned n, unsigned cur)
 {
@@ -314,7 +335,7 @@ static void draw_parts(void)
             px_text(36, y + 17, line, 1, sel ? C_AC : C_TX);
         }
     }
-    draw_hint("K1 PART VOL  PRESETS SOUND  HOME DETAIL");
+    draw_hint("{K1} PART VOL  {PRESETS} SOUND  {HOME} DETAIL");
 }
 
 /* ---- one part: its layers --------------------------------------------------------- */
@@ -347,16 +368,16 @@ static void draw_ident(unsigned with_layer, unsigned with_channel, unsigned with
 static void draw_no_part(void)
 {
     px_text(4, 72, "NO SOUND IN THIS PART", 1, C_AM);
-    px_text(4, 90, "ENV ADDS ONE ON THE LOWEST", 1, C_TX);
+    px_tip(4, 90, "{ENV} ADDS ONE ON THE LOWEST", -1);
     px_text(4, 101, "FREE MIDI CHANNEL, WITH ONE", 1, C_TX);
-    px_text(4, 112, "LAYER. SELECT PICKS A PART.", 1, C_TX);
+    px_tip(4, 112, "LAYER. {SELECT} PICKS A PART.", -1);
 }
 static void draw_part(void)
 {
     unsigned p = sel_part();
     draw_head();
     draw_ident(1, 1, 0);
-    if (!part_used(p)) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
+    if (!part_used(p)) { draw_no_part(); draw_hint("{ENV} = ADD A PART HERE"); return; }
     uint8_t list[DX_ENGINES];
     unsigned n = part_layers(p, list), sl = fr.live.parts.part[p].sel < n ? fr.live.parts.part[p].sel : 0U;
     for (unsigned i = 0; i < n; ++i) {
@@ -387,7 +408,7 @@ static void draw_part(void)
     tile_u(1, "LEVEL", fr.live.parts.part[p].level, C_TX);
     o = put_u(tb, sl + 1U); *o++ = '/'; put_u(o, n); tile(2, "LAYER", tb, C_TX);
     o = put_u(tb, engines_in_use()); put_s(o, "/8"); tile(3, "ENGINES", tb, C_AM);
-    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "ALGO LAYER  ENV ADD  LFO DEL  ARP LEARN");
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  {ARP}=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  {ARP}=STOP" : "{ALGO} LAYER  {ENV} ADD  {LFO} DEL  {ARP} LEARN");
 }
 
 /* ---- the part in detail: HOME a second time ---------------------------------------- */
@@ -402,7 +423,7 @@ static void draw_detail(void)
     unsigned p = sel_part();
     draw_head();
     draw_ident(0, 1, 1);
-    if (!part_used(p)) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
+    if (!part_used(p)) { draw_no_part(); draw_hint("{ENV} = ADD A PART HERE"); return; }
     uint8_t list[DX_ENGINES];
     unsigned n = part_layers(p, list), sl = fr.live.parts.part[p].sel < n ? fr.live.parts.part[p].sel : 0U;
     px_rect(8, 64, 224, 1, C_LN);
@@ -457,7 +478,7 @@ static void draw_detail(void)
         }
     }
     if (big) px_text(4, 214, "BARS = KEYS  +N = SHIFT  V = VELOCITY", 1, C_TX);
-    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "K1 LAYER VOL K2 PART VOL K3 CH");
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  {ARP}=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  {ARP}=STOP" : "{K1} LAYER VOL {K2} PART VOL {K3} CH");
 }
 
 /* ---- layer pages ------------------------------------------------------------------- */
@@ -467,13 +488,13 @@ static void draw_pbar(unsigned page)
     draw_ident(1, 1, 0);
     static const char *const names[4] = {"SOUND", "RANGE", "VEL", "SENDS"};
     draw_tabs(4, 52, names, 4, page);
-    px_text_r(236, 56, "OCT = PAGE", 1, C_TX);
+    px_tip(236, 56, "{OCT} = PAGE", 1);
 }
 static void draw_esound(void)
 {
     int e = sel_engine();
     draw_head(); draw_pbar(0);
-    if (e < 0) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
+    if (e < 0) { draw_no_part(); draw_hint("{ENV} = ADD A PART HERE"); return; }
     unsigned en = (unsigned)e, p = fr.live.parts.layer[en].owner;
     const struct dx_engine_cfg *c = &fr.cfg.e[en];
     uint16_t col = engine_color(en);
@@ -495,13 +516,13 @@ static void draw_esound(void)
     put_pan(tb, fr.live.pan[en]); tile(1, "PAN", tb, C_TX);
     o = tb; if (fr.live.bright[en] > 0) *o++ = '+'; put_i(o, fr.live.bright[en]); tile(2, "BRIGHT", tb, C_AM);
     put_u(tb, fr.e[en].program + 1U); tile(3, "PRESETS", tb, col);
-    draw_hint("K1 LEVEL  K2 PAN  K3 BRIGHT");
+    draw_hint("{K1} LEVEL  {K2} PAN  {K3} BRIGHT");
 }
 static void draw_eplays(void)
 {
     int e = sel_engine();
     draw_head(); draw_pbar(1);
-    if (e < 0) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
+    if (e < 0) { draw_no_part(); draw_hint("{ENV} = ADD A PART HERE"); return; }
     unsigned en = (unsigned)e, p = fr.live.parts.layer[en].owner;
     const struct dx_engine_cfg *c = &fr.cfg.e[en];
     uint16_t col = engine_color(en);
@@ -527,13 +548,13 @@ static void draw_eplays(void)
     put_note(tb, c->hi); tile(1, "HIGH", tb, col);
     o = put_shift(tb, c->shift); put_s(o, c->shift % 12 ? "" : " OCT"); tile(2, "SHIFT", tb, C_AM);
     tile(3, "FOLD", c->fold == DX_FOLD_WRAP ? "WRAP" : c->fold == DX_FOLD_CLIP ? "CLIP" : "DROP", C_TX);
-    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  ARP=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  ARP=STOP" : "ARP = LEARN THE RANGE FROM TWO KEYS");
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  {ARP}=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  {ARP}=STOP" : "{ARP} = LEARN THE RANGE FROM TWO KEYS");
 }
 static void draw_evel(void)
 {
     int e = sel_engine();
     draw_head(); draw_pbar(2);
-    if (e < 0) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
+    if (e < 0) { draw_no_part(); draw_hint("{ENV} = ADD A PART HERE"); return; }
     unsigned en = (unsigned)e, p = fr.live.parts.layer[en].owner;
     const struct dx_engine_cfg *c = &fr.cfg.e[en];
     uint16_t col = engine_color(en);
@@ -553,13 +574,13 @@ static void draw_evel(void)
     }
     tile_u(0, "LOW", vlo, col); tile_u(1, "HIGH", vhi, col);
     o = put_u(tb, layer_index(en) + 1U); *o++ = '/'; put_u(o, n); tile(2, "LAYER", tb, C_TX);
-    draw_hint("K1 LOW  K2 HIGH  SPLIT LAYERS BY TOUCH");
+    draw_hint("{K1} LOW  {K2} HIGH  SPLIT LAYERS BY TOUCH");
 }
 static void draw_esends(void)
 {
     int e = sel_engine();
     draw_head(); draw_pbar(3);
-    if (e < 0) { draw_no_part(); draw_hint("ENV = ADD A PART HERE"); return; }
+    if (e < 0) { draw_no_part(); draw_hint("{ENV} = ADD A PART HERE"); return; }
     unsigned en = (unsigned)e;
     const struct dx_engine_cfg *c = &fr.cfg.e[en];
     char *o = put_u(tb, fr.e[en].rev); put_s(o, " / 15"); px_text(4, 72, "REVERB SEND", 1, C_TX); px_text(4, 82, tb, 2, C_TX);
@@ -574,7 +595,7 @@ static void draw_esends(void)
     px_text(4, 186, "A NOTE ON THE PART USES ONE VOICE", 1, C_TX);
     tile_u(0, "REV", fr.e[en].rev, C_TX); tile_u(1, "DLY", fr.e[en].dly, C_TX); tile_u(2, "POLY", c->poly, C_TX);
     tile_u(3, "ENGINE", en + 1U, C_AC);
-    draw_hint("K1 REVERB  K2 DELAY  K3 MAX VOICES");
+    draw_hint("{K1} REVERB  {K2} DELAY  {K3} MAX VOICES");
 }
 
 /* ---- midi in ---------------------------------------------------------------- */
@@ -668,8 +689,8 @@ static void draw_mix(void)
         char *o = put_s(tb, "PART "); o = put_u(o, p + 1U); o = put_s(o, "  CH "); o = put_u(o, fr.live.parts.part[p].channel);
         o = put_s(o, "  LEVEL "); o = put_u(o, fr.live.parts.part[p].level); o = put_s(o, "  PAN "); put_pan(o, pan);
         px_text(4, 206, tb, 1, C_TX);
-    } else px_text(4, 206, "EMPTY PART  ENV ADDS A SOUND", 1, C_TX);
-    draw_hint(ui.mixkeys ? "KEYS MUTE/SOLO  SELECT PART  EDIT = PLAY" : "K1 LVL K2 PAN K3 REV K4 DLY ALGO CH");
+    } else px_tip(4, 206, "EMPTY PART  {ENV} ADDS A SOUND", -1);
+    draw_hint(ui.mixkeys ? "KEYS MUTE/SOLO  {SELECT} PART  {EDIT} = PLAY" : "{K1} LVL {K2} PAN {K3} REV {K4} DLY {ALGO} CH");
 }
 /* The value of effect knob i (decay, delay time, feedback, return) as the tiles and the overlay write it. */
 static void fx_text(unsigned i, const uint8_t v[4], char *o)
@@ -705,7 +726,7 @@ static void draw_fx(void)
     groove_effects_get(v);
     static const char *const labels[4] = {"DECAY", "DLY TIME", "FEEDBK", "RETURN"};
     for (unsigned i = 0; i < 4; ++i) { fx_text(i, v, tb); tile(i, labels[i], tb, C_TX); }
-    draw_hint("OCT OR FX AGAIN = MASTER FILTER");
+    draw_hint("{OCT} OR {FX} AGAIN = MASTER FILTER");
 }
 /* Position of a frequency on the 20 Hz to 20 kHz log axis, 0..223. */
 static unsigned log2_q8(unsigned v)
@@ -755,7 +776,7 @@ static void draw_master(void)
     tile(1, "CUTOFF", tb, C_AM);
     tile_u(2, "RES", l->filter_res, C_TX);
     tile(3, "USB OUT", "PRE VOL", C_GR);
-    draw_hint("OCT OR FX AGAIN = BACK TO FX PAGE");
+    draw_hint("{OCT} OR {FX} AGAIN = BACK TO FX PAGE");
 }
 
 /* ---- scenes ------------------------------------------------------------------ */
@@ -773,7 +794,7 @@ static void draw_scenes(void)
         unsigned idx = bank * 16U + s;
         int x = 4 + 58 * (int)(s % 4), y = 48 + 38 * (int)(s / 4);
         unsigned has = scene_exists(idx), cur = idx == fr.current_scene, sel = idx == ui.scene;
-        if (cur) { px_rect(x, y, 56, 34, RGB(0x00, 0x3C, 0x44)); px_frame(x, y, 56, 34, C_AC); px_frame(x + 1, y + 1, 54, 32, C_AC); }
+        if (cur) { px_rect(x, y, 56, 34, RGB(0x00, 0x3A, 0x32)); px_frame(x, y, 56, 34, C_AC); px_frame(x + 1, y + 1, 54, 32, C_AC); }
         else { if (sel) px_rect(x, y, 56, 34, C_SEL); px_frame(x, y, 56, 34, has ? C_LN : RGB(0x3C, 0x3C, 0x3C)); }
         if (sel) px_rect(x, y, 2, 34, C_TX);                    /* the cursor: a white bar at the left edge */
         put_2(tb, idx + 1U); px_text(x + 4, y + 4, tb, 2, has ? (cur ? C_AC : C_TX) : RGB(0x90, 0x90, 0x90));
@@ -792,7 +813,7 @@ static void draw_scenes(void)
             px_text(18 + 17 * (int)i, 112, ch, 2, i == ui.name_pos ? C_BLACK : C_TX);
             if (i == ui.name_pos) { px_rect(17 + 17 * (int)i, 110, 14, 18, C_AM); px_text(18 + 17 * (int)i, 112, ch, 2, C_BLACK); }
         }
-        px_text(18, 136, "K1 CURSOR  K2 LETTER  SAVE = STORE", 1, C_TX);
+        px_tip(18, 136, "{K1} CURSOR  {K2} LETTER  {SAVE} = STORE", -1);
     } else if (ui.mode == M_CLAIM) {
         px_rect(10, 78, 220, 84, C_BLACK); px_frame(10, 78, 220, 84, C_AM);
         px_text(18, 84, "FIRST SAVE: FLASH SETUP", 1, C_AM);
@@ -801,9 +822,9 @@ static void draw_scenes(void)
         px_text(18, 122, "SAVE). IT WILL BE ERASED.", 1, C_TX);
         px_text(18, 132, "DX747 CANNOT BACK IT UP.", 1, C_TX);
         px_text(18, 142, "SAVE = ERASE AND CONTINUE", 1, C_AM);
-        px_text(18, 152, "HOME = CANCEL", 1, C_TX);
+        px_tip(18, 152, "{HOME} = CANCEL", -1);
     }
-    draw_hint(ui.mode == M_BROWSE ? "KEYS RECALL  OCT BANK  SAVE STORES" : "HOME = CANCEL");
+    draw_hint(ui.mode == M_BROWSE ? "KEYS RECALL  {OCT} BANK  {SAVE} STORES" : "{HOME} = CANCEL");
 }
 
 /* ---- system --------------------------------------------------------------------- */
@@ -837,13 +858,13 @@ static void draw_sys(void)
     px_rect(151, 47 + 26 * 5 + 10, (int)(fr.cpu * 78U / 100U), 10, fr.cpu >= 85 ? C_AM : C_GR);
     switch (ui.sys_row) {
     case 0: draw_hint("PHONE OR COMPUTER CONNECTS TO THIS UNIT"); break;
-    case 4: draw_hint("K1 = CHANGE  CC74 CUTOFF 71 RES 70 TYPE"); break;
+    case 4: draw_hint("{K1} = CHANGE  CC74 CUTOFF 71 RES 70 TYPE"); break;
     case 3:
         if (s->scene_ch && dx_part_on_channel(&fr.live.parts, s->scene_ch) != DX_NO_PART) draw_hint("A PART USES THIS CH: NO PROGRAM CHANGE");
-        else draw_hint(s->scene_ch ? "PROGRAM CHANGE ON THIS CH = SCENE" : "K1 = CHANGE  OFF: NO SCENE CHANNEL");
+        else draw_hint(s->scene_ch ? "PROGRAM CHANGE ON THIS CH = SCENE" : "{K1} = CHANGE  OFF: NO SCENE CHANNEL");
         break;
-    case 1: case 2: draw_hint("SELECT OR OCT = ROW  K1 = CHANGE"); break;
-    default: draw_hint("SELECT OR OCT = ROW"); break;
+    case 1: case 2: draw_hint("{SELECT} OR {OCT} = ROW  {K1} = CHANGE"); break;
+    default: draw_hint("{SELECT} OR {OCT} = ROW"); break;
     }
 }
 
@@ -1003,8 +1024,8 @@ static void draw_overlay(void)
         char lines[3][20];
         unsigned n = ov_wrap(ui.notice ? ui.notice : "", lines);
         int h = 14 + 16 * (int)n, y = 237 - h;
-        px_rect(x, y, w, h, C_BLACK); px_frame(x, y, w, h, C_AM); px_frame(x + 1, y + 1, w - 2, h - 2, C_AM);
-        for (unsigned i = 0; i < n; ++i) px_text_c(120, y + 8 + 16 * (int)i, lines[i], 2, C_AM);
+        px_rect(x, y, w, h, C_BLACK); px_frame(x, y, w, h, C_AC); px_frame(x + 1, y + 1, w - 2, h - 2, C_AC);
+        for (unsigned i = 0; i < n; ++i) px_text_c(120, y + 8 + 16 * (int)i, lines[i], 2, C_AC);
         return;
     }
     struct ov o;

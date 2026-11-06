@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DX747 workbench</title>
 <style>
-:root{color-scheme:dark;--bg:#0f1214;--panel:#181d20;--panel2:#20272b;--line:#323b41;--tx:#eef2f4;--dim:#9aa7ad;--ac:#00e5ff;--am:#ffb000;--gr:#44ff6e;--rd:#ff4d4d}
+:root{color-scheme:dark;--bg:#0f1214;--panel:#181d20;--panel2:#20272b;--line:#323b41;--tx:#eef2f4;--dim:#9aa7ad;--ac:#04dfbf;--am:#ffb000;--gr:#44ff6e;--rd:#ff4d4d}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
@@ -34,10 +34,10 @@ input.name{width:150px;text-transform:uppercase}input.num{width:62px}.pair{displ
 .layer .row{margin:4px 0}select.voice{min-width:220px}button.toggle.on{background:var(--am);border-color:var(--am)}
 .banks{display:flex;gap:6px;margin:6px 0 12px}
 .scene-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:640px}
-.scene{display:flex;flex-direction:column;gap:2px;text-align:left;padding:8px;min-height:62px}.scene b{color:var(--dim)}.scene.sel{outline:2px solid var(--tx)}.scene.current{border-color:var(--ac);background:#052a31}
+.scene{display:flex;flex-direction:column;gap:2px;text-align:left;padding:8px;min-height:62px}.scene b{color:var(--dim)}.scene.sel{outline:2px solid var(--tx)}.scene.current{border-color:var(--ac);background:#05302a}
 .dots{display:grid;grid-template-columns:repeat(8,6px);gap:2px;margin-top:auto}.dots i{width:6px;height:6px;background:#2c3237}
 .voice-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}.voice{text-align:left}.voice i{color:var(--dim);font-style:normal;display:inline-block;min-width:2em}.voice.sel{background:var(--ac);color:#001418}.voice.sel i{color:#003}
-#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:80vw;padding:10px 18px;border-radius:8px;background:#102a33;border:1px solid var(--ac);opacity:0;pointer-events:none;transition:opacity .2s}#toast.show{opacity:1}#toast.bad{background:#3a1515;border-color:var(--rd)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:80vw;padding:10px 18px;border-radius:8px;background:#0f2f2a;border:1px solid var(--ac);opacity:0;pointer-events:none;transition:opacity .2s}#toast.show{opacity:1}#toast.bad{background:#3a1515;border-color:var(--rd)}
 /* Configure: sliders with a centre mark, the key range keyboard, the two-handle slider, the segmented control */
 .presetbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:0 0 14px;color:var(--dim)}.presetbar .err{color:#ff8f8f}
 .track{position:relative;display:inline-flex;align-items:center}.track .tick{position:absolute;top:-1px;left:calc(8px + (100% - 16px) * var(--at));width:2px;height:5px;margin-left:-1px;background:var(--dim);pointer-events:none}
