@@ -95,6 +95,22 @@ DX747 is a fork of M-VAVE's open firmware (`FM1_OFFICIAL_OPEN`) and has its own 
 each under DX747's names, **`FM1_DX747.fwsc`** and **`FM1-DX747.html`**, and `./build.sh --package` also builds
 **`DX747-Workbench.html`** (the configurator, simulator and updater, [DX747.md](DX747.md)) in the same folder.
 
+### SMK-37 Pro and Elite (experimental, never run on a unit)
+
+The same firmware has a second target for M-VAVE's SMK-37 (`targets/smk37/`): the 37 keys play with velocity, the 16 pads recall scenes
+and mute and solo, the four faders are part volumes (FADER BANK for parts 5 to 8), the wheels and the pedal play the selected part.
+It is built with **M-VAVE's own SMK-37 SDK** (`m-vave/smk37_open`, copied unchanged; the FM-1 SDK is never linked into it):
+
+~~~bash
+./build.sh --target smk37-pro      # build/smk37-pro/dx7/generated/SMK37_DX747_PRO.fwsc, update identity SMK-37 Pro_8747747
+./build.sh --target smk37-elite    # build/smk37-elite/dx7/generated/SMK37_DX747_ELITE.fwsc, update identity SMK-37 Elite_8747747
+~~~
+
+It passes the build's size, symbol and identity checks and its controls run in the simulator tests, but **this project has no SMK-37**:
+nothing has been tried on a unit, so do not install it on one before [docs/ON-DEVICE-CHECKLIST-SMK37.md](docs/ON-DEVICE-CHECKLIST-SMK37.md)
+has been worked through. The Firmware Hub does not install SMK-37 firmwares, and this one is not offered there. [targets/smk37/README.md](targets/smk37/README.md)
+says what each folder is.
+
 ### Distribution builds
 
 For a build you distribute, `FM1_SOURCE_URL` (or `--source-url`) must be the HTTPS URL of the matching source archive, including your
