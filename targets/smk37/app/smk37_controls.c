@@ -41,7 +41,7 @@ static void set_master(int level)
 void smk37_controls_reset(void)
 {
     memset(&panel, 0, sizeof panel);
-    physical = shifted = 0; bank = 0; pickup = 15; seen = 0;
+    physical = shifted = 0; bank = 0; pickup = 15; seen = 0; master = 100;
     memset(owned, 255, sizeof owned);
     set_master(master);
 }
@@ -63,6 +63,7 @@ static void fader(unsigned id, unsigned value)
     if (value > 127U) value = 127U;
     unsigned previous = last[id], known = (seen >> id) & 1U;
     last[id] = (uint8_t)value; seen |= (uint8_t)bit;
+    if (!dx_ui_fader_live(part)) return;                    /* nothing to move (an empty slot, the boot animation, safe boot): keep waiting to take over */
     int target = (int)dx_ui_part_level(part), v = (int)value;
     if (!(pickup & bit) && owned[part] != 255U && owned[part] != target) pickup |= (uint8_t)bit;   /* the level moved elsewhere: pick it up again */
     if (pickup & bit) {                                     /* after a bank change, at power-on or a level changed elsewhere: take over where the part is */

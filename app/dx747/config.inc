@@ -5,6 +5,12 @@
 
 enum { DX_CFG_PROTOCOL = 1 };                        /* DX_CFG_STATE_BYTES is in dx747.h */
 _Static_assert(16 + 8 * 15 + 8 * 26 + 2 == DX_CFG_STATE_BYTES, "state image layout");
+/* Before a configuration change moves the part the keys play: the SMK-37 also lifts the pedal and centres the wheels. */
+#ifdef DX_SMK37
+#define DX_UI_RELEASE_PART() dx_ui_release_part()
+#else
+#define DX_UI_RELEASE_PART() dx_ui_release_keys()
+#endif
 static uint32_t cfg_last_scene_write;
 static uint8_t cfg_image[DX_CFG_STATE_BYTES];
 
@@ -210,11 +216,11 @@ int dx_config_command(unsigned cmd, const uint8_t *d, unsigned n, uint8_t *out, 
     case 26:
         if (n != 3 || d[0] >= DX_PARTS || !dx_part_used(&live.parts, d[0])) return GROOVE_PROJECT_INVALID;
         if (d[1] == 0 && d[2] <= 127) { live.parts.part[d[0]].level = d[2]; dx_part_level_changed(d[0]); return 0; }
-        if (d[1] == 1 && d[2] >= 1 && d[2] <= 16) { dx_ui_release_keys(); return dx_part_set_channel(d[0], d[2]) ? 0 : GROOVE_PROJECT_INVALID; }
+        if (d[1] == 1 && d[2] >= 1 && d[2] <= 16) { DX_UI_RELEASE_PART(); return dx_part_set_channel(d[0], d[2]) ? 0 : GROOVE_PROJECT_INVALID; }
         return GROOVE_PROJECT_INVALID;
     case 27:
         if (n != 3 || d[1] >= DX_PARTS) return GROOVE_PROJECT_INVALID;
-        dx_ui_release_keys();                                 /* the built-in keys' note offs must go where the note ons went */
+        if (d[0] == 3) DX_UI_RELEASE_PART(); else dx_ui_release_keys();   /* the built-in keys' note offs must go where the note ons went */
         switch (d[0]) {
         case 0: r = dx_part_add(d[1]); break;
         case 1: r = dx_part_used(&live.parts, d[1]) ? dx_part_add_layer(d[1]) : GROOVE_PROJECT_INVALID; break;

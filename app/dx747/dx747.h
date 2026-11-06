@@ -54,7 +54,9 @@ void dx_ui_note(unsigned note, unsigned velocity, unsigned down);   /* a key str
 void dx_ui_pad(unsigned pad, unsigned down);                         /* pad 1..16: scene n of the bank, or mute and solo on Mix */
 int dx_ui_octave(void);                                              /* the keys' octave shift, -2..2 */
 unsigned dx_ui_part_level(unsigned part);                            /* 0..127, for the faders' pickup */
-void dx_ui_fader(unsigned part, unsigned value);                     /* a fader moved a part's level */
+void dx_ui_fader(unsigned part, unsigned value);
+unsigned dx_ui_fader_live(unsigned part);
+void dx_ui_release_part(void);                        /* dx_ui_release_keys, and lift the pedal and centre the wheels: the part the keys play is about to change */                     /* a fader moved a part's level */
 void dx_ui_wheel(unsigned wheel, unsigned value);                    /* 0 pitch bend (64 centre), 1 mod wheel */
 void dx_ui_pedal(unsigned down);                                     /* the sustain pedal */
 uint32_t dx_ui_pad_color(unsigned pad);                              /* 0xRRGGBB for the pad's light */
