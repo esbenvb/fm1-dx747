@@ -444,7 +444,8 @@
     bindKeyboard(); help();
     $('#sound-note').textContent = 'Click the panel or a key to switch the sound on.';
     document.addEventListener('pointerdown', () => app.sim.startAudio(), { once: true });
-    showTab('device'); setStatus();
+    const first = location.hash.slice(1);                      // a link can open a tab: #device, #configure, #sounds ...
+    showTab(document.querySelector('#tabs button[data-tab="' + first + '"]') ? first : 'device'); setStatus();
     useSimulator();
     app.release = release; app.setLocked = on => { app.locked = on; setStatus(); };
     globalThis.DxApp = app;

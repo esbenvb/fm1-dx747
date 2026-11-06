@@ -1,0 +1,46 @@
+# The DX747 workbench (the simulator, the configurator, the test keyboard and the updater in one page) on GitHub Pages, so that
+# The Firmware Hub's card can link to it: https://esbenvb.github.io/fm1-dx747/#device (the firmware in the browser) and
+# https://esbenvb.github.io/fm1-dx747/#configure (the web editor). It is the page ./build.sh --package makes, built on GitHub's
+# Ubuntu runner (Docker for the firmware, JieLi's Linux toolchain and the WASI SDK downloaded and hash-checked by ./build.sh --setup).
+# One-time setting: the repository's Settings > Pages > Source must be "GitHub Actions".
+name: pages
+on:
+  push:
+    branches: [dx747]
+    paths: ["app/**", "web/**", "sdk/**", "third_party/**", "tools/**", "build.sh", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with:
+          persist-credentials: false
+      - name: One-time downloads (toolchain and WASI SDK, hash-checked)
+        run: ./build.sh --setup
+      - name: Build the workbench pages
+        run: ./build.sh --package --source-url "https://github.com/${GITHUB_REPOSITORY}/archive/${GITHUB_SHA}.zip"
+      - name: The site
+        run: |
+          mkdir site
+          cp build/official-web/DX747-Workbench.html site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

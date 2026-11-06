@@ -1,7 +1,11 @@
 {
   "what": "An eight-part multitimbral DX7 module. Every part has its own MIDI channel and up to eight layered DX7 voices, with key splits, velocity windows and 64 scenes. A master filter, shared reverb and delay, DX7 ROM import and a web configurator. Played and controlled over MIDI.",
   "author": "Esben von Buchwald",
-  "kinds": ["synth"],
+  "kinds": [
+    "synth"
+  ],
+  "play": "https://esbenvb.github.io/fm1-dx747/#device",
+  "editor": "https://esbenvb.github.io/fm1-dx747/#configure",
   "image": "docs/card.png",
   "color": "#04DFBF"
 }
