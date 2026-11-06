@@ -22,6 +22,9 @@
 static uint32_t last_frame, last_signature;
 static unsigned frame_forced = 1;
 void dx_ui_release_keys(void) { release_keys(); }
+#ifdef DX_SMK37
+void dx_ui_release_part(void) { release_part(); }
+#endif
 
 static uint32_t hash_bytes(const void *data, unsigned bytes, uint32_t h)
 {
@@ -45,6 +48,9 @@ void groove_screen_init(void)
     ui.screen = S_BOOT;
     ui.octave = 0;
     fm1_controls_init();
+#ifdef DX_SMK37
+    smk_reset();
+#endif
     if (fm1_panel_safe_boot()) { dx_safe_boot_enter(); ui.screen = S_SAFE; }
     fm1_screen_init();
     ui.boot_until = fm1_millis() + BOOT_MS;       /* the animation starts when the screen is ready, not before its 0.2 s start-up delay */

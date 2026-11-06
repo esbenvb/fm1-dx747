@@ -34,16 +34,21 @@ static unsigned key_note(unsigned key) { return (unsigned)clampi(53 + (int)key +
 #ifdef DX_SMK37
 static uint32_t smk_held[4];                           /* the notes the SMK-37's keys hold, one bit per note */
 static uint8_t smk_pedal, smk_bend = 64, smk_mod;      /* what the pedal and the wheels have sent to the part the keys play: 0 / 64 / 0 is neutral */
-/* Before the keys' channel moves to another part (or the screen changes): let go of the notes, lift the pedal and centre the wheels
- * where they went, so that nothing stays sustained, bent or modulated on the part that is no longer played. */
+/* Let go of the notes the SMK-37's keys hold. */
 static void smk_release_notes(void)
 {
     for (unsigned n = 0; n < 128; ++n) if ((smk_held[n >> 5] >> (n & 31U)) & 1U) dx_route_key_v(n, 0, 0);
     memset(smk_held, 0, sizeof smk_held);
+}
+/* Before the keys' channel moves to another part: lift the pedal and centre the wheels where they were sent, so that nothing stays
+ * sustained, bent or modulated on the part that is no longer played. (Not on a screen change or an octave step: the part stays.) */
+static void smk_release_controllers(void)
+{
     if (smk_pedal) { dx_route_ctl(0xb0, 64, 0); smk_pedal = 0; }
     if (smk_bend != 64) { dx_route_ctl(0xe0, 0, 64); smk_bend = 64; }
     if (smk_mod) { dx_route_ctl(0xb0, 1, 0); smk_mod = 0; }
 }
+static void smk_reset(void) { memset(smk_held, 0, sizeof smk_held); smk_pedal = smk_mod = 0; smk_bend = 64; }
 #endif
 /* Held keys are released before anything changes where they play (another screen's keys, another part). */
 static void release_keys(void)
@@ -54,6 +59,12 @@ static void release_keys(void)
     smk_release_notes();
 #endif
 }
+/* Held keys (and on the SMK-37 the pedal and the wheels) are released before the part the keys play changes. */
+#ifdef DX_SMK37
+static void release_part(void) { release_keys(); smk_release_controllers(); }
+#else
+#define release_part() release_keys()
+#endif
 static void go(unsigned screen)
 {
     if (ui.screen == screen) return;
@@ -120,7 +131,7 @@ static void step_scene(int d)
 
 static void select_part_step(int d)
 {
-    release_keys();                        /* the keys' note offs must go to the part they started on */
+    release_part();                        /* the keys' note offs must go to the part they started on */
     ui.learn = 0;                          /* LEARN was for the layer of the part left behind */
     dx_part_select(wrap((int)live_sel_part() + d, DX_PARTS));
 }
@@ -137,11 +148,11 @@ static void add_here(void)
 {
     unsigned p = live_sel_part();
     int r;
-    release_keys();
+    release_part();
     if (!dx_part_used(LP(), p)) {
         r = dx_part_add(p);
         notice(r >= 0 ? "PART ADDED" : r == DX_PART_NO_ENGINE ? "NO FREE ENGINE" : r == DX_PART_NO_CHANNEL ? "NO FREE CHANNEL" : "NO FREE PART");
-        if (r >= 0) { release_keys(); dx_part_select((unsigned)r); }
+        if (r >= 0) { release_part(); dx_part_select((unsigned)r); }
         return;
     }
     r = dx_part_add_layer(p);
@@ -154,7 +165,7 @@ static void add_here(void)
 static void remove_here(void)
 {
     unsigned p = live_sel_part();
-    release_keys();
+    release_part();
     if (!dx_part_used(LP(), p)) { notice("NOTHING TO REMOVE"); return; }
     uint8_t list[DX_ENGINES];
     unsigned n = dx_part_layers(LP(), p, list), sl = LP()->part[p].sel < n ? LP()->part[p].sel : 0U;
@@ -166,7 +177,7 @@ static void step_channel(int d)
 {
     unsigned p = live_sel_part();
     if (!dx_part_used(LP(), p)) return;
-    release_keys();                        /* before the keys' channel moves with the part: their note offs must match the note ons */
+    release_part();                        /* before the keys' channel moves with the part: their note offs must match the note ons */
     int cur = LP()->part[p].channel;
     for (int k = 1; k <= 16; ++k) {
         unsigned ch = wrap(cur - 1 + d * k, 16) + 1U;
@@ -281,7 +292,7 @@ static void mix_key(unsigned w)
 {
     unsigned p = w / 2U;
 #ifdef DX_SMK37
-    if (p != live_sel_part()) release_keys();             /* a key held on another part must be let go on that part */
+    if (p != live_sel_part()) release_part();             /* a key held on another part must be let go on that part */
 #endif
     if (p != live_sel_part()) dx_part_select(p);
     if (dx_part_used(LP(), p)) { if (w & 1U) toggle_part_solo(p); else toggle_part_mute(p); }
@@ -550,22 +561,24 @@ void dx_ui_pad(unsigned pad, unsigned down)
 }
 int dx_ui_octave(void) { return ui.octave; }
 unsigned dx_ui_part_level(unsigned part) { return part < DX_PARTS ? LP()->part[part].level : 0U; }
+/* Whether a fader reading for the part would be applied: the part exists and the panel is not ignored (boot animation, safe boot). */
+unsigned dx_ui_fader_live(unsigned part) { return part < DX_PARTS && ui.screen != S_SAFE && ui.screen != S_BOOT && dx_part_used(LP(), part); }
 void dx_ui_fader(unsigned part, unsigned value)
 {
-    if (part >= DX_PARTS || !dx_part_used(LP(), part) || ui.screen == S_SAFE) return;
+    if (!dx_ui_fader_live(part)) return;
     dx_live_edit()->parts.part[part].level = (uint8_t)(value > 127U ? 127U : value);
     dx_part_level_changed(part);
     knob(OV_PLEVEL, part);
 }
 void dx_ui_wheel(unsigned wheel, unsigned value)
 {
-    if (ui.screen == S_SAFE) return;                           /* safe boot: no routing, no panel input */
+    if (ui.screen == S_SAFE || ui.screen == S_BOOT) return;    /* safe boot and the boot animation (which includes the chord's scan): no routing, no panel input */
     if (value > 127U) value = 127U;
     if (wheel) { smk_mod = (uint8_t)value; dx_route_ctl(0xb0, 1, value); } else { smk_bend = (uint8_t)value; dx_route_ctl(0xe0, 0, value); }
 }
 void dx_ui_pedal(unsigned down)
 {
-    if (ui.screen == S_SAFE || (!down && !smk_pedal)) return;   /* an up without a down: nothing to lift */
+    if (ui.screen == S_SAFE || ui.screen == S_BOOT || (!down && !smk_pedal)) return;   /* an up without a down: nothing to lift */
     smk_pedal = down ? 1U : 0U; dx_route_ctl(0xb0, 64, down ? 127U : 0U);
 }
 static uint32_t rgb888(uint16_t c) { return ((uint32_t)(c >> 11) * 255U / 31U) << 16 | ((uint32_t)((c >> 5) & 63U) * 255U / 63U) << 8 | ((uint32_t)(c & 31U) * 255U / 31U); }

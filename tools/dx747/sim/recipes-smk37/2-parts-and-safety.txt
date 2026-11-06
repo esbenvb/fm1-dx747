@@ -26,6 +26,26 @@ expect_voices 1
 spedal 0
 run 100
 expect_voices 0
+# a screen change or an octave step keeps the pedal down: only a change of part lifts it
+sbtn 2 1
+sbtn 2 0
+run 100
+skey 12 90
+spedal 127
+skey 12 0
+run 100
+expect_voices 1
+sbtn 8 1
+sbtn 8 0
+run 100
+expect_voices 1
+sbtn 2 1
+sbtn 2 0
+run 100
+expect_voices 1
+spedal 0
+run 100
+expect_voices 0
 # a key held on part 2, then a pad on the mixer in key mode selects part 4: the note stops on part 2
 sbtn 8 1
 sbtn 8 0
