@@ -10,6 +10,14 @@ for r in tools/dx747/sim/recipes/*.txt; do
     echo "== $(basename "$r")"
     tools/dx747/sim/native/dx747-sim "$out" "$r" > /dev/null || status=1
 done
+# The SMK-37 flavour of the simulator (DX_SMK37, targets/smk37/app/smk37_controls.c): its own recipes, screenshots not kept.
+make -B -s -C tools/dx747/sim/native dx747-sim-smk37 || status=1
+smk_out="$(mktemp -d)"
+for r in tools/dx747/sim/recipes-smk37/*.txt; do
+    echo "== smk37 $(basename "$r")"
+    tools/dx747/sim/native/dx747-sim-smk37 "$smk_out" "$r" > /dev/null || status=1
+done
+rm -rf "$smk_out"
 # The real workbench page code (sdk/WebUpdate.js) against the real firmware: library tab, ROM import, voices.
 if command -v node >/dev/null 2>&1; then
     echo "== page-flow.mjs"

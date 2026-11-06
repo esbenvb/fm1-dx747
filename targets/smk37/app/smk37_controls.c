@@ -146,11 +146,11 @@ void fm1_led_idle_level(unsigned level) { (void)level; }                      /*
 unsigned fm1_panel_safe_boot(void)
 {
     unsigned held = 0;
-    uint32_t start = fm1_millis();
-    do {
+    for (unsigned i = 0; i < 40U; ++i) {                   /* about 400 ms of scanning: the scanner needs a few passes to see the chord */
         smk37_scan_read();
         if ((physical & (1U << SHIFT)) && (physical & (1U << ENV_BUTTON))) held = 1;
-    } while (fm1_millis() - start < 400U);
+        fm1_device_delay(10);
+    }
     smk37_controls_release();                              /* the chord is not a button press for the screens */
     return held;
 }

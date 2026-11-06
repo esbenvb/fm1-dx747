@@ -9,6 +9,10 @@
 #include "fm1_audio_io.h"
 #include <string.h>
 #include <stdlib.h>
+#include "dx747/target.h"
+#ifdef DX_SMK37
+#include "smk37_controls.h"
+#endif
 
 #ifdef __wasm__
 #define EXPORT(name) __attribute__((export_name(name)))
@@ -53,6 +57,21 @@ void fm1_audio_stats_read(struct fm1_audio_stats *stats)
 }
 uint32_t fm1_millis(void) { return now_ms; }
 void fm1_controls_init(void) {}
+#ifdef DX_SMK37
+/* The SMK-37 build of the simulator runs DX747's own controls layer (targets/smk37/app/smk37_controls.c) on events, as the board's
+ * scanner feeds it: sim_smk(kind, id, value) is smk37_control_event. The safe-boot chord is the buttons SHIFT and ENV held at power-on. */
+static unsigned safe_boot_chord;
+void smk37_scan_read(void) {}
+void fm1_device_delay(unsigned ms) { (void)ms; }
+EXPORT("sim_safe_boot") void sim_safe_boot(unsigned on) { safe_boot_chord = on != 0; }
+EXPORT("sim_smk") void sim_smk(unsigned kind, unsigned id, int value) { smk37_control_event(kind, id, value); fm1_web_control(); }
+EXPORT("sim_pad_color") uint32_t sim_pad_color(unsigned pad) { return smk37_pad_color(pad, 0); }
+void fm1_controls_read(struct fm1_controls *value)
+{
+    smk37_controls_snapshot(value);
+    value->battery = 900;
+}
+#else
 /* Safe boot is a power-on chord on the device (app/board/panel.c); here the harness asks for it before sim_boot. */
 static unsigned safe_boot_chord;
 unsigned fm1_panel_safe_boot(void) { return safe_boot_chord; }
@@ -62,11 +81,14 @@ void fm1_controls_read(struct fm1_controls *value)
     *value = controls;
     memset(controls.encoders, 0, sizeof controls.encoders);
 }
+#endif
 /* A lamp's state is its brightness 0..8 (on is 8), so a screen can tell a dim key from a bright one. The idle glow of the
  * "off" lamps is a hardware-only feature and is not shown. */
 void fm1_led_set(unsigned key, int on) { if (key < sizeof leds) leds[key] = on ? 8 : 0; }
+#ifndef DX_SMK37                                    /* the SMK-37 controls layer provides these two */
 void fm1_led_level(unsigned key, unsigned level) { if (key < sizeof leds) leds[key] = (uint8_t)(level > 8 ? 8 : level); }
 void fm1_led_idle_level(unsigned level) { (void)level; }
+#endif
 /* Track 16-row bands until the browser consumes the next display update. */
 static void screen_changed(unsigned y, unsigned h)
 {
@@ -230,6 +252,10 @@ EXPORT("sim_boot") void sim_boot(unsigned clear)
         ++flash_revision;
     }
     memset(&controls, 0, sizeof controls); controls.battery = 900; controls.knob = 1023;
+#ifdef DX_SMK37
+    smk37_controls_reset();
+    if (safe_boot_chord) { smk37_control_event(SMK37_BUTTON, 0, 1); smk37_control_event(SMK37_BUTTON, 9, 1); }
+#endif
     memset(leds, 0, sizeof leds); memset(previous, 0, sizeof previous);
     capture_read = capture_write = capture_on = midi_busy = 0; midi_ready = 6; midi_source = FM1_MIDI_USB;
     now_ms = 0; frames = 0; gate = midi_read = midi_write = midi_reset = 0;
