@@ -67,8 +67,9 @@ The built-in 27-key keyboard plays the part you have selected on every screen, t
 
 ## Build
 
-DX747 builds on macOS and Linux with Docker and Node 18 or newer, and on Windows; the Windows steps are in
-[docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md). **Get the source by cloning the repository** into any folder, and run every
+DX747 builds on macOS and Linux with Docker and Node 18 or newer, and on Windows with JieLi's Windows toolchain 2.5.3 (`build.bat`,
+`build.bat --web` and `build.bat --package`; the Windows steps, the toolchain installation and the troubleshooting are in
+[docs/BUILDING.md](docs/BUILDING.md), Option A). **Get the source by cloning the repository** into any folder, and run every
 command from its root; nothing depends on where it is:
 
 ~~~
