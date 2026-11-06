@@ -93,7 +93,7 @@ Differences from `Build.ps1` (all deliberate): tool names (`common/bin/clang`, `
 ## Not done in M0
 
 - No `.fwsc` packaging at that time (`Package.cs` port): not needed for the size gate. It exists now as
-  `tools/portable/fwsc.mjs`, and its package is byte for byte the Windows one (docs/BUILD-WINDOWS.md).
+  `tools/portable/fwsc.mjs`, and its package is byte for byte the Windows one (docs/BUILDING.md).
 - The working tree was not built (sibling sessions are editing `app/`); `build.sh` takes it as an argument.
 - No download of the V14 release workbench for a cross-check, and no hardware run.
 

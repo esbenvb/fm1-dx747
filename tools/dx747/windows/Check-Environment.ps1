@@ -10,7 +10,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\dx747\windows\Check-Environment.ps1 -Toolchain D:\JL\pi32
 #
 # Written for Windows PowerShell 5.1 (the one that ships with Windows 10 and 11);
-# PowerShell 7 works too. See docs\BUILD-WINDOWS.md.
+# PowerShell 7 works too. See docs\BUILDING.md.
 param([string]$Toolchain = $env:FM1_PI32_TOOLCHAIN)
 $ErrorActionPreference = 'Continue'
 $script:failures = 0

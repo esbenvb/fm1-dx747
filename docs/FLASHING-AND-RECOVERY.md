@@ -30,8 +30,8 @@ Do not flash DX747 to a unit you cannot afford to lose until all of this is done
 2. **A full backup** of the unit's flash with that programmer, stored somewhere safe.
 3. **A practice run with something known good:** build the flashing page for the
    unmodified upstream firmware (commit `4c7496d`, in its own folder, with the same
-   `build.bat --package` steps as in [BUILD-WINDOWS.md](BUILD-WINDOWS.md)), install
-   it the way Step 6 there describes (from a unit on the original V15 that means the
+   `build.bat --package` steps as in [BUILDING.md](BUILDING.md)), install
+   it the way "Installing from the page" below describes (from a unit on the original V15 that means the
    page's force flash), check it starts, and restore the backup with the programmer.
    Only when that round trip works is the setup proven.
 4. **A backup of your own data, before DX747 goes on the unit:** projects, DX7 voices
@@ -71,13 +71,74 @@ The unit's flash holds the firmware and a user area. DX747 treats the user area 
 Project and sample formats of different firmware are not interchangeable. Keep
 exported backups for rollback, as the SDK's own README says.
 
+## Installing from the page
+
+Only after the way back is in place (above). The page is `build/official-web/FM1-DX747.html` ([BUILDING.md](BUILDING.md)), or the
+Update tab of `DX747-Workbench.html`. These steps were written from the page's code and a simulated unit; the author has since
+installed on a real FM-1, but if a step does not match what you see, trust what you see. The page says itself that a successful
+transfer does not guarantee that your data is kept, or that the unit recovers from a power cut during the write.
+
+Before you start: Chrome or Edge, a good USB cable straight into the PC, the PC set
+not to sleep, **every other MIDI device unplugged** from the PC (the force flash
+sends identity queries to every MIDI port it finds), and no other MIDI program open.
+
+1. Open the page. It opens on the "Play & edit" tab; the update is on **Device update**.
+   Tick **I have backed up the sounds, projects and samples I want to keep**:
+   the install button stays disabled until you do.
+2. **Connect.** Answer the browser's MIDI and SysEx permission prompt at once: the
+   connection gives up after 12 seconds ("Connection timed out"), and you can click
+   Connect again.
+   - **From a unit that runs the original V15:** the page says "Different firmware
+     detected" and keeps Install disabled. Click **Enable force flash and reconnect**
+     (it only switches the mode on and reconnects; nothing is written), then **Force
+     flash**, and accept the warning that it may prevent startup and need a recovery
+     tool. That warning is meant seriously.
+   - **From a unit that runs an Open build** (the official one or DX747): the page says
+     "FM1 connected. Ready to update" and the button reads "Start update". The page
+     treats any identity of the shape `FM-1_8` plus six digits as an Open-compatible
+     build, so DX747 (`FM-1_8747747`) and M-VAVE's Open V14 (`FM-1_8000014`) update each
+     other as normal (see below). If the unit already runs this exact build it says
+     "This version is already installed. No update is needed." and installs nothing.
+3. **While it writes:** keep USB and power connected, keep the PC awake, keep the tab
+   open, touch nothing. Closing the tab only brings up a warning.
+   If something is interrupted, open the same page again and connect: a unit that comes
+   back in update mode shows "Connected in update mode. You can continue writing this
+   version". Whether a unit interrupted in the middle of the write always comes back
+   that way is not verified.
+4. **When it finishes** the page's status line says "Firmware updated, but sample
+   initialization is incomplete. Write the built-in bank from the sampler page", and
+   the red error line below it says "Invalid file or parameters. The current project is
+   unchanged". **That is expected for DX747 and the firmware is installed.** DX747 has
+   no sample bank to write and refuses the sample step, so the page's automatic sample
+   step always fails; nothing is written and no samples are lost at this step. Do not
+   repeat the update and do not follow the page's advice to use the sampler page (the
+   page may also suggest checking the sample bank under "Projects & sounds"; DX747 has
+   none).
+
+To go back to the original V15, use **Recovery & force update** and **Restore original
+V15**. Choosing it clears the backup box, so tick it again, then Connect and **Install
+original V15**, and confirm. The page's own confirmation says that the four voice banks
+will be replaced and that Open projects and samples may be erased. **Back up voices,
+projects and samples before you do this.** (On a unit that already runs V15 the same
+button only restores the four voice banks.)
+
+DX747 has its own identity, release **V01** and update identity **`FM-1_8747747`**
+(`app/version.h`). The page still labels any such build "Official Open firmware" (M-VAVE's
+wording; its files are hash-checked, so it cannot be changed), but its Version row shows
+V01, **Firmware details** shows the **Build ID** (the first 16 characters of the build
+identity; hover for all 64; also in `build\dx7\build-identity.json` after a build), and
+at the end of an install the page shows the identity `FM-1_8747747`. After the
+reboot the page waits for the unit to answer with that same identity; a unit that answers
+with another one makes it report that the version check failed. The page is M-VAVE's, with
+their name and logo in it.
+
 ## Going back to the stock firmware
 
 With the unit starting normally, use the page you built, which carries the original
 V15 (the official hosted workbench has no way to take a local file, and a loose
 firmware file cannot be loaded): **Recovery & force update**, **Restore original V15**,
 connect, tick the backup box again (choosing Restore clears it), **Install original
-V15** and confirm ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 6). It also restores the unit if DX747
+V15** and confirm ("Installing from the page", above). It also restores the unit if DX747
 starts but misbehaves. Then restore your samples and projects from your backups.
 
 **Going back replaces all four DX7 voice banks with the 128 factory voices**, and the
@@ -127,7 +188,7 @@ staging area; saving a scene on the unit and agreeing to the flash setup clears 
   (`build.bat --package` and `./build.sh` also leave it as `FM1_DX747.fwsc`), but the
   workbench cannot load a loose file. A custom firmware is installed from the page
   that `build.bat --package` builds, `build\official-web\FM1-DX747.html`,
-  which carries the firmware inside it ([BUILD-WINDOWS.md](BUILD-WINDOWS.md), Step 5), or
+  which carries the firmware inside it ([BUILDING.md](BUILDING.md)), or
   from `DX747-Workbench.html` (its Update tab, [DX747.md](../DX747.md), "The DX747 workbench"), which
   carries the same package.
   The same page also carries the original V15 firmware, for going back. The

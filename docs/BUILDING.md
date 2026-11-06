@@ -60,6 +60,14 @@ with a pinned hash), and the Microsoft Visual C++ Redistributable for x64, versi
    `(Get-FileHash C:\JL\pi32\bin\clang.exe -Algorithm SHA256).Hash.ToLower()` prints
    `d4bc97cf421c1ccc373dd8924ce88720ff7457b3f1478d15df4aeda6ae923bce`.
 
+**Check the machine first (optional).** `tools\dx747\windows\Check-Environment.ps1` repeats the checks `Build.ps1` makes before it
+compiles (the SDK files, no stray files under `sdk\`, the engine library, the version header, the 22 toolchain files, the Visual C++
+runtime) and prints `ok`, `FAIL` (this would stop the build) or `advice` with what to do; it changes nothing:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\dx747\windows\Check-Environment.ps1
+```
+
 **2. Build**, in PowerShell from the repository root:
 
 ```powershell
@@ -89,6 +97,13 @@ characters and the WASI SDK that `--package` unpacks into `build\tools` has file
 | `WASI SDK archive SHA-256 mismatch`, or `curl.exe` errors | The download was cut off or blocked: run again |
 | `Set FM1_SOURCE_URL or -SourceUrl to the HTTPS URL ...` | `--package` needs the source address (see Outputs) |
 | `clang.exe` or `pi32v2-ld.exe` disappears | Antivirus quarantined a toolchain file: restore it and exclude `C:\JL` and your clone |
+| `Install JieLi Windows toolchain 2.5.3 ... set FM1_PI32_TOOLCHAIN` | `-Toolchain` (or `FM1_PI32_TOOLCHAIN`) does not point at the folder that contains `bin\clang.exe`. Use `C:\JL\pi32`. The check script reports a wrong value. |
+| `Set FM1_RELEASE_VERSION in app/version.h`, or `Set a compatible FM1_UPDATE_PRODUCT in app/version.h` | `app\version.h` was edited. Restore it. |
+| `Required runtime symbol absent: <name>` or `Application callback was lost or replaced by a weak default: <name>` | A code change removed something the firmware must keep. A source problem, not a PC problem: report the line. |
+| `FM1 runtime heap is N bytes; need at least 49152` | The program uses too much RAM. Source problem: report the line. |
+| `Add-Type` errors, or "language mode" | The packaging step compiles `sdk\Package.cs` with `Add-Type`. A company policy (AppLocker, WDAC) can block it: use a personal machine. |
+| `error:` lines from `clang.exe` | A compile error in the source. Report the first one with its file and line. |
+| `Matching SDK original V15 recovery firmware is missing or invalid` | `sdk\firmware\FM-1_015.fwsc` is missing or changed. Get the source again. |
 
 ---
 
@@ -191,3 +206,28 @@ folders on one machine to tell a toolchain difference from a path effect.
 `tools/portable/ported-from.json` holds the SHA-256 of the versions they were written against, and the scripts refuse to
 run when one of those files has changed (`FM1_ALLOW_UNSYNCED=1` overrides, with a warning). After a change to one of them: read
 the change, update the port, compare a Windows build with a Docker build as above, then update `ported-from.json`.
+
+---
+
+## DX747
+
+DX747 is a fork of M-VAVE's open firmware (`FM1_OFFICIAL_OPEN`) and builds with exactly the scripts above. What it adds:
+
+- **Its own names.** The SDK scripts (`sdk/Build.ps1`, `sdk/WebUpdate.js`) are hash-pinned and not edited, so they write the upstream
+  names, `FM1_OFFICIAL_OPEN.fwsc` and `FM1-Official-Open-Source.html`. **`build.bat --package`** and **`./build.sh`** leave a copy of each
+  beside it as **`FM1_DX747.fwsc`** and **`FM1-DX747.html`** (the same bytes; copies from an earlier run are deleted first, so a failed
+  build never leaves a stale one). The check build (`sdk\Build.ps1 -FirmwareOnly`, and plain `build.bat`) writes only the upstream names.
+  The Windows `SHA256SUMS.txt` names the upstream page; the DX747-named copy has the same hash.
+- **The DX747 workbench.** `./build.sh --package` also builds `build/official-web/DX747-Workbench.html` (the simulator, the configurator,
+  a test keyboard and the updater, `tools/dx747/workbench.mjs`, from `web/page/`) and lists it in `SHA256SUMS.txt`; `--web` builds it
+  without firmware beside the preview. Only the Mac and Linux route makes it; it is published at
+  <https://esbenvb.github.io/fm1-dx747/> ([FIRMWARE-HUB.md](FIRMWARE-HUB.md)).
+- **One more symbol check.** `tools/docker/gates.mjs` also requires the master filter's functions (`mfx_run`, `mfx_lp`, `mfx_bp`,
+  `mfx_hp`), which run in the audio interrupt, to be in SRAM wherever they survive as symbols.
+- **What a good build prints** (commit `656b37a`, from the project's Windows PC and Mac): `FM1: 447432 bytes app image` (limit 453,921)
+  and `Offline package fits 1 MiB: image 466944, VM 36864, user 536576 bytes`; the build identity, the package and the flashing page were
+  byte for byte the same from both ([LINUX-BUILD-BASELINE.md](LINUX-BUILD-BASELINE.md)). A result far from these numbers means something is off.
+- **Installing** the package on a unit is [FLASHING-AND-RECOVERY.md](FLASHING-AND-RECOVERY.md), "Installing from the page".
+
+**If a build still fails,** report the whole output of `Check-Environment.ps1` (Windows), the last 40 lines of the build output starting a few
+lines before the first red text, and the output of `git log --oneline -1`.

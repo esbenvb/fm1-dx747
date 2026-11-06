@@ -54,7 +54,7 @@ The built-in 27-key keyboard plays the part you have selected on every screen, t
 
 ---
 
-> **This tree is DX747**, custom firmware that makes the FM-1 an eight-part multitimbral DX7 module controlled over MIDI. It replaces the stock sequencer, sampler and screens. Start with [DX747.md](DX747.md); build instructions for Windows are in [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md); read [docs/FLASHING-AND-RECOVERY.md](docs/FLASHING-AND-RECOVERY.md) before flashing. The text below is the SDK's own README for the stock firmware it is based on.
+> **This tree is DX747**, custom firmware that makes the FM-1 an eight-part multitimbral DX7 module controlled over MIDI. It replaces the stock sequencer, sampler and screens. Start with [DX747.md](DX747.md); build instructions are in [docs/BUILDING.md](docs/BUILDING.md); read [docs/FLASHING-AND-RECOVERY.md](docs/FLASHING-AND-RECOVERY.md) before flashing. The text below is the SDK's own README for the stock firmware it is based on.
 >
 > **DX747 is a tribute to the Yamaha DX7.** It is an independent hobby project and is **not in any way associated with, endorsed by or sponsored by Yamaha Corporation or The Boeing Company** (or by M-VAVE). "DX7" is a Yamaha product name and "747" is a Boeing aircraft designation; any trademarks of Yamaha or Boeing, including "DX7" and "747", belong to their owners, and the names are used here only to say what the firmware is a tribute to and what its logo looks like. No rights to them are claimed. The firmware has its own identity (release V01, update identity `FM-1_8747747`) and replaces M-VAVE's Open V14 rather than being a version of it. See [DX747.md](DX747.md), "Licence and names".
 
@@ -62,7 +62,7 @@ The built-in 27-key keyboard plays the part you have selected on every screen, t
 
 Nothing here touches your FM-1: building is not flashing. Read
 [docs/FLASHING-AND-RECOVERY.md](docs/FLASHING-AND-RECOVERY.md) before you ever flash, and
-[docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md) for every step in detail and what to do when one
+[docs/BUILDING.md](docs/BUILDING.md) for every step in detail and what to do when one
 fails.
 
 **1. Get the source: clone the repository.** That is all; nothing else needs downloading or
@@ -93,7 +93,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File sdk\Build.ps1 -FirmwareOnly 
 ~~~
 
 The first command finds problems before the build does; the second proves that the firmware builds.
-To build the page that installs it on a unit, see Step 5 of [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md).
+To build the page that installs it on a unit, see [docs/BUILDING.md](docs/BUILDING.md).
 
 # FM1 Open V14
 
