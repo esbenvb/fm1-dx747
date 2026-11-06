@@ -70,6 +70,27 @@ button.mini{padding:2px 9px;font-size:12px}
 .sim-key.white{top:0;height:100%;width:6.25%;background:#d8dcde;border:1px solid #777}.sim-key.black{top:0;height:62%;width:3.8%;background:#15191b;border:1px solid #000;z-index:2}
 .sim-key.held{background:#9fd0ff}.sim-key.black.held{background:#3a6ea5}
 .sim-key.lit.white{box-shadow:inset 0 -14px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}.sim-key.lit.black{box-shadow:inset 0 -10px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}
+/* the SMK-37 panel (Smk37Panel in dx747-sim.js) */
+.smkpanel{max-width:1180px;overflow-x:auto}
+.smk-top{display:grid;grid-template-columns:auto auto minmax(440px,1fr) auto;gap:18px;align-items:start;min-width:980px}
+.smk-wheels,.smk-faders{display:flex;gap:10px}
+.smk-slider{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--dim);width:44px}
+.smk-slider input[type=range]{writing-mode:vertical-lr;direction:rtl;width:26px;height:132px;margin:0;accent-color:var(--ac)}
+.smk-left{display:flex;flex-direction:column;gap:10px}
+.smkpanel .sim-screen canvas{width:264px;height:264px}
+.smk-bl{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.smk-mid{display:flex;flex-direction:column;gap:12px;min-width:0}
+.smk-enc,.smk-pads{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.smk-br{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.sim-button.smk-b{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;font-size:11px;line-height:1.1}
+.smk-pad{aspect-ratio:1;padding:0;border-radius:8px;border:1px solid #11161a;background:var(--pad,#000);color:#6f7d83;font-size:11px;touch-action:none;user-select:none}
+.smk-pad.held{outline:2px solid #fff}
+.smk-cap{display:none;font-size:9px;line-height:1.15;color:#9fb0b7;font-weight:400;text-align:center;white-space:normal}
+.smkpanel.captions .smk-cap{display:block}
+.smk-keys{position:relative;height:130px;margin-top:20px;min-width:980px;user-select:none}
+.smk-keys .sim-key.white{width:4.545%}.smk-keys .sim-key.black{width:2.7%}
+.smk-keys .smk-c{position:absolute;left:0;right:0;bottom:3px;font-size:9px;color:#555;pointer-events:none}
+.smk-foot{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:14px;font-size:12px;color:var(--dim)}.smk-foot .check{margin:0}
 /* the test keyboard */
 .kb-bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}.kb-bar .val{min-width:2.5em}
 .kb-piano{position:relative;height:170px;margin:16px 0;user-select:none}
@@ -98,7 +119,7 @@ details{margin-top:40px;color:var(--dim)}details pre{white-space:pre-wrap;font-s
   <section id="tab-device">
     <p class="hint" id="sound-note"></p>
     <div id="sim-host"></div>
-    <p class="hint">This is the DX747 firmware itself, compiled to run in your browser, with the panel of the FM-1: buttons, encoders, master knob and keys. It is the unit the Configure, Sounds, Scenes and Master tabs work on while <b>Simulator</b> is selected above. Its scenes and settings are kept in this browser. <button id="btn-reset">Reset the simulator</button></p>
+    <p class="hint"><span id="sim-panel-note">This is the DX747 firmware itself, compiled to run in your browser, with the panel of the FM-1: buttons, encoders, master knob and keys.</span> It is the unit the Configure, Sounds, Scenes and Master tabs work on while <b>Simulator</b> is selected above. Its scenes and settings are kept in this browser. <button id="btn-reset">Reset the simulator</button></p>
   </section>
   <section id="tab-configure" hidden><div id="presetbar" class="presetbar" hidden><span id="preset-status"></span><button id="preset-reload" type="button" title="Read the names of the 128 voices from the unit again">Reload presets</button></div><div id="parts"></div></section>
   <section id="tab-sounds" hidden><div id="sounds-body"></div></section>

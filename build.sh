@@ -6,6 +6,7 @@
 #
 #   ./build.sh                       firmware: build, run the SDK's checks, make build/dx7/generated/FM1_DX747.fwsc
 #   ./build.sh --web                 browser preview: build/preview/index.html and DX747-Workbench.html
+#   ./build.sh --web --target smk37-pro   the same page with the SMK-37's panel: build/smk37-pro/preview/DX747-Workbench.html
 #   ./build.sh --package             firmware and the complete workbench pages: build/official-web/
 #   ./build.sh --setup               one-time downloads (JieLi's Linux toolchain, 26 MB; WASI SDK 27, 114-125 MB)
 #
@@ -25,7 +26,7 @@ TARGET=fm1
 REF=""
 URL="${FM1_SOURCE_URL:-}"
 
-usage() { sed -n '4,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '4,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --web) MODE=web; shift ;;
@@ -71,7 +72,7 @@ case "$TARGET" in
   fm1) ;;
   smk37-pro | smk37-elite)
     [ -z "$REF" ] || { echo "error: --from-git is not supported with --target $TARGET" >&2; exit 2; }
-    [ "$MODE" = firmware ] || { echo "error: for --target $TARGET only the firmware is built so far (./build.sh --target $TARGET)" >&2; exit 2; }
+    [ "$MODE" = firmware ] || [ "$MODE" = web ] || { echo "error: for --target $TARGET only the firmware and the browser preview are built so far (./build.sh --target $TARGET [--web])" >&2; exit 2; }
     BUILD="$HERE/build/$TARGET"; SRC="$BUILD/src"
     export FM1_TARGET="$TARGET"
     node "$HERE/tools/dx747/target.mjs" --target "$TARGET" --out "$SRC" ;;
@@ -103,9 +104,12 @@ case "$MODE" in
   web)
     echo "== browser core"
     "$HERE/tools/portable/browser-core.sh" -o "$BUILD/web" "$SRC" >/dev/null
-    node "$HERE/tools/portable/page.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview"
+    if [ "$TARGET" = fm1 ]; then
+      node "$HERE/tools/portable/page.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview"
+    fi                                        # (the stock page is the FM-1's: the SMK-37 target has only the DX747 workbench page)
     node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview"
-    echo "== done: $BUILD/preview/index.html and $BUILD/preview/DX747-Workbench.html" ;;
+    if [ "$TARGET" = fm1 ]; then echo "== done: $BUILD/preview/index.html and $BUILD/preview/DX747-Workbench.html"
+    else echo "== done: $BUILD/preview/DX747-Workbench.html (the SMK-37 panel)"; fi ;;
   package)
     firmware
     echo "== browser core"

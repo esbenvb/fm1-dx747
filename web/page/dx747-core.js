@@ -72,7 +72,36 @@
     screen() { return new Uint8Array(this.c.memory.buffer, this.c.sim_state(), 225)[1]; }
     flash() { return new Uint8Array(this.c.memory.buffer, this.c.sim_flash(), FLASH); }
     get flashRevision() { return this.c.sim_flash_revision(); }
+    // ---- the SMK-37 flavour (a core built with DX_SMK37 exports sim_smk and sim_pad_color) ------------------------
+    /** Whether the module is the SMK-37 build: it takes the board's events instead of the FM-1's panel. */
+    get smk37() { return typeof this.c.sim_smk === 'function'; }
+    /** One event as the board's scanner reports it: kind is one of DxCore.SMK37.KIND, id the control, value its state (see smk37_controls.h). */
+    smk(kind, id, value) { this.c.sim_smk(kind, id, value | 0); }
+    /** The colour (0xRRGGBB) the firmware gives pad 0..15. */
+    padColor(pad) { return this.c.sim_pad_color(pad) >>> 0; }
   }
+  /** Whether the compiled module (bytes) is the SMK-37 build, without starting it. */
+  DxCore.hasSmk37 = wasm => WebAssembly.Module.exports(new WebAssembly.Module(wasm)).some(e => e.name === 'sim_smk');
+  /* The SMK-37's panel, as the board layer and DX747's controls layer have it. The tables mirror targets/smk37/app/smk37_controls.c
+   * (button_map, encoder_map), targets/smk37/board/panel.c (the lamps) and M-VAVE's own labels (targets/smk37/sdk/Simulator.js), and
+   * tools/dx747/page/test-smk37.mjs fails if they drift from the C. */
+  DxCore.SMK37 = {
+    KIND: { BUTTON: 0, KEY: 1, PRESSURE: 2, PAD: 3, ENCODER: 4, COMBINATION: 5, PEDAL: 6, FADER: 7 },
+    KEYS: 37, PADS: 16, FIRST_NOTE: 48,
+    /** The 18 physical buttons, 0..17, with the label printed on the SMK-37. */
+    BUTTONS: ['SHIFT', 'FADER BANK', 'HOME', 'SAVE', 'OCT -', 'OCT +', 'ARP', 'PAD / STEP', 'SCL', 'ENV / LFO', 'MIX', 'BT', 'HOME / SRC', 'EDIT', 'FX', 'SEQ', 'PLAY', 'REC'],
+    /** DX747's button names, the order of the virtual panel (app/dx747/ui_data.inc). */
+    VIRTUAL: ['OCT-', 'OCT+', 'FX', 'SEL', 'ENV', 'LFO', 'EDIT', 'GLO', 'HOME', 'SAVE', 'ARP', 'SEQ', 'PLAY', 'REC'],
+    /** Physical button -> virtual button (255: none). SHIFT and FADER BANK are handled by the controls layer itself. */
+    BUTTON_MAP: [255, 255, 8, 9, 0, 1, 10, 255, 3, 4, 7, 255, 8, 6, 2, 11, 12, 13],
+    /** Virtual button -> the physical lamp that shows it (ENV and LFO share one). */
+    LAMP: [4, 5, 14, 8, 9, 9, 13, 10, 12, 3, 6, 15, 16, 17],
+    /** The 8 encoders, 0..7, with their labels, and the DX747 control each one is (encoder_map; the last is the master level). */
+    ENCODERS: ['K1', 'K2', 'K3', 'K4', 'SELECT', 'PAGE', 'PRESET', 'MASTER'],
+    ENCODER_MAP: [2, 3, 4, 5, 0, 1, 6],
+    VIRTUAL_ENCODERS: ['SELECT', 'ALGO', 'K1', 'K2', 'K3', 'K4', 'PRESETS'],
+    SHIFT: 0, ENV: 9,
+  };
   DxCore.SOURCE = SOURCE;
   globalThis.DxCore = DxCore;
 })();

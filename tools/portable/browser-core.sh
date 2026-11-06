@@ -60,6 +60,13 @@ options=(--sysroot="$WASI/share/wasi-sysroot"
   -DFM1_HOST_TEST -DFM1_OPEN_WEB -Wall -Wextra -Werror
   -Wno-unused-function -Wno-array-parameter -mexec-model=reactor)
 for dir in web/engine web/synth third_party/synth sdk/include app/synth app; do options+=("-I$SRC/$dir"); done
+# A tree assembled for the SMK-37 (tools/dx747/target.mjs) has the SMK-37 board layer in app/board/: its smk37_controls.h and
+# app/smk37_controls.c (DX747's controls layer, compiled with the rest of app/) make the browser core the SMK-37 flavour, which
+# exports sim_smk and sim_pad_color (web/engine/Simulator.c). The FM-1 tree has no smk37_controls.h and is built as before.
+if [ -f "$SRC/app/board/smk37_controls.h" ]; then
+  options+=(-DDX_SMK37 "-I$SRC/app/board")
+  echo "SMK-37 flavour (DX_SMK37)" >&2
+fi
 for f in "${SOURCES[@]}"; do options+=("$SRC/$f"); done
 options+=(-Wl,--strip-all -Wl,-z,stack-size=131072 -Wl,--initial-memory=4194304 -Wl,--max-memory=33554432 -o "$WASM")
 

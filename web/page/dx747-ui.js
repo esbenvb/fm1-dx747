@@ -439,7 +439,14 @@
     $('#preset-reload').onclick = () => { app.autoReread = true; loadVoices(true); };
     $('#btn-reset').onclick = () => { if (confirm('Erase the simulator\'s saved scenes and settings and start again?')) app.sim.reset(); };
     const wasm = Uint8Array.from(atob(DX_SIMULATOR.data), c => c.charCodeAt(0));
-    app.sim = new SimPanel($('#sim-host'), wasm);
+    // A core built for the SMK-37 (./build.sh --web --target smk37-pro) gets that device's panel; the FM-1 core, the FM-1's.
+    const smk37 = DxCore.hasSmk37(wasm);
+    app.sim = smk37 ? new Smk37Panel($('#sim-host'), wasm) : new SimPanel($('#sim-host'), wasm);
+    if (smk37) {
+      document.title = 'DX747 workbench (SMK-37)';
+      $('#sim-panel-note').textContent = 'This is the DX747 firmware itself, compiled to run in your browser, with the panel of the SMK-37: 18 buttons, 8 encoders, 4 faders, 2 wheels, a pedal, 16 pads and 37 keys. Under each control is what DX747 does with it.';
+      $('#btn-unit').textContent = 'Connect SMK-37 (USB)';
+    }
     app.sim.on((what, value) => { if (what === 'audio') $('#sound-note').textContent = 'Sound is on.'; if (what === 'audio-error') toast('Sound could not start: ' + value.message, true); });
     bindKeyboard(); help();
     $('#sound-note').textContent = 'Click the panel or a key to switch the sound on.';

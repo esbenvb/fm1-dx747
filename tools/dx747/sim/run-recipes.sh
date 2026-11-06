@@ -29,5 +29,8 @@ if command -v node >/dev/null 2>&1; then
     node tools/dx747/page/test-client.mjs > /dev/null || status=1
     echo "== tools/dx747/page/test-controls.mjs"
     node tools/dx747/page/test-controls.mjs > /dev/null || status=1
+    # The SMK-37 panel's tables always; the firmware behind them when ./build.sh --web --target smk37-pro has built the browser core.
+    echo "== tools/dx747/page/test-smk37.mjs"
+    node tools/dx747/page/test-smk37.mjs || status=1
 fi
 exit $status

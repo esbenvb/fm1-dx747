@@ -144,7 +144,15 @@
     /** Names of the 32 voices in library bank 0..3 (A to D). */
     async voiceNames(bank) {
       if (this.bankNames[bank]) return this.bankNames[bank];
-      const gen = this.libGen, raw = await this.run(() => this.lib.readBank(bank));
+      // readBank checks every voice's parameters, and the SMK-37 SDK's script (the one in that device's page) refuses a bank holding a DX7
+      // voice with an operator detune of 15 (factory voice A23, SYN LEAD 6); only the names are wanted here, so take the file as it is.
+      const gen = this.libGen;
+      let raw;
+      try { raw = await this.run(() => this.lib.readBank(bank)); }
+      catch (error) {
+        if (!/parameter out of range|参数越界/.test(error.message)) throw error;
+        raw = await this.run(() => this.lib.download(4, bank));
+      }
       const names = Array.from({ length: 32 }, (_, v) => text(raw, v * 128 + 118, 10));
       if (gen === this.libGen) this.bankNames[bank] = names;                 // a read that began before the library changed must not be remembered
       return names;
