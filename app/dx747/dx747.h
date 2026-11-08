@@ -53,13 +53,17 @@ unsigned fm1_panel_safe_boot(void);                    /* 1 when the safe-boot c
 void dx_ui_note(unsigned note, unsigned velocity, unsigned down);   /* a key struck at a velocity: the part's notes, or LEARN */
 void dx_ui_pad(unsigned pad, unsigned down);                         /* pad 1..16: scene n of the bank, or mute and solo on Mix */
 int dx_ui_octave(void);                                              /* the keys' octave shift, -2..2 */
-unsigned dx_ui_part_level(unsigned part);                            /* 0..127, for the faders' pickup */
-void dx_ui_fader(unsigned part, unsigned value);
-unsigned dx_ui_fader_live(unsigned part);
+unsigned dx_ui_fader_role(unsigned fader, unsigned bank);            /* what the fader controls on the screen on view: 0..7 the level of that part, 8 and up the filter or an effect, 255 nothing */
+void dx_ui_role_set(unsigned role, unsigned value);                  /* a fader moved it */
 void dx_ui_release_part(void);                        /* dx_ui_release_keys, and lift the pedal and centre the wheels: the part the keys play is about to change */                     /* a fader moved a part's level */
 void dx_ui_wheel(unsigned wheel, unsigned value);                    /* 0 pitch bend (64 centre), 1 mod wheel */
 void dx_ui_pedal(unsigned down);                                     /* the sustain pedal */
 uint32_t dx_ui_pad_color(unsigned pad);                              /* 0xRRGGBB for the pad's light */
+/* The names of the controls as printed on the unit (smk37_controls.c): the screens say what to press in these, not in the FM-1's. */
+const char *smk37_button_label(unsigned button);                     /* the printed button that is DX747's button (BTN_* in ui_data.inc), NULL if none */
+const char *smk37_printed_label(unsigned id);                        /* the label of printed button id (the board's 0..17), whatever it does */
+unsigned smk37_knob_bank(void);                                      /* 0 K1 to K4 are parts 1 to 4, 1 parts 5 to 8 (KNOB BANK) */
+const char *smk37_encoder_label(unsigned encoder);                   /* the printed knob that is DX747's encoder (0 SELECT, 1 ALGO, 2 to 5 K1 to K4, 6 PRESETS; 7 the master level) */
 #endif
 
 /* ---- safe boot (app/project.c) ----

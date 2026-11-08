@@ -1,6 +1,6 @@
 # SMK-37 recipe 1: DX747's SMK-37 controls layer (targets/smk37/app/smk37_controls.c) on the events the board's scanner reports:
-# keys with velocity, faders with pickup and the fader bank, pads as scenes and as mute and solo, the pedal, safe boot.
-# Physical buttons: 0 SHIFT, 1 FADER BANK, 2 HOME, 3 SAVE, 8 SEL, 9 ENV, 13 EDIT (see button_map in smk37_controls.c).
+# keys with velocity, faders and the fader bank, pads as scenes and as mute and solo, the pedal, safe boot.
+# Printed buttons by the board's ids: 1 FADER BANK, 12 PATCH (Parts), 17 SEQ REC (save a scene), 15 SEQ (Mix), 13 PARA (edit pages) (button_map in smk37_controls.c).
 boot
 wipe
 run 400
@@ -28,37 +28,66 @@ sbtn 5 0
 skey 12 0
 run 100
 expect_voices 0
-# faders: part levels with pickup. Parts start at 127; a reading far from the part's level does nothing until it takes over
+# faders: part levels, on the screens where they are levels (Mix here; on Parts they are the filter). The first reading of a fader, at power-on, only says
+# where it stands; after that a fader sets its part's level as soon as it moves, wherever it was left
+sbtn 15 1
+sbtn 15 0
+run 100
+expect_screen 8
+expect_level 0 127
+sfader 0 127
 expect_level 0 127
 sfader 0 64
-expect_level 0 127
+expect_level 0 64
 sfader 0 126
 expect_level 0 126
 sfader 0 40
 expect_level 0 40
-# FADER BANK: faders 1 to 4 become parts 5 to 8, and take over only where those parts are
+# FADER BANK: faders 1 to 4 become parts 5 to 8, and set them as soon as they move, from wherever they were left; part 1 keeps its level
 sbtn 1 1
 sbtn 1 0
+expect_lamp 1 1
 sfader 0 100
-expect_level 4 127
+expect_level 4 100
 expect_level 0 40
-sfader 0 127
 sfader 0 50
 expect_level 4 50
 expect_level 0 40
 sbtn 1 1
 sbtn 1 0
-sfader 1 20
+expect_lamp 1 0
+# fader 2 was never touched: its first reading only says where it stands, then it moves part 2
+sfader 1 127
 expect_level 1 127
+sfader 1 20
+expect_level 1 20
+# a fader that was moved on another screen is not dead on this one (Parts: the filter, here part levels again)
+sbtn 12 1
+sbtn 12 0
+run 100
+expect_screen 1
+sfader 1 90
+sbtn 15 1
+sbtn 15 0
+run 100
+expect_screen 8
+sfader 1 60
+expect_level 1 60
+sbtn 1 1
+sbtn 1 0
+sfader 1 30
+expect_level 5 30
+sbtn 1 1
+sbtn 1 0
 # pads: scene recall on the Scenes screen. Save the setup as scene 1, change a level, recall it with pad 1
-sbtn 2 1
-sbtn 2 0
-sbtn 3 1
-sbtn 3 0
+sbtn 12 1
+sbtn 12 0
+sbtn 17 1
+sbtn 17 0
 run 100
 expect_screen 11
-sbtn 3 1
-sbtn 3 0
+sbtn 17 1
+sbtn 17 0
 run 300
 sfader 0 20
 expect_level 0 20
@@ -66,18 +95,17 @@ spad 0 1
 spad 0 0
 run 300
 expect_level 0 40
-# the mixer in key mode: pads are mute and solo, two to a part, and light in their part's colour
-sbtn 8 1
-sbtn 8 0
+# the mixer: the top row of pads mutes part 1 to 8, the lower row soloes them, always (no key to press first); dim red until muted, then bright red
+sbtn 15 1
+sbtn 15 0
 run 100
 expect_screen 8
-sbtn 13 1
-sbtn 13 0
-run 100
+expect_pad_color 0 300808
+expect_pad_color 8 302000
 spad 0 1
 spad 0 0
 run 100
-expect_pad_color 0 300800
+expect_pad_color 0 ff2020
 skey 12 90
 run 100
 expect_voices 0
@@ -96,6 +124,6 @@ sfader 4 100
 sfader 5 90
 spedal 0
 run 100
-# safe boot: SHIFT and ENV held at power-on
+# safe boot: SCALE and CHORD (add layer and remove layer) held at power-on
 boot safe
 expect_screen 13

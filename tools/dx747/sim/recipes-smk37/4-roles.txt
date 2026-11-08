@@ -1,0 +1,128 @@
+# SMK-37 recipe 4: what the knobs, faders, pads and < > do on each screen (dx_ui_pad, dx_ui_fader_role, on_encoders, step_here in app/dx747/ui_input.inc).
+# Printed buttons by the board's ids: 0 KNOB BANK, 1 FADER BANK, 2 <, 3 >, 5 OCTAVE+, 7 NOTE REPEAT (Part), 12 PATCH (Parts, then Details), 13 PARA, 14 FX,
+# 15 SEQ (Mix), 16 SEQ PLAY (Scenes), 17 SEQ REC (save a scene). Printed knobs: id 0 is K1 and id 4 is K5. The state image (expect_state): 8 filter type,
+# 9 resonance, 10 and 11 cutoff in Hz, 12 reverb decay, 14 delay feedback, 15 FX return.
+boot
+wipe
+run 400
+expect_screen 1
+# Parts: the faders are the master filter. FADER2 resonance, FADER1 cutoff, FADER3 type; a cutoff or resonance move turns an off filter into a low-pass
+expect_state 8 0
+sfader 1 0
+sfader 1 64
+expect_state 9 64
+expect_state 8 1
+sfader 0 0
+sfader 0 127
+expect_state 10 32
+expect_state 11 78
+sfader 0 0
+expect_state 10 20
+expect_state 11 0
+sfader 2 10
+sfader 2 100
+expect_state 8 3
+# FADER4 is not used on Parts: it changes no part's level
+sfader 3 0
+sfader 3 10
+expect_level 0 127
+# Details (PATCH again): the faders are the shared effects. FADER1 reverb decay, FADER3 delay feedback, FADER4 FX return
+sbtn 12 1
+sbtn 12 0
+run 100
+expect_screen 14
+sfader 0 0
+sfader 0 127
+expect_state 12 127
+sfader 2 0
+sfader 2 127
+expect_state 14 127
+sfader 3 0
+sfader 3 127
+expect_state 15 127
+# Part: the faders are part levels again, and the pads are the layers (top row) and the parts (lower row)
+sbtn 7 1
+sbtn 7 0
+run 100
+expect_screen 2
+sfader 0 64
+expect_level 0 64
+expect_pad_color 1 0
+expect_pad_color 11 0f2811
+spad 10 1
+spad 10 0
+run 100
+expect_sel 2
+spad 0 1
+spad 0 0
+run 100
+expect_selayer 2 0
+# on Details and the edit pages the pads are the same
+sbtn 13 1
+sbtn 13 0
+run 100
+expect_screen 3
+spad 12 1
+spad 12 0
+run 100
+expect_sel 4
+# Mix: < and > pick the part, OCTAVE+ moves the keys and not the part, the faders are levels, the knobs are pan, KNOB BANK moves them to parts 5 to 8
+sbtn 15 1
+sbtn 15 0
+run 100
+expect_screen 8
+expect_sel 4
+sbtn 3 1
+sbtn 3 0
+expect_sel 5
+sbtn 2 1
+sbtn 2 0
+sbtn 2 1
+sbtn 2 0
+expect_sel 3
+sbtn 5 1
+sbtn 5 0
+expect_sel 3
+# the keys play on Mix (they reach the engine through dx_ui_note, not the FM-1 key handler): only the pads are mute and solo there
+skey 12 90
+run 60
+expect_voices 1
+skey 12 0
+run 1500
+expect_voices 0
+expect_live pan 0 0
+senc 0 3
+expect_live pan 0 6
+expect_live pan 4 0
+sbtn 0 1
+sbtn 0 0
+senc 0 3
+expect_live pan 4 6
+expect_live pan 0 6
+sbtn 0 1
+sbtn 0 0
+senc 0 -3
+expect_live pan 0 0
+# FX: < and > pick the part
+sbtn 14 1
+sbtn 14 0
+run 100
+expect_screen 9
+sbtn 3 1
+sbtn 3 0
+expect_sel 4
+# Scenes: the pads show what is stored. Dark: empty. Bright white: the scene in use, with the cursor on it
+sbtn 12 1
+sbtn 12 0
+sbtn 17 1
+sbtn 17 0
+sbtn 17 1
+sbtn 17 0
+run 300
+expect_screen 11
+expect_pad_color 0 ffffff
+expect_pad_color 1 0
+senc 4 1
+run 100
+expect_pad_color 0 20ffe0
+expect_pad_color 1 282828

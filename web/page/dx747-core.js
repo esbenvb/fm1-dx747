@@ -79,28 +79,39 @@
     smk(kind, id, value) { this.c.sim_smk(kind, id, value | 0); }
     /** The colour (0xRRGGBB) the firmware gives pad 0..15. */
     padColor(pad) { return this.c.sim_pad_color(pad) >>> 0; }
+    /** The 18 button lamps by printed button (DxCore.SMK37.BUTTONS order), 0 dark or 8 lit, as the firmware lights them through smk37_led(). */
+    smkLamps() { return new Uint8Array(this.c.memory.buffer, this.c.sim_smk_lamps(), 18).slice(); }
   }
   /** Whether the compiled module (bytes) is the SMK-37 build, without starting it. */
   DxCore.hasSmk37 = wasm => WebAssembly.Module.exports(new WebAssembly.Module(wasm)).some(e => e.name === 'sim_smk');
-  /* The SMK-37's panel, as the board layer and DX747's controls layer have it. The tables mirror targets/smk37/app/smk37_controls.c
-   * (button_map, encoder_map), targets/smk37/board/panel.c (the lamps) and M-VAVE's own labels (targets/smk37/sdk/Simulator.js), and
-   * tools/dx747/page/test-smk37.mjs fails if they drift from the C. */
+  /* The SMK-37's panel, as DX747's controls layer has it. The tables mirror targets/smk37/app/smk37_controls.c (button_label, button_map,
+   * encoder_map) and the names in M-VAVE's own simulator (targets/smk37/sdk/Simulator.js: SDK_BUTTONS, SDK_ENCODERS);
+   * tools/dx747/page/test-smk37.mjs fails if they drift from those files.
+   * What is printed on the unit (BUTTONS, ENCODERS, PAD_ICONS) is read off the drawing of the panel in the SMK-37 manual: the buttons
+   * of each group in the order of the board's ids (left group 0..5, right group 6..17, row by row), eight knobs K1..K8 above the pads. */
   DxCore.SMK37 = {
     KIND: { BUTTON: 0, KEY: 1, PRESSURE: 2, PAD: 3, ENCODER: 4, COMBINATION: 5, PEDAL: 6, FADER: 7 },
     KEYS: 37, PADS: 16, FIRST_NOTE: 48,
-    /** The 18 physical buttons, 0..17, with the label printed on the SMK-37. */
-    BUTTONS: ['SHIFT', 'FADER BANK', 'HOME', 'SAVE', 'OCT -', 'OCT +', 'ARP', 'PAD / STEP', 'SCL', 'ENV / LFO', 'MIX', 'BT', 'HOME / SRC', 'EDIT', 'FX', 'SEQ', 'PLAY', 'REC'],
-    /** DX747's button names, the order of the virtual panel (app/dx747/ui_data.inc). */
-    VIRTUAL: ['OCT-', 'OCT+', 'FX', 'SEL', 'ENV', 'LFO', 'EDIT', 'GLO', 'HOME', 'SAVE', 'ARP', 'SEQ', 'PLAY', 'REC'],
-    /** Physical button -> virtual button (255: none). SHIFT and FADER BANK are handled by the controls layer itself. */
-    BUTTON_MAP: [255, 255, 8, 9, 0, 1, 10, 255, 3, 4, 7, 255, 8, 6, 2, 11, 12, 13],
-    /** Virtual button -> the physical lamp that shows it (ENV and LFO share one). */
-    LAMP: [4, 5, 14, 8, 9, 9, 13, 10, 12, 3, 6, 15, 16, 17],
-    /** The 8 encoders, 0..7, with their labels, and the DX747 control each one is (encoder_map; the last is the master level). */
-    ENCODERS: ['K1', 'K2', 'K3', 'K4', 'SELECT', 'PAGE', 'PRESET', 'MASTER'],
+    /** The 18 physical buttons, 0..17, with the label printed on the SMK-37 (the manual's drawing). */
+    BUTTONS: ['KNOB BANK', 'FADER BANK', '<', '>', 'OCTAVE-', 'OCTAVE+', 'ARP', 'NOTE REPEAT', 'SCALE', 'CHORD', 'GLOBE', 'BT', 'PATCH', 'PARA', 'FX', 'SEQ', 'SEQ PLAY', 'SEQ REC'],
+    /** The names M-VAVE's own simulator gives the same 18 buttons (the stock firmware's functions). */
+    SDK_BUTTONS: ['SHIFT', 'FADER BANK', 'HOME', 'SAVE', 'OCT -', 'OCT +', 'ARP', 'PAD / STEP', 'SCL', 'ENV / LFO', 'MIX', 'BT', 'HOME / SRC', 'EDIT', 'FX', 'SEQ', 'PLAY', 'REC'],
+    /** What is printed under the lower row of pads, left to right. */
+    PAD_ICONS: ['▶', 'II', '●', '«', '»', '◁', '▷', 'UNDO'],
+    /** DX747's own button names, the order of the virtual panel (BTN_* in app/dx747/ui_data.inc). Only the FM-1 uses these as the names of
+     *  controls; on the SMK-37 every button is called by what is printed on it. */
+    VIRTUAL: ['OCT-', 'OCT+', 'FX', 'SEL', 'ENV', 'LFO', 'EDIT', 'GLO', 'HOME', 'SAVE', 'ARP', 'SEQ', 'PLAY', 'REC', 'BACK', 'FWD'],
+    /** Printed button -> DX747's button (255: none). Each of the 16 is on exactly one printed button; KNOB BANK has no function yet and FADER
+     *  BANK is handled by the controls layer itself. */
+    BUTTON_MAP: [255, 255, 14, 15, 0, 1, 10, 11, 4, 5, 7, 13, 8, 6, 2, 3, 12, 9],
+    /** The printed buttons that, held at power-on, start safe boot: add layer and remove layer (SCALE and CHORD, left and right). */
+    SAFE_BOOT: [8, 9],
+    /** The 8 knobs, 0..7, left to right, as printed on the unit, and the DX747 control each one is (encoder_map; the last is the master level). */
+    ENCODERS: ['K1', 'K2', 'K3', 'K4', 'K5', 'K6', 'K7', 'K8'],
+    /** The names M-VAVE's simulator gives the same eight encoders: only four of them are K knobs there. */
+    SDK_ENCODERS: ['K1', 'K2', 'K3', 'K4', 'SELECT', 'PAGE', 'PRESET', 'MASTER'],
     ENCODER_MAP: [2, 3, 4, 5, 0, 1, 6],
     VIRTUAL_ENCODERS: ['SELECT', 'ALGO', 'K1', 'K2', 'K3', 'K4', 'PRESETS'],
-    SHIFT: 0, ENV: 9,
   };
   DxCore.SOURCE = SOURCE;
   globalThis.DxCore = DxCore;

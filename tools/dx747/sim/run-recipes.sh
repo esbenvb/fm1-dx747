@@ -29,8 +29,16 @@ if command -v node >/dev/null 2>&1; then
     node tools/dx747/page/test-client.mjs > /dev/null || status=1
     echo "== tools/dx747/page/test-controls.mjs"
     node tools/dx747/page/test-controls.mjs > /dev/null || status=1
-    # The SMK-37 panel's tables always; the firmware behind them when ./build.sh --web --target smk37-pro has built the browser core.
+    # The SMK-37 panel's tables, and the firmware behind them: the SMK-37 browser core is built from the tree tools/dx747/target.mjs
+    # assembles (the same one ./build.sh --web --target smk37-pro builds), into a folder of its own.
     echo "== tools/dx747/page/test-smk37.mjs"
-    node tools/dx747/page/test-smk37.mjs || status=1
+    smk_core="$(mktemp -d)"
+    if FM1_TARGET=smk37-pro node tools/dx747/target.mjs --target smk37-pro --out build/smk37-pro/src > /dev/null \
+        && tools/portable/browser-core.sh -o "$smk_core" build/smk37-pro/src > /dev/null; then
+        node tools/dx747/page/test-smk37.mjs --wasm "$smk_core/simulator.wasm" || status=1
+    else
+        echo "the SMK-37 browser core could not be built"; status=1
+    fi
+    rm -rf "$smk_core"
 fi
 exit $status

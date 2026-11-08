@@ -1,0 +1,162 @@
+# SMK-37 recipe 3: the buttons, by what is printed on them (button_map and button_label in targets/smk37/app/smk37_controls.c).
+# Printed buttons by the board's ids: 2 <, 3 >, 4 OCTAVE-, 5 OCTAVE+, 7 NOTE REPEAT (Part), 8 SCALE (add layer), 9 CHORD (remove layer),
+# 10 GLOBE (System), 11 BT (MIDI in), 12 PATCH (Parts, then Details), 13 PARA (edit pages), 14 FX (then Master filter), 15 SEQ (Mix),
+# 16 SEQ PLAY (Scenes), 17 SEQ REC (save a scene). The lamp of the button that opens the screen on view is lit and no other is.
+boot
+wipe
+run 400
+expect_screen 1
+expect_lamp 12 1
+expect_lamp 15 0
+sbtn 10 1
+sbtn 10 0
+run 100
+expect_screen 12
+expect_lamp 10 1
+expect_lamp 12 0
+sbtn 11 1
+sbtn 11 0
+run 100
+expect_screen 7
+expect_lamp 11 1
+expect_lamp 10 0
+sbtn 15 1
+sbtn 15 0
+run 100
+expect_screen 8
+expect_lamp 15 1
+expect_lamp 11 0
+sbtn 16 1
+sbtn 16 0
+run 100
+expect_screen 11
+expect_lamp 16 1
+expect_lamp 15 0
+sbtn 14 1
+sbtn 14 0
+run 100
+expect_screen 9
+expect_lamp 14 1
+sbtn 14 1
+sbtn 14 0
+run 100
+expect_screen 10
+sbtn 13 1
+sbtn 13 0
+run 100
+expect_screen 3
+expect_lamp 13 1
+expect_lamp 14 0
+sbtn 7 1
+sbtn 7 0
+run 100
+expect_screen 2
+expect_lamp 7 1
+expect_lamp 13 0
+sbtn 12 1
+sbtn 12 0
+run 100
+expect_screen 1
+sbtn 12 1
+sbtn 12 0
+run 100
+expect_screen 14
+sbtn 12 1
+sbtn 12 0
+run 100
+expect_screen 1
+# < and > on Parts: the part before and after
+expect_sel 0
+sbtn 3 1
+sbtn 3 0
+expect_sel 1
+sbtn 2 1
+sbtn 2 0
+expect_sel 0
+# CHORD removes a layer (the last one takes the part with it) and the next part is selected; SCALE adds one, left adds and right removes: no SHIFT
+expect_part 0 1 1
+sbtn 9 1
+sbtn 9 0
+run 100
+expect_part 0 0 0
+expect_sel 1
+# < selects the empty slot again, and SCALE makes a part there, on the lowest free channel
+sbtn 2 1
+sbtn 2 0
+expect_sel 0
+sbtn 8 1
+sbtn 8 0
+run 100
+expect_part 0 1 1
+# the eight parts use the eight engines: remove part 1 again, and SCALE gives the part that is selected next a second layer
+sbtn 9 1
+sbtn 9 0
+run 100
+expect_part 0 0 0
+expect_sel 1
+sbtn 8 1
+sbtn 8 0
+run 100
+expect_part 1 2 2
+# < and > on Part step through the layers of the part
+sbtn 7 1
+sbtn 7 0
+run 100
+expect_screen 2
+expect_selayer 1 0
+sbtn 3 1
+sbtn 3 0
+expect_selayer 1 1
+sbtn 2 1
+sbtn 2 0
+expect_selayer 1 0
+# the lamps follow the part: a button that does not open the screen on view is dark
+expect_lamp 7 1
+expect_lamp 12 0
+# SEQ REC saves a scene (it names it first), < and > then step through the stored scenes and recall them
+sbtn 12 1
+sbtn 12 0
+sbtn 17 1
+sbtn 17 0
+run 100
+expect_screen 11
+sbtn 17 1
+sbtn 17 0
+run 300
+sbtn 16 1
+sbtn 16 0
+run 100
+sfader 1 126
+sfader 1 40
+expect_level 1 40
+senc 4 1
+sbtn 17 1
+sbtn 17 0
+sbtn 17 1
+sbtn 17 0
+run 300
+sbtn 2 1
+sbtn 2 0
+run 300
+expect_level 1 127
+sbtn 3 1
+sbtn 3 0
+run 300
+expect_level 1 40
+# System: OCTAVE+ moves to the next row, < and > change its value (row 3 is the button light, 3 of 8 at power-on)
+sbtn 10 1
+sbtn 10 0
+sbtn 5 1
+sbtn 5 0
+sbtn 5 1
+sbtn 5 0
+run 100
+expect_state 6 3
+sbtn 3 1
+sbtn 3 0
+run 100
+expect_state 6 4
+sbtn 2 1
+sbtn 2 0
+run 100
+expect_state 6 3

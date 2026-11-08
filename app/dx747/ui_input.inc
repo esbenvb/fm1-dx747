@@ -70,6 +70,9 @@ static void go(unsigned screen)
     if (ui.screen == screen) return;
     release_keys();
     ui.screen = (uint8_t)screen; ui.mode = M_BROWSE; ui.learn = 0; ui.mixkeys = 0; ui.ov_kind = OV_NONE; /* a value shown for one screen's knob is not for the next */
+#ifdef DX_SMK37
+    if (screen == S_MIX) ui.mixkeys = 1;     /* the SMK-37's 16 pads are always the mixer's mute and solo there: no key to press first */
+#endif
 }
 
 /* ---- scenes ------------------------------------------------------------------ */
@@ -89,6 +92,12 @@ static void begin_save(void)
 static void scene_overlay_button(unsigned pressed)
 {
     if (pressed & BTN_BIT(BTN_HOME)) { ui.mode = M_BROWSE; return; }
+#ifdef DX_SMK37
+    if (ui.mode == M_NAME && (pressed & (BTN_BIT(BTN_BACK) | BTN_BIT(BTN_FWD)))) {       /* < and >: the cursor, as K1 */
+        ui.name_pos = (uint8_t)wrap((int)ui.name_pos + ((pressed & BTN_BIT(BTN_FWD)) ? 1 : -1), 12);
+        return;
+    }
+#endif
     if (!(pressed & BTN_BIT(BTN_SAVE))) return;
     if (ui.mode == M_CLAIM) {
         int r = dx_storage_claim();
@@ -302,7 +311,7 @@ static void toggle_mixkeys(void)
 {
     release_keys();
     ui.mixkeys ^= 1U;
-    notice(ui.mixkeys ? "KEYS MUTE AND SOLO" : "KEYS PLAY AGAIN");
+    notice(ui.mixkeys ? TXT("KEYS MUTE AND SOLO", "PADS MUTE AND SOLO") : TXT("KEYS PLAY AGAIN", "PADS RECALL AGAIN"));
 }
 
 /* ---- the panel -------------------------------------------------------------- */
@@ -311,6 +320,38 @@ static unsigned screen_has_parts(void)
 {
     return ui.screen == S_PARTS || ui.screen == S_DETAIL || ui.screen == S_PART || ui.screen == S_ESOUND || ui.screen == S_EPLAYS || ui.screen == S_EVEL || ui.screen == S_ESENDS;
 }
+#ifdef DX_SMK37
+/* The value of the System row on the cursor, a step down or up: K1 on the FM-1, and < and > on the SMK-37 (the same rows and limits). */
+static void sys_value_step(int d)
+{
+    struct dx_settings s;
+    dx_settings_get(&s);
+    switch (ui.sys_row) {
+    case 1: s.radio_off ^= GROOVE_RADIO_AUDIO; break;
+    case 2: s.backlight = (uint8_t)clampi(s.backlight + d, 0, 8); break;
+    case 3: s.scene_ch = (uint8_t)wrap((int)s.scene_ch + d, 17); break;
+    case 4: s.master_ch = (uint8_t)wrap((int)s.master_ch + d, 17); break;
+    default: return;
+    }
+    dx_settings_update(&s);
+    knob(OV_SYS, ui.sys_row);
+}
+/* < and >, the SMK-37's back and forward: one step in what the screen is about. The part on Parts, Mix and FX, the layer on Part, Details and the
+ * edit pages, the next stored scene on Scenes (it is recalled), the value of the row on System. Nothing on the other screens. */
+static void step_here(int d)
+{
+    switch (ui.screen) {
+    case S_PARTS: case S_MIX: case S_FX: select_part_step(d); knob(OV_PART, live_sel_part()); break;
+    case S_PART: case S_DETAIL: case S_ESOUND: case S_EPLAYS: case S_EVEL: case S_ESENDS:
+        select_layer_step(d);
+        if (live_sel_engine() >= 0) knob(OV_LAYER, (unsigned)live_sel_engine());
+        break;
+    case S_SCENES: step_scene(d); break;
+    case S_SYS: sys_value_step(d); break;
+    default: break;
+    }
+}
+#endif
 static void on_button(unsigned pressed)
 {
     if (ui.screen == S_BOOT) { go(S_PARTS); return; }
@@ -327,14 +368,20 @@ static void on_button(unsigned pressed)
         step_scene((pressed & BTN_BIT(BTN_OCT_UP)) ? 1 : -1);
         return;
     }
+#ifdef DX_SMK37
+    if (pressed & (BTN_BIT(BTN_BACK) | BTN_BIT(BTN_FWD))) { step_here((pressed & BTN_BIT(BTN_FWD)) ? 1 : -1); return; }
+#endif
     if (pressed & BTN_BIT(BTN_HOME)) {
         ui.home_from = ui.screen; ui.home_learn = ui.learn; ui.home_learn_lo = ui.learn_lo; ui.home_mixkeys = ui.mixkeys;
         go(ui.screen == S_PARTS ? S_DETAIL : S_PARTS);
     } /* the second press shows the part in detail */
     else if (pressed & BTN_BIT(BTN_SEQ)) go(S_PART);
     else if (pressed & BTN_BIT(BTN_EDIT)) {
+#ifndef DX_SMK37
         if (ui.screen == S_MIX) toggle_mixkeys();
-        else go(ui.screen == S_ESOUND ? S_EPLAYS : ui.screen == S_EPLAYS ? S_EVEL : ui.screen == S_EVEL ? S_ESENDS : S_ESOUND);
+        else
+#endif
+        go(ui.screen == S_ESOUND ? S_EPLAYS : ui.screen == S_EPLAYS ? S_EVEL : ui.screen == S_EVEL ? S_ESENDS : S_ESOUND);
     }
     else if (pressed & BTN_BIT(BTN_REC)) go(S_MON);
     else if (pressed & BTN_BIT(BTN_FX)) go(ui.screen == S_FX ? S_MASTER : S_FX);
@@ -344,6 +391,9 @@ static void on_button(unsigned pressed)
     else if (pressed & BTN_BIT(BTN_SAVE)) begin_save();
     else if (pressed & (BTN_BIT(BTN_ENV) | BTN_BIT(BTN_LFO))) {
         unsigned add = (pressed & BTN_BIT(BTN_ENV)) != 0;
+#ifdef DX_SMK37
+        if (screen_has_parts() || ui.screen == S_MIX) { if (add) add_here(); else remove_here(); }
+#else
         if (screen_has_parts()) { if (add) add_here(); else remove_here(); }
         else if (ui.screen == S_MIX) {
             unsigned p = live_sel_part();
@@ -351,6 +401,7 @@ static void on_button(unsigned pressed)
             else if (add) add_here();                  /* nothing to mute in an empty slot: ENV makes a part there, as the screen says */
         }
         else if (ui.screen == S_SCENES) step_scene(add ? -1 : 1);
+#endif
     }
     else if (pressed & BTN_BIT(BTN_ARP)) {
         if (screen_learns() && !ui.learn && live_sel_engine() < 0) notice("LEARN: ADD\nA PART FIRST");
@@ -366,7 +417,11 @@ static void on_button(unsigned pressed)
         case S_FX: case S_MASTER: go(ui.screen == S_FX ? S_MASTER : S_FX); break;
         case S_SCENES: ui.scene = (uint8_t)wrap((int)ui.scene + 16 * d, DX_SCENES); break;
         case S_SYS: ui.sys_row = (uint8_t)wrap((int)ui.sys_row + d, 7); break;
+#ifdef DX_SMK37
+        case S_DETAIL: select_part_step(d); knob(OV_PART, live_sel_part()); break;
+#else
         case S_MIX: case S_DETAIL: select_part_step(d); knob(OV_PART, live_sel_part()); break;
+#endif
         default: release_keys(); ui.octave = (int8_t)clampi(ui.octave + d, -2, 2); knob(OV_OCT, 0); break;
         }
     }
@@ -489,6 +544,15 @@ static void on_encoders(void)
             knob(OV_POLY, eng);
         }
         break;
+#ifdef DX_SMK37
+    case S_MIX:                            /* K1 to K4: the pan of four parts, 1 to 4 or 5 to 8 (KNOB BANK); K6: the channel of the selected part */
+        if (e[1] && used) { step_channel(e[1]); knob(OV_PCH, p); }
+        for (unsigned i = 0; i < 4; ++i) {
+            unsigned part = smk37_knob_bank() * 4U + i;
+            if (e[2 + i] && dx_part_used(LP(), part)) { part_pan_step(part, e[2 + i]); knob(OV_PPAN, part); }
+        }
+        break;
+#else
     case S_MIX:                            /* every knob here works on the whole part */
         if (!used) break;
         if (e[1]) { step_channel(e[1]); knob(OV_PCH, p); }
@@ -497,6 +561,7 @@ static void on_encoders(void)
         if (e[4]) { part_sends_step(p, 0, e[4]); knob(OV_PREV, p); }
         if (e[5]) { part_sends_step(p, 1, e[5]); knob(OV_PDLY, p); }
         break;
+#endif
     case S_FX:
         for (unsigned i = 0; i < 4; ++i) if (e[2 + i]) { groove_effects_edit(i, e[2 + i]); knob(OV_FX, i); }
         break;
@@ -548,27 +613,96 @@ void dx_ui_note(unsigned note, unsigned velocity, unsigned down)
     dx_route_key_v(note, velocity, 1);
     smk_held[note >> 5] |= bit;
 }
+/* Part, Details and the edit pages: the 16 pads are the layers of the selected part (the top row) and the eight parts (the lower row). */
+static unsigned pad_layers(void)
+{
+    return ui.screen == S_PART || ui.screen == S_DETAIL || ui.screen == S_ESOUND || ui.screen == S_EPLAYS || ui.screen == S_EVEL || ui.screen == S_ESENDS;
+}
 void dx_ui_pad(unsigned pad, unsigned down)
 {
     if (!down || pad > 15 || ui.screen == S_SAFE) return;
     if (ui.screen == S_BOOT) { go(S_PARTS); return; }
     if (ui.mode != M_BROWSE) return;
-    if (ui.screen == S_MIX && ui.mixkeys) { mix_key(pad); return; }
+    if (ui.screen == S_MIX) { mix_key(pad < 8U ? pad * 2U : (pad - 8U) * 2U + 1U); return; }      /* top row: mute part 1 to 8, lower row: solo */
+    if (pad_layers()) {
+        if (pad >= 8U) {                                          /* lower row: the part */
+            release_part(); ui.learn = 0;
+            dx_part_select(pad - 8U);
+            knob(OV_PART, live_sel_part());
+        } else {                                                  /* top row: the layer of the selected part */
+            uint8_t list[DX_ENGINES];
+            unsigned n = dx_part_layers(LP(), live_sel_part(), list);
+            if (pad < n) { dx_part_select_layer(live_sel_part(), pad); knob(OV_LAYER, list[pad]); }
+        }
+        return;
+    }
     unsigned idx = (ui.scene / 16U) * 16U + pad;              /* the bank on screen (bank A at power-on) */
     ui.scene = (uint8_t)idx;
     if (scene_exists(idx)) { int r = dx_scene_recall(idx); notice(r ? "RECALL FAILED" : "SCENE RECALLED"); }
-    else notice("EMPTY SLOT\nSAVE STORES HERE");
+    else {
+        static char text[44];                                  /* EMPTY SLOT, then the printed button that saves a scene */
+        char *o = put_s(text, "EMPTY SLOT\n");
+        o = put_s(o, smk37_button_label(BTN_SAVE));
+        put_s(o, " STORES HERE");
+        notice(text);
+    }
 }
 int dx_ui_octave(void) { return ui.octave; }
-unsigned dx_ui_part_level(unsigned part) { return part < DX_PARTS ? LP()->part[part].level : 0U; }
-/* Whether a fader reading for the part would be applied: the part exists and the panel is not ignored (boot animation, safe boot). */
-unsigned dx_ui_fader_live(unsigned part) { return part < DX_PARTS && ui.screen != S_SAFE && ui.screen != S_BOOT && dx_part_used(LP(), part); }
-void dx_ui_fader(unsigned part, unsigned value)
+
+/* The faders: what each one controls depends on the screen on view, and the controls layer asks; a fader sets its thing as soon as it moves.
+ * A role is 0 to 7, the level of that part, or one of FR_*. Parts: the master filter; Master: the master filter; Details and FX: the shared effects;
+ * everywhere else the levels of four parts, 1 to 4 or 5 to 8 (FADER BANK). */
+enum { FR_TYPE = 8, FR_CUTOFF, FR_RES, FR_DECAY, FR_DTIME, FR_FEEDBACK, FR_RETURN, FR_NONE = 255 };
+unsigned dx_ui_fader_role(unsigned fader, unsigned bank)
 {
-    if (!dx_ui_fader_live(part)) return;
-    dx_live_edit()->parts.part[part].level = (uint8_t)(value > 127U ? 127U : value);
-    dx_part_level_changed(part);
-    knob(OV_PLEVEL, part);
+    if (ui.screen == S_SAFE || ui.screen == S_BOOT) return FR_NONE;
+    switch (ui.screen) {
+    case S_PARTS: return fader == 0 ? FR_CUTOFF : fader == 1 ? FR_RES : fader == 2 ? FR_TYPE : FR_NONE;
+    case S_MASTER: return fader == 0 ? FR_TYPE : fader == 1 ? FR_CUTOFF : fader == 2 ? FR_RES : FR_NONE;
+    case S_DETAIL: case S_FX: return FR_DECAY + fader;
+    default: { unsigned part = bank * 4U + fader; return part < DX_PARTS && dx_part_used(LP(), part) ? part : FR_NONE; }
+    }
+}
+/* The cutoff on a scale of 0 to 127: 20 Hz to 20 kHz in equal ratios (about 5.6% a step). */
+static unsigned cutoff_hz(unsigned v)
+{
+    if (v == 0) return 20U;
+    if (v >= 127U) return 20000U;
+    unsigned h = 20U * 64U;
+    for (unsigned i = 0; i < v; ++i) h += h * 559U / 10000U;
+    h /= 64U;
+    return h < 20U ? 20U : h > 20000U ? 20000U : h;
+}
+void dx_ui_role_set(unsigned role, unsigned v)
+{
+    struct dx_live *live = dx_live_edit();
+    uint8_t fx[4];
+    if (v > 127U) v = 127U;
+    switch (role) {
+    case FR_TYPE: live->filter_type = (uint8_t)(v >> 5); apply_filter(); knob(OV_FTYPE, 0); break;
+    case FR_CUTOFF:                         /* a cutoff or resonance move turns an off filter into a low-pass so that it is heard, as over MIDI */
+        live->filter_hz = (uint16_t)cutoff_hz(v);
+        if (live->filter_type == DX_FILTER_OFF) live->filter_type = DX_FILTER_LP;
+        apply_filter(); knob(OV_FHZ, 0); break;
+    case FR_RES:
+        live->filter_res = (uint8_t)v;
+        if (live->filter_type == DX_FILTER_OFF) live->filter_type = DX_FILTER_LP;
+        apply_filter(); knob(OV_FRES, 0); break;
+    case FR_DECAY: groove_effects_get(fx); groove_effects_edit(0, (int)v - (int)fx[0]); knob(OV_FX, 0); break;
+    case FR_DTIME:
+        groove_effects_get(fx);
+        if (groove_delay_synced(fx[1])) groove_effects_edit(1, (int)(GROOVE_DELAY_SYNC + v * 8U / 127U) - (int)fx[1]);
+        else groove_effects_edit(1, (int)(v * 244U / 127U) - (int)(fx[1] > GROOVE_DELAY_LAST ? fx[1] - 9U : fx[1]));
+        knob(OV_FX, 1); break;
+    case FR_FEEDBACK: groove_effects_get(fx); groove_effects_edit(2, (int)v - (int)fx[2]); knob(OV_FX, 2); break;
+    case FR_RETURN: groove_effects_get(fx); groove_effects_edit(3, (int)v - (int)fx[3]); knob(OV_FX, 3); break;
+    default:
+        if (role < DX_PARTS && dx_part_used(LP(), role)) {
+            live->parts.part[role].level = (uint8_t)v;
+            dx_part_level_changed(role);
+            knob(OV_PLEVEL, role);
+        }
+    }
 }
 void dx_ui_wheel(unsigned wheel, unsigned value)
 {
@@ -584,18 +718,36 @@ void dx_ui_pedal(unsigned down)
 static uint32_t rgb888(uint16_t c) { return ((uint32_t)(c >> 11) * 255U / 31U) << 16 | ((uint32_t)((c >> 5) & 63U) * 255U / 63U) << 8 | ((uint32_t)(c & 31U) * 255U / 31U); }
 static uint32_t scaled(uint32_t rgb, unsigned num, unsigned den)
 { return (((rgb >> 16) & 255U) * num / den) << 16 | (((rgb >> 8) & 255U) * num / den) << 8 | ((rgb & 255U) * num / den); }
+/* The pads' lights. Mix: the top row is the mute of part 1 to 8 (dim red, bright red while muted), the lower row the solo (dim amber, bright amber while
+ * soloed), dark where there is no part. Part, Details, edit pages: the top row is the layers of the selected part in the part's colour (the framed one
+ * bright), the lower row the eight parts in theirs (the selected one bright). Elsewhere the scenes: dark where empty, teal where stored, bright
+ * teal for the scene in use, white for the cursor, bright white for both. */
 uint32_t dx_ui_pad_color(unsigned pad)
 {
     if (pad > 15) return 0;
-    if (ui.screen == S_MIX && ui.mixkeys) {                    /* two pads a part: mute, solo; lit in the part's colour, red and amber when on */
-        unsigned p = pad / 2U;
-        if (!part_used(p)) return 0x040404U;
-        if (pad & 1U) return part_solo(p) ? 0x302000U : scaled(rgb888(EC[p & 7U]), 1, 8);
-        return part_muted(p) ? 0x300800U : scaled(rgb888(EC[p & 7U]), 1, 8);
+    if (ui.screen == S_MIX) {
+        unsigned p = pad & 7U;
+        if (!part_used(p)) return 0;
+        if (pad < 8U) return part_muted(p) ? 0xFF2020U : 0x300808U;
+        return part_solo(p) ? 0xFFB000U : 0x302000U;
+    }
+    if (pad_layers()) {
+        unsigned p = live_sel_part();
+        if (pad >= 8U) {
+            unsigned q = pad - 8U;
+            if (!part_used(q)) return 0;
+            return q == p ? rgb888(EC[q & 7U]) : scaled(rgb888(EC[q & 7U]), 1, 6);
+        }
+        uint8_t list[DX_ENGINES];
+        unsigned n = dx_part_layers(LP(), p, list), framed = LP()->part[p].sel < n ? LP()->part[p].sel : 0U;
+        if (pad >= n) return 0;
+        return pad == framed ? rgb888(EC[p & 7U]) : scaled(rgb888(EC[p & 7U]), 1, 6);
     }
     unsigned idx = (ui.scene / 16U) * 16U + pad;
-    if (!scene_exists(idx)) return 0x040404U;
-    return idx == fr.current_scene ? 0x203020U : 0x081008U;
+    unsigned cursor = idx == ui.scene, current = idx == fr.current_scene;
+    if (!scene_exists(idx)) return cursor ? 0x282828U : 0U;
+    if (current) return cursor ? 0xFFFFFFU : 0x20FFE0U;
+    return cursor ? 0xC0C0C0U : 0x0B4A42U;
 }
 #endif
 
@@ -605,6 +757,9 @@ static void led_put(unsigned index, unsigned code)
 {
     if (index >= sizeof led_code || led_code[index] == code) return;
     led_code[index] = (uint8_t)code;
+#ifdef DX_SMK37
+    if (index < 14U) { fm1_led_level(index, code < 2U ? code : code - 2U); return; }    /* the lamp is on the printed button that carries it */
+#endif
     if (code < 2U) fm1_led_set(index, (int)code); else fm1_led_level(index, code - 2U);
 }
 static void led_set(unsigned index, unsigned on) { led_put(index, on ? 1U : 0U); }
@@ -623,7 +778,7 @@ static void update_leds(void)
     case S_SYS: active_button = BTN_GLO; break;
     default: break;
     }
-    for (unsigned b = 0; b < 14; ++b) led_set(b, b == active_button || (b == BTN_ARP && ui.learn && fr.lit_blink) || (b == BTN_EDIT && ui.screen == S_MIX && ui.mixkeys));
+    for (unsigned b = 0; b < 14; ++b) led_set(b, b == active_button || (b == BTN_ARP && ui.learn && fr.lit_blink) || (b == BTN_EDIT && MIX_EDIT_LAMP));
     /* The white keys: scenes that exist on the Scenes screen; on the mixer in key mode the mute and solo keys, dark for a
      * part that is not there, dim while they could be pressed and bright while the part is muted or soloed. */
     for (unsigned i = 0; i < 16; ++i) {

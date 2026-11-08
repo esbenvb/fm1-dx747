@@ -70,26 +70,42 @@ button.mini{padding:2px 9px;font-size:12px}
 .sim-key.white{top:0;height:100%;width:6.25%;background:#d8dcde;border:1px solid #777}.sim-key.black{top:0;height:62%;width:3.8%;background:#15191b;border:1px solid #000;z-index:2}
 .sim-key.held{background:#9fd0ff}.sim-key.black.held{background:#3a6ea5}
 .sim-key.lit.white{box-shadow:inset 0 -14px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}.sim-key.lit.black{box-shadow:inset 0 -10px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}
-/* the SMK-37 panel (Smk37Panel in dx747-sim.js) */
-.smkpanel{max-width:1180px;overflow-x:auto}
-.smk-top{display:grid;grid-template-columns:auto auto minmax(440px,1fr) auto;gap:18px;align-items:start;min-width:980px}
-.smk-wheels,.smk-faders{display:flex;gap:10px}
-.smk-slider{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--dim);width:44px}
-.smk-slider input[type=range]{writing-mode:vertical-lr;direction:rtl;width:26px;height:132px;margin:0;accent-color:var(--ac)}
-.smk-left{display:flex;flex-direction:column;gap:10px}
-.smkpanel .sim-screen canvas{width:264px;height:264px}
+/* the SMK-37 panel (Smk37Panel in dx747-sim.js): laid out like the drawing in the SMK-37 manual, scaled to the window */
+.smkpanel{max-width:1320px;overflow-x:auto}
+.smk-fit{width:1240px}
+.smk-top{display:grid;grid-template-columns:auto 262px minmax(0,1fr) 340px;gap:22px;align-items:stretch}
+.smk-wheels{display:flex;gap:10px}
+.smk-slider{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10px;color:var(--dim);width:52px}
+.smk-slider b{font-weight:600;letter-spacing:.03em;color:var(--tx);font-size:11px}
+.smk-slider input[type=range]{writing-mode:vertical-lr;direction:rtl;width:30px;height:170px;margin:0;accent-color:var(--ac)}
+.smk-slider.wheel input[type=range]{-webkit-appearance:none;appearance:none;width:50px;border-radius:12px;border:2px solid #0d1113;background:repeating-linear-gradient(#20262a 0 6px,#2f373c 6px 8px);accent-color:auto}
+.smk-slider.wheel input[type=range]::-webkit-slider-runnable-track{background:transparent}
+.smk-slider.wheel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:46px;height:34px;border-radius:8px;border:1px solid #0d1113;background:linear-gradient(#a3adb3,#5b666d 55%,#8a949a)}
+.smk-slider.wheel input[type=range]::-moz-range-track{background:transparent}
+.smk-slider.wheel input[type=range]::-moz-range-thumb{width:46px;height:34px;border-radius:8px;border:1px solid #0d1113;background:linear-gradient(#a3adb3,#5b666d 55%,#8a949a)}
+.smk-left{display:flex;flex-direction:column;justify-content:space-between;gap:12px}
+.smkpanel .sim-screen canvas{width:240px;height:240px}
 .smk-bl{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
-.smk-mid{display:flex;flex-direction:column;gap:12px;min-width:0}
-.smk-enc,.smk-pads{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
-.smk-br{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
-.sim-button.smk-b{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;font-size:11px;line-height:1.1}
-.smk-pad{aspect-ratio:1;padding:0;border-radius:8px;border:1px solid #11161a;background:var(--pad,#000);color:#6f7d83;font-size:11px;touch-action:none;user-select:none}
+.smk-mid{display:flex;flex-direction:column;gap:8px;min-width:0}
+.smk-knobs,.smk-pads,.smk-icons{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}
+.smk-knobbox .sim-step{width:24px}
+.smk-pads{margin-top:6px}
+.smk-knobbox{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--dim)}
+.smk-k{font-weight:600;color:var(--tx);font-size:11px}
+.smk-knob{position:relative;width:46px;height:46px;padding:0;border-radius:50%;background:radial-gradient(circle at 35% 30%,#59636a,#2a3034 70%);border:2px solid #0d1113;touch-action:none;cursor:ns-resize}
+.smk-knob i{position:absolute;left:50%;top:5px;width:3px;height:14px;margin-left:-1.5px;border-radius:2px;background:var(--ac);transform-origin:50% 18px;transform:rotate(var(--angle,0deg))}
+.smk-pad{aspect-ratio:1.26;padding:0;border-radius:8px;border:1px solid #11161a;background:var(--pad,#000);color:#6f7d83;font-size:11px;touch-action:none;user-select:none}
 .smk-pad.held{outline:2px solid #fff}
+.smk-icons span{text-align:center;font-size:12px;line-height:1;color:var(--dim)}
+.smk-right{display:flex;flex-direction:column;justify-content:space-between;gap:18px}
+.smk-faders{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.smk-faders .smk-slider{width:auto}
+.smk-br{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.sim-button.smk-b{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;font-size:10px;line-height:1.1;word-break:break-word}
 .smk-cap{display:none;font-size:9px;line-height:1.15;color:#9fb0b7;font-weight:400;text-align:center;white-space:normal}
 .smkpanel.captions .smk-cap{display:block}
-.smk-keys{position:relative;height:130px;margin-top:20px;min-width:980px;user-select:none}
+.smk-keys{position:relative;height:150px;margin-top:22px;user-select:none}
 .smk-keys .sim-key.white{width:4.545%}.smk-keys .sim-key.black{width:2.7%}
-.smk-keys .smk-c{position:absolute;left:0;right:0;bottom:3px;font-size:9px;color:#555;pointer-events:none}
 .smk-foot{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:14px;font-size:12px;color:var(--dim)}.smk-foot .check{margin:0}
 /* the test keyboard */
 .kb-bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}.kb-bar .val{min-width:2.5em}

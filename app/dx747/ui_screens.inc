@@ -41,7 +41,11 @@ static void draw_title(const char *t, const char *right)
 }
 /* A tip line: the names of controls are written in braces, {K1} LAYER VOL, and drawn in the DX7 green, the rest in white.
  * align: -1 the text starts at x, 0 it is centred on x, 1 it ends at x. */
+#ifdef DX_SMK37
+static void px_tip_raw(int x, int y, const char *s, int align)
+#else
 static void px_tip(int x, int y, const char *s, int align)
+#endif
 {
     unsigned n = 0;
     for (const char *p = s; *p; ++p) n += *p != '{' && *p != '}';
@@ -60,6 +64,67 @@ static void px_tip(int x, int y, const char *s, int align)
         } else if (len < sizeof run - 1U) run[len++] = *p;
     }
 }
+#ifdef DX_SMK37
+/* On the SMK-37 the names in braces are the labels printed on the unit, found in the controls layer's own tables (smk37_controls.c), so
+ * the tip lines follow the mapping: {SELECT} is K5, {HOME} is PATCH, {ENV} is SCALE, {LFO} is CHORD, {OCT} is OCTAVE (the buttons are OCTAVE- and OCTAVE+); {KNOBBANK}
+ * and {FADERBANK} are the two banks, which are no button of DX747's. */
+static const char *tip_label(const char *name, unsigned n, char *buf)
+{
+    static const struct { const char *name; uint8_t kind, id; } names[] = {
+        {"SELECT", 'e', 0}, {"ALGO", 'e', 1}, {"K1", 'e', 2}, {"K2", 'e', 3}, {"K3", 'e', 4}, {"K4", 'e', 5}, {"PRESETS", 'e', 6}, {"MASTER", 'e', 7},
+        {"KNOBBANK", 'p', 0}, {"FADERBANK", 'p', 1}, {"OCT", 'o', 0}, {"FX", 'b', BTN_FX}, {"SEL", 'b', BTN_SEL}, {"ENV", 'b', BTN_ENV}, {"LFO", 'b', BTN_LFO}, {"EDIT", 'b', BTN_EDIT},
+        {"GLO", 'b', BTN_GLO}, {"HOME", 'b', BTN_HOME}, {"SAVE", 'b', BTN_SAVE}, {"ARP", 'b', BTN_ARP}, {"SEQ", 'b', BTN_SEQ}, {"PLAY", 'b', BTN_PLAY},
+        {"REC", 'b', BTN_REC},
+    };
+    for (unsigned i = 0; i < sizeof names / sizeof *names; ++i) {
+        const char *w = names[i].name;
+        unsigned k = 0;
+        while (w[k] && k < n && w[k] == name[k]) ++k;
+        if (w[k] || k != n) continue;
+        const char *label = names[i].kind == 'e' ? smk37_encoder_label(names[i].id) : names[i].kind == 'p' ? smk37_printed_label(names[i].id)
+                          : smk37_button_label(names[i].kind == 'o' ? BTN_OCT_DOWN : names[i].id);
+        if (!label) return NULL;
+        unsigned len = 0;
+        while (label[len] && len < 15) { buf[len] = label[len]; ++len; }
+        if (names[i].kind == 'o' && len && (buf[len - 1] == '-' || buf[len - 1] == '+')) --len;   /* OCTAVE- and OCTAVE+: OCTAVE */
+        buf[len] = 0;
+        return buf;
+    }
+    return NULL;
+}
+static void px_tip(int x, int y, const char *s, int align)
+{
+    char out[96];
+    unsigned o = 0;
+    for (const char *p = s; *p && o < sizeof out - 18U;) {
+        if (*p != '{') { out[o++] = *p++; continue; }
+        const char *q = p + 1;
+        unsigned n = 0;
+        while (q[n] && q[n] != '}') ++n;
+        char buf[16];
+        const char *label = tip_label(q, n, buf);
+        out[o++] = '{';
+        if (label) while (*label) out[o++] = *label++; else for (unsigned i = 0; i < n; ++i) out[o++] = q[i];
+        out[o++] = '}';
+        p = q + n + (q[n] == '}');
+    }
+    out[o] = 0;
+    px_tip_raw(x, y, out, align);
+}
+#endif
+#ifdef DX_SMK37
+/* A plain text with the printed labels of one or two buttons in it (the tip lines do these in green; a few texts are drawn in one colour). */
+static const char *smk_phrase(const char *a, unsigned button1, const char *b, int button2, const char *c)
+{
+    static char t[48];
+    char *o = put_s(t, a);
+    o = put_s(o, smk37_button_label(button1));
+    o = put_s(o, b);
+    if (button2 >= 0) o = put_s(o, smk37_button_label((unsigned)button2));
+    put_s(o, c);
+    return t;
+}
+#endif
 static void draw_hint(const char *s) { px_tip(120, 230, s, 0); }
 /* Page tabs: the current one filled. */
 static void draw_tabs(int x, int y, const char *const *names, unsigned n, unsigned cur)
@@ -261,7 +326,7 @@ static void draw_safe(void)
     px_text_c(120, 126, "NOTHING IS LOADED OR SAVED.", 1, C_TX);
     px_text_c(120, 150, "USB MIDI AND THE FIRMWARE UPDATE", 1, C_TX);
     px_text_c(120, 164, "PAGE STILL WORK.", 1, C_TX);
-    px_text_c(120, 196, "POWER OFF, RELEASE ENV + LFO,", 1, C_AC);
+    px_text_c(120, 196, TXT("POWER OFF, RELEASE ENV + LFO,", smk_phrase("POWER OFF, RELEASE ", BTN_ENV, " + ", BTN_LFO, ",")), 1, C_AC);
     px_text_c(120, 210, "POWER ON FOR A NORMAL START.", 1, C_AC);
 }
 
@@ -307,7 +372,7 @@ static void draw_parts(void)
         if (sel) { px_rect(1, y, 238, 25, C_SEL); px_rect(1, y, 2, 25, C_TX); }
         part_chip(p, 4, y + 2, 26, 21, 0);
         if (!used) {
-            px_text(36, y + 9, sel ? "EMPTY  ENV = NEW PART" : "EMPTY", 1, sel ? C_AM : C_DIM);
+            px_text(36, y + 9, sel ? TXT("EMPTY  ENV = NEW PART", smk_phrase("EMPTY  ", BTN_ENV, " = NEW PART", -1, "")) : "EMPTY", 1, sel ? C_AM : C_DIM);
             continue;
         }
         const struct dx_part *pt = &fr.live.parts.part[p];
@@ -408,7 +473,7 @@ static void draw_part(void)
     tile_u(1, "LEVEL", fr.live.parts.part[p].level, C_TX);
     o = put_u(tb, sl + 1U); *o++ = '/'; put_u(o, n); tile(2, "LAYER", tb, C_TX);
     o = put_u(tb, engines_in_use()); put_s(o, "/8"); tile(3, "ENGINES", tb, C_AM);
-    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  {ARP}=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  {ARP}=STOP" : "{ALGO} LAYER  {ENV} ADD  {LFO} DEL  {ARP} LEARN");
+    draw_hint(ui.learn == 1 ? "LEARN: PLAY THE LOWEST KEY  {ARP}=STOP" : ui.learn == 2 ? "LEARN: PLAY THE HIGHEST KEY  {ARP}=STOP" : TXT("{ALGO} LAYER  {ENV} ADD  {LFO} DEL  {ARP} LEARN", "{ALGO} LAYER {ENV} ADD {LFO} DEL {ARP} LEARN"));
 }
 
 /* ---- the part in detail: HOME a second time ---------------------------------------- */
@@ -488,7 +553,7 @@ static void draw_pbar(unsigned page)
     draw_ident(1, 1, 0);
     static const char *const names[4] = {"SOUND", "RANGE", "VEL", "SENDS"};
     draw_tabs(4, 52, names, 4, page);
-    px_tip(236, 56, "{OCT} = PAGE", 1);
+    px_tip(236, 56, TXT("{OCT} = PAGE", "{OCT} PAGE"), 1);
 }
 static void draw_esound(void)
 {
@@ -515,7 +580,7 @@ static void draw_esound(void)
     tile_u(0, "LEVEL", lvl, C_TX);
     put_pan(tb, fr.live.pan[en]); tile(1, "PAN", tb, C_TX);
     o = tb; if (fr.live.bright[en] > 0) *o++ = '+'; put_i(o, fr.live.bright[en]); tile(2, "BRIGHT", tb, C_AM);
-    put_u(tb, fr.e[en].program + 1U); tile(3, "PRESETS", tb, col);
+    put_u(tb, fr.e[en].program + 1U); tile(3, TXT("PRESETS", smk37_encoder_label(6)), tb, col);
     draw_hint("{K1} LEVEL  {K2} PAN  {K3} BRIGHT");
 }
 static void draw_eplays(void)
@@ -657,7 +722,7 @@ static void draw_mix(void)
 {
     draw_head();
     draw_title("MIX", NULL);
-    px_text_r(236, 33, ui.mixkeys ? "WHITE KEYS = MUTE / SOLO" : "ONE FADER PER PART", 1, ui.mixkeys ? C_AM : C_TX);
+    px_text_r(236, 33, ui.mixkeys ? TXT("WHITE KEYS = MUTE / SOLO", "PADS = MUTE / SOLO") : "ONE FADER PER PART", 1, ui.mixkeys ? C_AM : C_TX);
     for (unsigned p = 0; p < DX_PARTS; ++p) {
         int x = 4 + 29 * (int)p;
         unsigned sel = p == sel_part();
@@ -690,7 +755,7 @@ static void draw_mix(void)
         o = put_s(o, "  LEVEL "); o = put_u(o, fr.live.parts.part[p].level); o = put_s(o, "  PAN "); put_pan(o, pan);
         px_text(4, 206, tb, 1, C_TX);
     } else px_tip(4, 206, "EMPTY PART  {ENV} ADDS A SOUND", -1);
-    draw_hint(ui.mixkeys ? "KEYS MUTE/SOLO  {SELECT} PART  {EDIT} = PLAY" : "{K1} LVL {K2} PAN {K3} REV {K4} DLY {ALGO} CH");
+    draw_hint(ui.mixkeys ? TXT("KEYS MUTE/SOLO  {SELECT} PART  {EDIT} = PLAY", "{K1}-{K4} PAN  {KNOBBANK} 1-4/5-8  {ALGO} CH") : "{K1} LVL {K2} PAN {K3} REV {K4} DLY {ALGO} CH");
 }
 /* The value of effect knob i (decay, delay time, feedback, return) as the tiles and the overlay write it. */
 static void fx_text(unsigned i, const uint8_t v[4], char *o)
@@ -768,7 +833,7 @@ static void draw_master(void)
     if (l->filter_type != DX_FILTER_OFF) for (int y = 50; y < 127; y += 4) px_rect(xc, y, 1, 2, C_AM);
     px_text_c(axis_x(100), 131, "100", 1, C_DIM); px_text_c(axis_x(1000), 131, "1K", 1, C_DIM); px_text_c(axis_x(10000), 131, "10K", 1, C_DIM);
     px_text(8, 146, "USB OUT TAP", 1, C_TX); px_text(8, 158, "AFTER FILTER, BEFORE VOLUME", 1, C_GR);
-    px_text(8, 174, "BT AND USB IN", 1, C_TX); px_text(8, 186, "FOLLOW THE KNOB", 1, C_TX);
+    px_text(8, 174, "BT AND USB IN", 1, C_TX); px_text(8, 186, TXT("FOLLOW THE KNOB", "FOLLOW K8"), 1, C_TX);
     static const char *const types[4] = {"OFF", "LP", "HP", "BP"};
     tile(0, "TYPE", types[l->filter_type & 3U], C_TX);
     unsigned hz = l->filter_hz ? l->filter_hz : 1000U;
@@ -813,7 +878,7 @@ static void draw_scenes(void)
             px_text(18 + 17 * (int)i, 112, ch, 2, i == ui.name_pos ? C_BLACK : C_TX);
             if (i == ui.name_pos) { px_rect(17 + 17 * (int)i, 110, 14, 18, C_AM); px_text(18 + 17 * (int)i, 112, ch, 2, C_BLACK); }
         }
-        px_tip(18, 136, "{K1} CURSOR  {K2} LETTER  {SAVE} = STORE", -1);
+        px_tip(18, 136, TXT("{K1} CURSOR  {K2} LETTER  {SAVE} = STORE", "{K1} CURSOR {K2} LETTER {SAVE} STORES"), -1);
     } else if (ui.mode == M_CLAIM) {
         px_rect(10, 78, 220, 84, C_BLACK); px_frame(10, 78, 220, 84, C_AM);
         px_text(18, 84, "FIRST SAVE: FLASH SETUP", 1, C_AM);
@@ -821,10 +886,10 @@ static void draw_scenes(void)
         px_text(18, 111, "DATA (SAMPLE BANK OR UNSAVED STOCK", 1, C_TX);
         px_text(18, 122, "SAVE). IT WILL BE ERASED.", 1, C_TX);
         px_text(18, 132, "DX747 CANNOT BACK IT UP.", 1, C_TX);
-        px_text(18, 142, "SAVE = ERASE AND CONTINUE", 1, C_AM);
+        px_text(18, 142, TXT("SAVE = ERASE AND CONTINUE", smk_phrase("", BTN_SAVE, " = ERASE AND CONTINUE", -1, "")), 1, C_AM);
         px_tip(18, 152, "{HOME} = CANCEL", -1);
     }
-    draw_hint(ui.mode == M_BROWSE ? "KEYS RECALL  {OCT} BANK  {SAVE} STORES" : "{HOME} = CANCEL");
+    draw_hint(ui.mode == M_BROWSE ? TXT("KEYS RECALL  {OCT} BANK  {SAVE} STORES", "PADS RECALL  {OCT} BANK  {SAVE} STORES") : "{HOME} = CANCEL");
 }
 
 /* ---- system --------------------------------------------------------------------- */
@@ -834,7 +899,7 @@ static void draw_sys(void)
     static const char *const labels[7] = {"BLUETOOTH MIDI", "BLUETOOTH AUDIO IN", "BUTTON LIGHT", "SCENE CHANNEL", "MASTER CONTROL CHANNEL", "CPU", "SCENE FLASH"};
     const struct dx_settings *s = &fr.settings;
     draw_head();
-    draw_title("SYSTEM", "GLO");
+    draw_title("SYSTEM", TXT("GLO", smk37_button_label(BTN_GLO)));
     for (unsigned i = 0; i < 7; ++i) {
         int y = 47 + 26 * (int)i;
         uint16_t col = C_TX;

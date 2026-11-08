@@ -1,12 +1,12 @@
 # SMK-37 recipe 2: what must not stay behind when the part the keys play changes, faders that follow a level changed elsewhere,
-# and the panel being ignored in safe boot. Physical encoders: 4 SELECT. Physical buttons: 2 HOME, 8 SEL, 13 EDIT.
+# and the panel being ignored in safe boot. Printed knobs by the board's ids: 4 is K5 (SELECT). Printed buttons: 12 PATCH (Parts), 15 SEQ (Mix), 13 PARA (edit pages).
 boot
 wipe
 run 400
 senc 7 27
 # sustain: key down, pedal down, key up: the note is held by the pedal on part 1; SELECT moves to part 2 and lifts the pedal first
-sbtn 2 1
-sbtn 2 0
+sbtn 12 1
+sbtn 12 0
 skey 12 90
 run 60
 spedal 127
@@ -27,30 +27,28 @@ spedal 0
 run 100
 expect_voices 0
 # a screen change or an octave step keeps the pedal down: only a change of part lifts it
-sbtn 2 1
-sbtn 2 0
+sbtn 12 1
+sbtn 12 0
 run 100
 skey 12 90
 spedal 127
 skey 12 0
 run 100
 expect_voices 1
-sbtn 8 1
-sbtn 8 0
+sbtn 15 1
+sbtn 15 0
 run 100
 expect_voices 1
-sbtn 2 1
-sbtn 2 0
+sbtn 12 1
+sbtn 12 0
 run 100
 expect_voices 1
 spedal 0
 run 100
 expect_voices 0
-# a key held on part 2, then a pad on the mixer in key mode selects part 4: the note stops on part 2
-sbtn 8 1
-sbtn 8 0
-sbtn 13 1
-sbtn 13 0
+# a key held on part 2, then a pad on the mixer (the mute of part 7) selects part 7: the note stops on part 2
+sbtn 15 1
+sbtn 15 0
 run 100
 skey 12 90
 run 60
@@ -58,12 +56,12 @@ expect_voices 1
 spad 6 1
 spad 6 0
 run 100
-expect_sel 3
+expect_sel 6
 expect_voices 0
 skey 12 0
 run 100
 expect_voices 0
-# a fader follows a level that changed elsewhere: take it over again instead of jumping
+# a fader that moves after the level changed elsewhere (a workbench command here) sets it again, where the fader stands
 sfader 3 127
 sfader 3 60
 expect_level 3 60
@@ -71,7 +69,7 @@ expect_level 0 127
 wb 26 0 03 00 20
 expect_level 3 32
 sfader 3 61
-expect_level 3 32
+expect_level 3 61
 sfader 3 30
 expect_level 3 30
 # safe boot ignores keys, pads, faders and wheels

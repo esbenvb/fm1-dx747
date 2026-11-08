@@ -158,89 +158,163 @@
     }
   }
   /* ---- the SMK-37 -----------------------------------------------------------------------------------------------
-   * The same core, clock, sound and flash, with the SMK-37's panel around it: 18 buttons, 8 encoders, 4 faders, 2 wheels, a pedal,
-   * 16 pads with RGB lights and 37 keys with velocity. The layout (counts, labels, which buttons sit left and right of the screen)
-   * follows M-VAVE's own simulator in the SMK-37 SDK; the code is this project's. The core takes the board's events: smk(kind, id, value).
-   * Every control carries a caption with what DX747 does with it (from the tables in DxCore.SMK37, so a label that disagrees with its
-   * function, like MIX opening System, shows). */
-  const SCREEN_OF = { SEL: 'Mix', GLO: 'System', HOME: 'Parts, then Details', EDIT: 'Edit pages', SEQ: 'Part', REC: 'MIDI in', PLAY: 'Scenes', FX: 'FX, then Master filter',
-    SAVE: 'save a scene', ARP: 'LEARN', ENV: 'add a layer', LFO: 'remove a layer', 'OCT-': 'octave, page back', 'OCT+': 'octave, page on' };
-  /** What DX747 does with physical button id (text for the caption and the tooltip). */
+   * The same core, clock, sound and flash, with the SMK-37's panel around it, laid out and labelled as the drawing in the SMK-37 manual
+   * has it: the wheels, the screen with KNOB BANK / FADER BANK, < >, OCTAVE- OCTAVE+ under it, eight knobs K1..K8 above 16 pads (the
+   * transport symbols printed under the lower row), four faders with twelve buttons under them, and 37 keys. The code is this project's.
+   * The core takes the board's events: smk(kind, id, value). Everything on the panel is called by what is printed on it (DxCore.SMK37.BUTTONS,
+   * ENCODERS): under every button, knob and fader is a short caption with what DX747 does with it, and a tooltip with the whole story. The
+   * lamps are the firmware's own (sim_smk_lamps), the two banks' included (lit for parts 5 to 8). */
+  /* What DX747 does with each of its buttons (the index is its number in DxCore.SMK37.VIRTUAL), said in the labels printed on the unit: printed(v) is
+   * the label of the button that is DX747's button v, and the texts name the other buttons, knobs and screens the same way. */
+  const printed = v => { const S = DxCore.SMK37, i = S.BUTTON_MAP.indexOf(v); return i >= 0 ? S.BUTTONS[i] : '?'; };
+  const SMK_SHORT = ['oct / page -', 'oct / page +', 'FX', 'Mix', 'add layer', 'remove layer', 'Edit', 'System', 'Parts', 'Save', 'LEARN', 'Part', 'Scenes', 'MIDI in', 'back', 'forward'];
+  const SMK_LONG = [
+    () => printed(0) + ': Parts, Part, Mix, MIDI in: the keys one octave down. Edit pages, FX, Master filter: previous page. Details: previous part. Scenes: 16 scenes back. System: previous row. Pressed while ' + printed(12) + ' is held: previous scene, on any screen.',
+    () => printed(1) + ': Parts, Part, Mix, MIDI in: the keys one octave up. Edit pages, FX, Master filter: next page. Details: next part. Scenes: 16 scenes on. System: next row. Pressed while ' + printed(12) + ' is held: next scene, on any screen.',
+    () => printed(2) + ': the shared reverb and delay; pressed again, the master filter.',
+    () => printed(3) + ': the Mix screen: levels, meters, pan and sends of all parts; mute and solo.',
+    () => printed(4) + ': add a layer to the selected part; in an empty slot, a new part (Parts, Part, Details, edit pages, Mix).',
+    () => printed(5) + ': remove the framed layer; the last layer takes the part with it (Parts, Part, Details, edit pages, Mix).',
+    () => printed(6) + ': the edit pages of the framed layer (Sound, Range, Velocity, Sends), one page on at each press.',
+    () => printed(7) + ': the System screen: Bluetooth, button light, scene channel, master control channel.',
+    () => printed(8) + ': the Parts screen; pressed again, the selected part in Details. Held, then ' + printed(12) + ': all notes off. Cancels naming a scene.',
+    () => printed(9) + ': save the setup as a scene; it asks for a name first, and pressing ' + printed(9) + ' again stores it.',
+    () => printed(10) + ': LEARN: play the lowest and the highest key to set a layer\'s key range (Part and Range screens).',
+    () => printed(11) + ': the Part screen: the layers of the selected part.',
+    () => printed(12) + ': the Scenes screen. Held, then ' + printed(0) + ' or ' + printed(1) + ': previous or next scene on any screen.',
+    () => printed(13) + ': the MIDI in screen: the latest messages, with their port and channel.',
+    () => printed(14) + ': one step back: the part (Parts, Mix, FX), the layer (Part, Details, edit pages), the stored scene (Scenes), the value of the row (System), the cursor (naming a scene).',
+    () => printed(15) + ': one step forward: the part (Parts, Mix, FX), the layer (Part, Details, edit pages), the stored scene (Scenes), the value of the row (System), the cursor (naming a scene).',
+  ];
+  /** The short caption under physical button id. */
   function smkButtonCaption(id) {
+    const v = DxCore.SMK37.BUTTON_MAP[id];
+    if (id === 0) return 'knob bank';
+    if (id === 1) return 'fader bank';
+    return v === 255 ? 'unused' : SMK_SHORT[v];
+  }
+  /** What DX747 does with physical button id, in full (the tooltip). */
+  function smkButtonDetail(id) {
     const S = DxCore.SMK37, v = S.BUTTON_MAP[id];
-    if (id === S.SHIFT) return 'with ENV: LFO (click to hold)';
-    if (id === 1) return 'faders: parts 1-4 / 5-8';
-    if (id === S.ENV) return 'ENV: add a layer; with SHIFT: LFO, remove one';
-    if (v === 255) return 'unused';
-    const name = S.VIRTUAL[v];
-    return name + ': ' + SCREEN_OF[name];
+    if (id === 0) return S.BUTTONS[0] + ': on Mix, K1 to K4 pan parts 1 to 4, or parts 5 to 8. The lamp is lit for parts 5 to 8.';
+    if (id === 1) return S.BUTTONS[1] + ': where the faders are part levels, FADER1 to FADER4 are parts 1 to 4, or parts 5 to 8. The lamp is lit for parts 5 to 8.';
+    if (v === 255) return S.BUTTONS[id] + ': DX747 does not use it yet.';
+    return SMK_LONG[v]();
   }
   class Smk37Panel extends SimPanel {
     build() {
       const S = DxCore.SMK37, K = S.KIND, core = this.core;
       if (!core.smk37) throw new Error('This core is not the SMK-37 build');
       const root = this.container; root.textContent = ''; root.classList.add('simpanel', 'smkpanel', 'captions');
-      const slider = (cls, label, caption, min, max, value, kind, id, spring) => {
+      const slider = (cls, label, caption, detail, min, max, value, kind, id, spring) => {
         const box = el('label', 'smk-slider ' + cls), input = el('input'); input.type = 'range'; input.min = min; input.max = max; input.value = value;
-        input.setAttribute('aria-label', label); input.title = label + ': ' + caption;
+        input.setAttribute('aria-label', label); input.title = label + ': ' + detail;
         input.oninput = () => { core.smk(kind, id, +input.value); this.startAudio(); };
         if (spring != null) for (const type of ['pointerup', 'pointercancel', 'blur']) input.addEventListener(type, () => { input.value = spring; core.smk(kind, id, spring); });
-        box.append(input, el('b', null, label), el('small', 'smk-cap', caption)); return box;
+        box.append(el('b', null, label), input, el('small', 'smk-cap', caption)); return box;
       };
       const wheels = el('div', 'smk-wheels');
-      wheels.append(slider('wheel', 'PITCH', 'pitch bend', 0, 127, 64, K.FADER, 4, 64), slider('wheel', 'MOD', 'CC1', 0, 127, 0, K.FADER, 5));
+      wheels.append(slider('wheel', 'PITCH', 'pitch bend', 'pitch bend of the selected part (springs back to the middle)', 0, 127, 64, K.FADER, 4, 64),
+        slider('wheel', 'MOD', 'mod (CC1)', 'modulation (CC1, vibrato) of the selected part', 0, 127, 0, K.FADER, 5));
       const screen = el('div', 'sim-screen'); const canvas = el('canvas'); canvas.width = canvas.height = 240;
       this.ctx2d = canvas.getContext('2d'); this.image = this.ctx2d.createImageData(240, 240); screen.append(canvas);
       const button = id => {
         const b = el('button', 'sim-button smk-b'); b.append(el('span', null, S.BUTTONS[id]), el('small', 'smk-cap', smkButtonCaption(id)));
-        b.title = S.BUTTONS[id] + ' → ' + smkButtonCaption(id); b.dataset.id = id;
-        if (id === S.SHIFT) {                        // a mouse cannot hold SHIFT while it presses ENV: this one latches
-          let on = false;
-          b.addEventListener('pointerdown', e => { e.preventDefault(); on = !on; b.classList.toggle('held', on); core.smk(K.BUTTON, id, on ? 1 : 0); this.startAudio(); });
-        } else this.holdButton(b, down => core.smk(K.BUTTON, id, down ? 1 : 0));
+        b.title = S.BUTTONS[id] + ' → ' + smkButtonDetail(id); b.dataset.id = id;
+        this.holdButton(b, down => { core.smk(K.BUTTON, id, down ? 1 : 0); if (down && id < 2) this.drawLamps(); });
         return b;
       };
       this.buttons = S.BUTTONS.map((_, id) => button(id));
       const left = el('div', 'smk-bl'); for (let id = 0; id < 6; id++) left.append(this.buttons[id]);
-      const right = el('div', 'smk-br'); for (let id = 6; id < 18; id++) right.append(this.buttons[id]);
-      const enc = el('div', 'smk-enc');
-      S.ENCODERS.forEach((name, i) => {
-        const box = el('div', 'sim-encoder'), minus = el('button', 'sim-step', '−'), plus = el('button', 'sim-step', '+');
-        const caption = i < 7 ? S.VIRTUAL_ENCODERS[S.ENCODER_MAP[i]] : 'master level';
-        minus.setAttribute('aria-label', name + ' down'); plus.setAttribute('aria-label', name + ' up'); box.title = name + ' → ' + caption;
-        minus.onclick = () => core.smk(K.ENCODER, i, -1); plus.onclick = () => core.smk(K.ENCODER, i, 1);
-        box.addEventListener('wheel', e => { e.preventDefault(); core.smk(K.ENCODER, i, e.deltaY < 0 ? 1 : -1); }, { passive: false });
-        box.append(el('span', null, name), el('div', 'sim-pm'), el('small', 'smk-cap', caption)); box.children[1].append(minus, plus); enc.append(box);
-      });
+      const buttons = el('div', 'smk-br'); for (let id = 6; id < 18; id++) buttons.append(this.buttons[id]);
+      // eight knobs, as on the unit: a round knob that turns under the mouse (drag up or down, scroll, click), with - and + under it
+      const KNOB_CAPTION = ['per screen', 'per screen', 'per screen', 'per screen', 'part', 'layer', 'voice', 'master level'];
+      const KNOB_K = 'one of the four knobs that change with the screen. On Mix: the pan of a part, parts 1 to 4 or 5 to 8 (' + S.BUTTONS[0] + ')';
+      const KNOB_DETAIL = [KNOB_K, KNOB_K, KNOB_K, KNOB_K, 'the part (Scenes: the scene cursor, System: the row)', 'the layer inside the part (Mix: the channel of the part)', 'the voice (1 to 128) of the framed layer (System: the value)', 'the master level of everything you hear'];
+      const knob = i => {
+        const name = S.ENCODERS[i];
+        const box = el('div', 'smk-knobbox'), dial = el('button', 'smk-knob'), minus = el('button', 'sim-step', '−'), plus = el('button', 'sim-step', '+');
+        dial.append(el('i')); dial.setAttribute('aria-label', name + ': drag, scroll or click'); box.title = name + ' → ' + KNOB_DETAIL[i];
+        minus.setAttribute('aria-label', name + ' down'); plus.setAttribute('aria-label', name + ' up');
+        let angle = 0, lastY = 0, moved = false;
+        const turn = d => { angle += d * 18; dial.style.setProperty('--angle', angle + 'deg'); core.smk(K.ENCODER, i, d); };
+        minus.onclick = () => turn(-1); plus.onclick = () => turn(1);
+        box.addEventListener('wheel', e => {          // as M-VAVE's own page: leave horizontal swipes and pinch-zoom to the browser
+          if (!e.deltaY || e.ctrlKey || e.metaKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+          e.preventDefault(); turn(e.deltaY < 0 ? 1 : -1);
+        }, { passive: false });
+        dial.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); lastY = e.clientY; moved = false; dial.setPointerCapture(e.pointerId); this.startAudio(); });
+        dial.addEventListener('pointermove', e => {
+          if (!dial.hasPointerCapture(e.pointerId)) return;
+          const d = Math.trunc((lastY - e.clientY) / 6); if (d) { moved = true; lastY -= d * 6; turn(Math.max(-20, Math.min(20, d))); }
+        });
+        dial.addEventListener('pointerup', e => { if (dial.hasPointerCapture(e.pointerId) && !moved) turn(e.shiftKey ? -1 : 1); });
+        dial.addEventListener('keydown', e => {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); turn(1); } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { e.preventDefault(); turn(-1); }
+        });
+        const pm = el('div', 'sim-pm'); pm.append(minus, plus);
+        box.append(el('b', 'smk-k', name), dial, pm, el('small', 'smk-cap', KNOB_CAPTION[i]));
+        return box;
+      };
+      const knobs = el('div', 'smk-knobs'); for (let i = 0; i < S.ENCODERS.length; i++) knobs.append(knob(i));
       const pads = el('div', 'smk-pads'); this.pads = [];
       for (let i = 0; i < S.PADS; i++) {
-        const b = el('button', 'smk-pad', String(i + 1).padStart(2, '0')); b.title = 'Pad ' + (i + 1);
+        const b = el('button', 'smk-pad', String(i + 1).padStart(2, '0')); b.title = 'Pad ' + (i + 1) + ': ' + (i < 8
+          ? 'recalls scene ' + (i + 1) + ' of the bank on screen. On Mix: mutes part ' + (i + 1) + '. On Part, Details and the edit pages: picks layer ' + (i + 1) + ' of the selected part.'
+          : 'recalls scene ' + (i + 1) + ' of the bank on screen. On Mix: solos part ' + (i - 7) + '. On Part, Details and the edit pages: picks part ' + (i - 7) + '.');
         this.hold(b, down => core.smk(K.PAD, i, down ? 1 : 0)); this.pads.push(b); pads.append(b);
       }
+      const icons = el('div', 'smk-icons');            // printed under the lower row of pads; DX747 does not use them
+      for (const icon of S.PAD_ICONS) { const s = el('span', null, icon); s.title = 'Printed on the unit; DX747 does not use it'; icons.append(s); }
       const faders = el('div', 'smk-faders');
-      for (let i = 0; i < 4; i++) faders.append(slider('fader', 'F' + (i + 1), 'part level', 0, 127, 127, K.FADER, i));
+      const FADER_DETAIL = [
+        'Parts: the master filter cutoff. Master filter: its type. Details and FX: the reverb decay. Everywhere else: the level of part 1 (part 5 after FADER BANK).',
+        'Parts: the master filter resonance. Master filter: its cutoff. Details and FX: the delay time. Everywhere else: the level of part 2 (part 6 after FADER BANK).',
+        'Parts: the master filter type. Master filter: its resonance. Details and FX: the delay feedback. Everywhere else: the level of part 3 (part 7 after FADER BANK).',
+        'Parts and Master filter: not used. Details and FX: the effects return. Everywhere else: the level of part 4 (part 8 after FADER BANK).',
+      ].map(t => t + ' It acts as soon as you move it, wherever it was left (no pickup).');
+      for (let i = 0; i < 4; i++) faders.append(slider('fader', 'FADER' + (i + 1), 'by screen', FADER_DETAIL[i], 0, 127, 127, K.FADER, i));
       for (let i = 0; i < 4; i++) core.smk(K.FADER, i, 127);          // the first readings, as the scanner reports them at power-on: a part at 127 is picked up at once
       const top = el('div', 'smk-top');
-      const mid = el('div', 'smk-mid'); mid.append(enc, pads, right);
+      const mid = el('div', 'smk-mid'); mid.append(knobs, pads, icons);
       const col = el('div', 'smk-left'); col.append(screen, left);
-      top.append(wheels, col, mid, faders);
+      const right = el('div', 'smk-right'); right.append(faders, buttons);
+      top.append(wheels, col, mid, right);
       const keys = el('div', 'smk-keys'); this.keys = [];
       const whites = Array.from({ length: S.KEYS }, (_, k) => k).filter(k => ![1, 3, 6, 8, 10].includes(k % 12));
       for (let k = 0; k < S.KEYS; k++) {
         const white = whites.indexOf(k) >= 0, b = el('button', 'sim-key ' + (white ? 'white' : 'black'));
         const center = white ? whites.indexOf(k) + 0.5 : whites.filter(w => w < k).length;
         b.style.left = (center * 100 / whites.length) + '%'; b.style.transform = 'translateX(-50%)';
-        b.title = 'MIDI note ' + (S.FIRST_NOTE + k) + ' (the lower on the key, the harder)';
-        if (k % 12 === 0) b.append(el('span', 'smk-c', 'C' + (3 + Math.floor(k / 12))));
+        b.title = 'Key ' + (k + 1) + ': MIDI note ' + (S.FIRST_NOTE + k) + ' at octave 0, 12 more for each OCTAVE+ step. The lower on the key you press, the harder it is struck.';
         this.holdKey(b, k); this.keys.push(b); keys.append(b);
       }
       const foot = el('div', 'smk-foot');
       const pedal = el('button', null, 'Sustain pedal (hold)'); this.hold(pedal, down => core.smk(K.PEDAL, 0, down ? 127 : 0));
       const caps = el('label', 'check'), box = el('input'); box.type = 'checkbox'; box.checked = true;
       box.onchange = () => root.classList.toggle('captions', box.checked);
-      caps.append(box, ' Show what each control does in DX747');
+      caps.append(box, ' Show what each button, knob and fader does in DX747');
       foot.append(pedal, caps);
-      root.append(top, keys, foot);
+      // the panel has a natural width (the unit's proportions); in a narrower window it is scaled to fit, so that no control is cut off.
+      // The scaling changes the panel's height, so it is done a frame later, and a growth of under 2% is ignored: with a scroll bar that
+      // takes room, the height decides whether there is a bar, and the bar decides the width.
+      const fit = el('div', 'smk-fit'); fit.append(top, keys, foot); root.append(fit);
+      let zoom = 1, pending = 0;
+      const refit = () => {
+        pending = 0;
+        const want = Math.min(1, Math.max(0.3, (root.clientWidth - 36) / 1240));
+        if (want < zoom || want > zoom * 1.02) { zoom = want; fit.style.zoom = String(zoom); }
+      };
+      const schedule = () => { if (!pending) pending = requestAnimationFrame(refit); };
+      refit();
+      if (typeof ResizeObserver === 'function') new ResizeObserver(schedule).observe(root); else window.addEventListener('resize', schedule);
+    }
+    /** As SimPanel.hold, for the main mouse button only (a right click must not press anything). */
+    hold(node, fn) {
+      let down = false;
+      node.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); if (!down) { down = true; node.classList.add('held'); fn(true); this.startAudio(); } });
+      const lift = () => { if (down) { down = false; node.classList.remove('held'); fn(false); } };
+      node.addEventListener('pointerup', lift); node.addEventListener('pointerleave', lift); node.addEventListener('pointercancel', lift);
     }
     /** A button the firmware reads by polling (its control task looks at the panel every few milliseconds): a press that is over before the
      *  next look would be lost, as it would on the unit, so the release waits until the button has been down for MIN_DOWN ms. */
@@ -248,7 +322,7 @@
       const MIN_DOWN = 50; let down = false, at = 0, release = null;
       const flush = () => { if (release) { clearTimeout(release); release = null; fn(false); node.classList.remove('held'); } };
       node.addEventListener('pointerdown', e => {
-        e.preventDefault(); flush(); if (down) return;
+        if (e.button !== 0) return; e.preventDefault(); flush(); if (down) return;
         down = true; at = performance.now(); node.classList.add('held'); fn(true); this.startAudio();
       });
       const lift = () => {
@@ -262,7 +336,7 @@
     holdKey(node, key) {
       const K = DxCore.SMK37.KIND; let down = false;
       node.addEventListener('pointerdown', e => {
-        e.preventDefault(); if (down) return; down = true; node.classList.add('held');
+        if (e.button !== 0) return; e.preventDefault(); if (down) return; down = true; node.classList.add('held');
         const r = node.getBoundingClientRect(), y = r.height ? Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) : 0.7;
         this.core.smk(K.KEY, key, Math.round(24 + y * 103)); this.startAudio();
       });
@@ -276,15 +350,16 @@
         b.dataset.rgb = rgb; b.style.setProperty('--pad', '#' + rgb.toString(16).padStart(6, '0'));
       });
     }
-    /** The lamps of the 14 virtual buttons, shown on the physical buttons that carry them (panel.c: ENV and LFO share one). */
+    /** The lamps of the 14 virtual buttons, shown on the physical buttons that carry them (panel.c: ENV and LFO share one), and the
+     *  FADER BANK lamp, lit for parts 5 to 8. */
     drawLamps() {
-      const l = this.core.leds(), S = DxCore.SMK37;
+      const lamps = this.core.smkLamps();
       this.buttons.forEach((b, p) => {
-        let level = 0; S.LAMP.forEach((physical, v) => { if (physical === p && l[v] > level) level = l[v]; });
-        b.style.setProperty('--lamp', level / 8); b.classList.toggle('lit', level > 0);
+        b.style.setProperty('--lamp', lamps[p] / 8); b.classList.toggle('lit', lamps[p] > 0);
       });
     }
   }
+  Smk37Panel.caption = smkButtonCaption; Smk37Panel.detail = smkButtonDetail;
   globalThis.SimPanel = SimPanel;
   globalThis.Smk37Panel = Smk37Panel;
 })();

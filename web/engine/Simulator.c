@@ -59,12 +59,16 @@ uint32_t fm1_millis(void) { return now_ms; }
 void fm1_controls_init(void) {}
 #ifdef DX_SMK37
 /* The SMK-37 build of the simulator runs DX747's own controls layer (targets/smk37/app/smk37_controls.c) on events, as the board's
- * scanner feeds it: sim_smk(kind, id, value) is smk37_control_event. The safe-boot chord is the buttons SHIFT and ENV held at power-on. */
+ * scanner feeds it: sim_smk(kind, id, value) is smk37_control_event. The safe-boot chord is the buttons SCALE and CHORD held at power-on. */
 static unsigned safe_boot_chord;
 void smk37_scan_read(void)
 {
-    if (safe_boot_chord) { smk37_control_event(SMK37_BUTTON, 0, 1); smk37_control_event(SMK37_BUTTON, 9, 1); }
+    if (safe_boot_chord) { smk37_control_event(SMK37_BUTTON, 8, 1); smk37_control_event(SMK37_BUTTON, 9, 1); }   /* SCALE and CHORD */
 }
+/* The lamps of the 18 printed buttons, as the controls layer lights them through the board's smk37_led(); the page reads them (sim_smk_lamps). */
+static uint8_t smk_lamps[18];
+void smk37_led(unsigned id, unsigned state) { if (id < sizeof smk_lamps) smk_lamps[id] = state ? 8U : 0U; }
+EXPORT("sim_smk_lamps") const uint8_t *sim_smk_lamps(void) { return smk_lamps; }
 void fm1_device_delay(unsigned ms) { (void)ms; }
 EXPORT("sim_safe_boot") void sim_safe_boot(unsigned on) { safe_boot_chord = on != 0; }
 EXPORT("sim_smk") void sim_smk(unsigned kind, unsigned id, int value) { smk37_control_event(kind, id, value); fm1_web_control(); }

@@ -98,7 +98,8 @@ each under DX747's names, **`FM1_DX747.fwsc`** and **`FM1-DX747.html`**, and `./
 ### SMK-37 Pro and Elite (experimental, never run on a unit)
 
 The same firmware has a second target for M-VAVE's SMK-37 (`targets/smk37/`): the 37 keys play with velocity, the 16 pads recall scenes
-and mute and solo, the four faders are part volumes (FADER BANK for parts 5 to 8), the wheels and the pedal play the selected part.
+and mute and solo, the four faders are part volumes (FADER BANK for parts 5 to 8), the wheels and the pedal play the selected part. Every control is called by what is printed on the unit; the buttons and knobs are listed in
+[targets/smk37/README.md](targets/smk37/README.md#the-controls-by-the-labels-printed-on-the-unit).
 It is built with **M-VAVE's own SMK-37 SDK** (`m-vave/smk37_open`, copied unchanged; the FM-1 SDK is never linked into it):
 
 ~~~bash

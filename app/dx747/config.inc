@@ -220,7 +220,11 @@ int dx_config_command(unsigned cmd, const uint8_t *d, unsigned n, uint8_t *out, 
         return GROOVE_PROJECT_INVALID;
     case 27:
         if (n != 3 || d[1] >= DX_PARTS) return GROOVE_PROJECT_INVALID;
-        if (d[0] == 3) DX_UI_RELEASE_PART(); else dx_ui_release_keys();   /* the built-in keys' note offs must go where the note ons went */
+#ifdef DX_SMK37
+        if (d[0] == 3) dx_ui_release_part(); else dx_ui_release_keys();   /* the built-in keys' note offs must go where the note ons went */
+#else
+        dx_ui_release_keys();                                 /* the built-in keys' note offs must go where the note ons went */
+#endif
         switch (d[0]) {
         case 0: r = dx_part_add(d[1]); break;
         case 1: r = dx_part_used(&live.parts, d[1]) ? dx_part_add_layer(d[1]) : GROOVE_PROJECT_INVALID; break;

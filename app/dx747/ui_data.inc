@@ -4,7 +4,21 @@
 
 enum { S_BOOT, S_PARTS, S_PART, S_ESOUND, S_EPLAYS, S_EVEL, S_ESENDS, S_MON, S_MIX, S_FX, S_MASTER, S_SCENES, S_SYS, S_SAFE, S_DETAIL, S_COUNT };
 enum { M_BROWSE, M_NAME, M_CLAIM };                      /* scene screen modes */
-enum { BTN_OCT_DOWN, BTN_OCT_UP, BTN_FX, BTN_SEL, BTN_ENV, BTN_LFO, BTN_EDIT, BTN_GLO, BTN_HOME, BTN_SAVE, BTN_ARP, BTN_SEQ, BTN_PLAY, BTN_REC };
+enum { BTN_OCT_DOWN, BTN_OCT_UP, BTN_FX, BTN_SEL, BTN_ENV, BTN_LFO, BTN_EDIT, BTN_GLO, BTN_HOME, BTN_SAVE, BTN_ARP, BTN_SEQ, BTN_PLAY, BTN_REC
+#ifdef DX_SMK37
+       , BTN_BACK, BTN_FWD               /* the SMK-37's < and >: a step back and forward in what the screen is about */
+#endif
+};
+/* The names of the controls in the screens' texts are the FM-1's (the tokens in braces: {SELECT}, {HOME}, {ENV}, ...). On the SMK-37 the same
+ * tokens come out as the labels printed on that unit (px_tip), and a text that says KEYS where the SMK-37 has PADS is written twice:
+ * TXT(the FM-1's text, the SMK-37's text). The FM-1 build gets exactly the text it always had. */
+#ifdef DX_SMK37
+#define TXT(fm1, smk) smk
+#define MIX_EDIT_LAMP 0              /* the SMK-37's mixer has its pads as mute and solo all the time: PARA is not lit for it */
+#else
+#define TXT(fm1, smk) fm1
+#define MIX_EDIT_LAMP ui.screen == S_MIX && ui.mixkeys     /* the FM-1: EDIT is lit while the white keys mute and solo */
+#endif
 #define BTN_BIT(b) (1U << (b))
 static const uint8_t white_key[16] = {0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26};
 

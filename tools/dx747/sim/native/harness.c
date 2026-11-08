@@ -5,7 +5,7 @@
  *
  *   boot [clear] [logo|safe] restart the instrument; "clear" also restores the factory sample bank,
  *                       "logo" starts on the boot screen instead of skipping it, "safe" starts as if the
- *                       safe-boot chord (ENV + LFO) were held at power-on
+ *                       safe-boot chord (ENV + LFO on the FM-1, SCALE + CHORD on the SMK-37) were held at power-on
  *   wipe                erase the scene store and staging sectors (flash offsets 65536..335872)
  *   run MS              let MS milliseconds of simulated time pass
  *   press|release btn N / tap btn N     panel button 0..13 (OCT- OCT+ FX SEL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAY REC)
@@ -21,6 +21,7 @@
  *   spedal V            sustain pedal (>= 64 down)             sbtn N V     physical button N (0..17) down/up
  *   senc N D            encoder 0..6 turned D counts; 7 is the master level
  *   expect_pad_color N HEX  fail unless pad N is lit RRGGBB
+ *   expect_lamp N V     fail unless the lamp of printed button N (0..17) is on (V 1) or dark (V 0)
  *   shot NAME           write OUTDIR/NAME.png
  *   leds                print the LED states as a 41 character string (. dark, # full, 1..7 a dimmer level)
  *   echo TEXT           print TEXT
@@ -96,6 +97,7 @@ extern void sim_boot(unsigned);
 #ifdef DX_SMK37
 extern void sim_smk(unsigned, unsigned, int);
 extern uint32_t sim_pad_color(unsigned);
+extern const uint8_t *sim_smk_lamps(void);
 #endif
 extern void sim_control(unsigned, unsigned, int);
 extern const float *sim_render(void);
@@ -420,6 +422,10 @@ int main(int argc, char **argv)
         else if (!strcmp(p, "spedal") && a) { sim_smk(SMK37_PEDAL, 0, atoi(a)); run_ms(30); }
         else if (!strcmp(p, "sbtn") && a && b) { sim_smk(SMK37_BUTTON, (unsigned)atoi(a), atoi(b)); run_ms(60); }
         else if (!strcmp(p, "senc") && a && b) { sim_smk(SMK37_ENCODER, (unsigned)atoi(a), atoi(b)); run_ms(60); }
+        else if (!strcmp(p, "expect_lamp") && a && b) {
+            unsigned id = (unsigned)atoi(a), got = id < 18 ? sim_smk_lamps()[id] != 0 : 99U, want = (unsigned)atoi(b);
+            if (got != want) { fprintf(stderr, "expect_lamp: button %s lamp is %u, expected %u\n", a, got, want); ++errors; }
+        }
         else if (!strcmp(p, "expect_pad_color") && a && b) {
             uint32_t got = sim_pad_color((unsigned)atoi(a)), want = (uint32_t)strtoul(b, NULL, 16);
             if (got != want) { fprintf(stderr, "expect_pad_color: pad %s is %06x, expected %06x\n", a, (unsigned)got, (unsigned)want); ++errors; }
