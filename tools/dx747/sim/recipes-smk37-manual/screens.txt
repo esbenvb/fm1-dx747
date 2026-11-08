@@ -1,0 +1,168 @@
+# The screenshots of the SMK-37 manual (docs/manual-smk37/manual.md), as the SMK-37 build of the firmware draws them. Run by tools/dx747/make-manual-smk37.sh:
+#   tools/dx747/sim/native/dx747-sim-smk37 docs/screens-smk37 tools/dx747/sim/recipes-smk37-manual/screens.txt
+# Printed buttons by the board's ids: 0 KNOB BANK, 2 <, 3 >, 5 OCTAVE+, 6 ARP, 7 NOTE REPEAT, 8 SCALE (add layer), 9 CHORD (remove layer), 10 GLOBE, 11 BT, 12 PATCH, 13 PARA, 14 FX,
+# 15 SEQ, 16 SEQ PLAY, 17 SEQ REC. Printed knobs: id 0 is K1 and id 4 is K5. Pads 0 to 7 are the top row, 8 to 15 the lower.
+boot
+run 400
+wipe
+run 400
+expect_screen 1
+run 2500
+shot parts
+# PATCH again: the selected part in detail
+sbtn 12 1
+sbtn 12 0
+run 150
+expect_screen 14
+run 2500
+shot details
+# NOTE REPEAT: the Part screen. Free an engine (pad 16 picks part 8, CHORD removes it), then pad 9 picks part 1 and SCALE gives it a second layer
+sbtn 7 1
+sbtn 7 0
+run 150
+expect_screen 2
+run 2500
+shot part-one-layer
+spad 15 1
+spad 15 0
+run 100
+expect_sel 7
+sbtn 9 1
+sbtn 9 0
+run 100
+spad 8 1
+spad 8 0
+run 100
+expect_sel 0
+sbtn 8 1
+sbtn 8 0
+run 150
+expect_part 0 1 2
+run 2500
+shot part-two-layers
+# PARA steps through the four edit pages
+sbtn 13 1
+sbtn 13 0
+run 150
+expect_screen 3
+run 2500
+shot edit-sound
+sbtn 13 1
+sbtn 13 0
+run 150
+expect_screen 4
+run 2500
+shot edit-range
+sbtn 6 1
+sbtn 6 0
+run 150
+run 2500
+shot edit-range-learn
+sbtn 6 1
+sbtn 6 0
+run 100
+sbtn 13 1
+sbtn 13 0
+run 150
+expect_screen 5
+run 2500
+shot edit-velocity
+sbtn 13 1
+sbtn 13 0
+run 150
+expect_screen 6
+run 2500
+shot edit-sends
+# FX twice: the shared effects, then the master filter
+sbtn 14 1
+sbtn 14 0
+run 150
+expect_screen 9
+run 2500
+shot fx
+sbtn 14 1
+sbtn 14 0
+run 150
+expect_screen 10
+run 2500
+shot master-filter
+# SEQ: Mix. Pad 1 mutes part 1, pad 10 solos part 2
+sbtn 15 1
+sbtn 15 0
+run 150
+expect_screen 8
+run 2500
+shot mix
+spad 0 1
+spad 0 0
+spad 9 1
+spad 9 0
+run 150
+run 2500
+shot mix-mute-solo
+spad 0 1
+spad 0 0
+spad 9 1
+spad 9 0
+run 100
+# KNOB BANK: K1 to K4 are the pan of parts 5 to 8
+sbtn 0 1
+sbtn 0 0
+run 150
+expect_lamp 0 1
+sbtn 0 1
+sbtn 0 0
+run 100
+# SEQ PLAY: Scenes. SEQ REC asks for a name, SEQ REC again stores the scene
+sbtn 16 1
+sbtn 16 0
+run 150
+expect_screen 11
+run 2500
+shot scenes-empty
+sbtn 17 1
+sbtn 17 0
+run 150
+run 2500
+shot scene-name
+sbtn 17 1
+sbtn 17 0
+run 300
+expect_screen 11
+run 2500
+shot scenes-stored
+# GLOBE: System, BT: MIDI in
+sbtn 10 1
+sbtn 10 0
+run 150
+expect_screen 12
+run 2500
+shot system
+midi 1 90 3c 64
+midi 1 80 3c 00
+run 100
+sbtn 11 1
+sbtn 11 0
+run 150
+expect_screen 7
+run 2500
+shot midi-in
+# NOTE REPEAT, pad 16 (part 8, the empty slot), PATCH: Parts with the empty slot selected
+sbtn 7 1
+sbtn 7 0
+run 150
+spad 15 1
+spad 15 0
+run 100
+expect_sel 7
+sbtn 12 1
+sbtn 12 0
+run 150
+expect_screen 1
+run 2500
+shot parts-empty-slot
+# safe boot: SCALE and CHORD held at power-on
+boot safe
+run 300
+expect_screen 13
+shot safe-boot
