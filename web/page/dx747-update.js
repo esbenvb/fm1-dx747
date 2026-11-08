@@ -48,18 +48,20 @@
     } finally { clearTimeout(timer); lock(false); enable(); }
   }
 
+  /** The unit's name for the confirmations: the page says SMK-37 when it was built for the SMK-37 (dx747-ui.js sets DxApp.device). */
+  const unit = () => (globalThis.DxApp && DxApp.device) || 'FM-1';
   async function install() {
     if (u.busy || !u.connected) return;
     const stock = u.kind === 'stock', force = stock || $('up-force').checked;
-    if (stock && !confirm((u.updater.identity === 'FM-1_015' ? 'The unit already runs V15: this puts its 128 factory voices back. The four voice banks are overwritten.' : 'Put the original FM-1 V15 firmware and its 128 factory voices back? The four voice banks are overwritten, DX747 and its saved scenes are removed.') + '\nUnit: ' + u.updater.identity)) return;
-    if (!stock && force && !confirm('Force the update? The unit runs another firmware (' + u.updater.identity + '). A forced update can leave a unit that does not start; only go on if this is an FM-1 and you can restore it with the programmer.')) return;
+    if (stock && !confirm((u.updater.identity === 'FM-1_015' ? 'The unit already runs V15: this puts its 128 factory voices back. The four voice banks are overwritten.' : 'Put the original ' + unit() + ' V15 firmware and its 128 factory voices back? The four voice banks are overwritten, DX747 and its saved scenes are removed.') + '\nUnit: ' + u.updater.identity)) return;
+    if (!stock && force && !confirm('Force the update? The unit runs another firmware (' + u.updater.identity + '). A forced update can leave a unit that does not start; only go on if this is an ' + unit() + ' and you can restore it with the programmer.')) return;
     lock(true); enable(); text('up-error', '');
     let done = false;
     try { await u.updater.install({ force: stock ? true : force }); done = true; }
     catch (error) { fail(error); status('The update did not finish. Keep this page open, check the cable and try again.'); }
     finally {
       lock(false); u.connected = false;
-      if (done) { text('up-identity', (stock ? u.stock : u.pkg).product); status(stock ? 'The original V15 firmware is back. Switch voices to hear them.' : 'DX747 is installed. The unit restarts: press Connect FM-1 at the top to configure it.', 100); }
+      if (done) { text('up-identity', (stock ? u.stock : u.pkg).product); status(stock ? 'The original V15 firmware is back. Switch voices to hear them.' : 'DX747 is installed. The unit restarts: press Connect ' + unit() + ' at the top to configure it.', 100); }
       enable();
     }
   }

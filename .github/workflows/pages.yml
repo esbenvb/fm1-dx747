@@ -7,7 +7,7 @@ name: pages
 on:
   push:
     branches: [dx747]
-    paths: ["app/**", "web/**", "sdk/**", "third_party/**", "tools/**", "build.sh", ".github/workflows/pages.yml"]
+    paths: ["app/**", "web/**", "sdk/**", "targets/**", "third_party/**", "tools/**", "build.sh", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,11 +26,18 @@ jobs:
       - name: One-time downloads (toolchain and WASI SDK, hash-checked)
         run: ./build.sh --setup
       - name: Build the workbench pages
+        env:
+          DX_PAGES: "1"          # each page gets a Device menu at the top that goes to the other one
         run: ./build.sh --package --source-url "https://github.com/${GITHUB_REPOSITORY}/archive/${GITHUB_SHA}.zip"
+      - name: Build the SMK-37 page (the simulator and the configurator; it has no firmware to install)
+        env:
+          DX_PAGES: "1"
+        run: ./build.sh --web --target smk37-pro
       - name: The site
         run: |
-          mkdir site
+          mkdir -p site/smk37
           cp build/official-web/DX747-Workbench.html site/index.html
+          cp build/smk37-pro/preview/DX747-Workbench.html site/smk37/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -70,6 +70,8 @@ button.mini{padding:2px 9px;font-size:12px}
 .sim-key.white{top:0;height:100%;width:6.25%;background:#d8dcde;border:1px solid #777}.sim-key.black{top:0;height:62%;width:3.8%;background:#15191b;border:1px solid #000;z-index:2}
 .sim-key.held{background:#9fd0ff}.sim-key.black.held{background:#3a6ea5}
 .sim-key.lit.white{box-shadow:inset 0 -14px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}.sim-key.lit.black{box-shadow:inset 0 -10px 0 rgba(68,255,110,calc(var(--lamp,1)*1))}
+/* the device switch of the GitHub Pages site (hidden in a local build) */
+.devpick{font-size:13px;color:var(--dim)}.devpick select{font:inherit;color:var(--tx);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;margin-left:4px}
 /* the SMK-37 panel (Smk37Panel in dx747-sim.js): laid out like the drawing in the SMK-37 manual, scaled to the window */
 .smkpanel{max-width:1320px;overflow-x:auto}
 .smk-fit{width:1240px}
@@ -125,7 +127,7 @@ details{margin-top:40px;color:var(--dim)}details pre{white-space:pre-wrap;font-s
 <header>
   <div class="logo"><svg class="logo-mark" viewBox="8 146 219 42" role="img" aria-label="DX747" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="lg1" width="4" height="3" patternUnits="userSpaceOnUse" y="148"><rect width="4" height="1" fill="#fff"/></pattern><pattern id="lg2" width="4" height="3" patternUnits="userSpaceOnUse" y="148"><rect width="4" height="2" fill="#fff"/></pattern></defs><path d="M10,148 L45,148 L64,167 L45,186 L10,186ZM19,159 L42,159 L50,167 L42,175 L19,175Z" fill="url(#lg1)" fill-rule="evenodd"/><path d="M52,148 L66,148 L79,161 L93,148 L107,148 L88,167 L107,186 L93,186 L79,173 L66,186 L52,186 L71,167Z" fill="url(#lg2)"/><g style="fill:var(--ac)" fill-rule="evenodd"><path d="M112,148 L152,148 L152,159 L125,186 L112,186 L139,159 L112,159ZM114,150 L150,150 L150,158 L124,184 L117,184 L144,157 L114,157Z"/><path d="M169,148 L180,148 L180,169 L184,169 L184,180 L180,180 L180,186 L169,186 L169,180 L137,180ZM170,150 L178,150 L178,171 L182,171 L182,178 L178,178 L178,184 L171,184 L171,178 L142,178Z"/><path d="M171,155 L171,171 L155,171ZM169,160 L169,169 L160,169Z"/><path d="M185,148 L225,148 L225,159 L198,186 L185,186 L212,159 L185,159ZM187,150 L223,150 L223,158 L197,184 L190,184 L217,157 L187,157Z"/></g></svg><span>workbench</span></div>
   <span id="conn" class="pill">Not connected</span>
-  <div class="actions"><button id="btn-sim">Simulator</button><button id="btn-unit">Connect FM-1 (USB)</button></div>
+  <div class="actions"><label class="devpick" hidden>Device <select id="device" aria-label="Device" hidden></select></label><button id="btn-sim">Simulator</button><button id="btn-unit">Connect FM-1 (USB)</button></div>
 </header>
 <nav id="tabs">
   <button data-tab="device">Device</button><button data-tab="configure">Configure</button><button data-tab="sounds">Sounds</button>
@@ -160,6 +162,7 @@ details{margin-top:40px;color:var(--dim)}details pre{white-space:pre-wrap;font-s
   <details><summary>Notices and source</summary><p>Source: <a href="/*DX_SOURCE_URL*/" style="color:var(--ac)">/*DX_SOURCE_URL*/</a></p><pre>/*DX_NOTICES*/</pre></details>
 </main>
 <div id="toast"></div>
+<script>/*DX_SWITCH*/</script>
 <script>/*DX_SIMULATOR*/</script>
 <script>/*DX_PAYLOAD*/</script>
 <script>/*DX_I18N*/</script>

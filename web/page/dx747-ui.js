@@ -14,7 +14,7 @@
     for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
     return e;
   }
-  const app = { sim: null, dx: null, mode: null, realAccess: null, state: null, voices: null, scenes: null, sceneRev: null, sceneBank: 0, sceneSel: 0,
+  const app = { device: 'FM-1', unitName: /fm.?1/i, saveLabel: 'SAVE', sim: null, dx: null, mode: null, realAccess: null, state: null, voices: null, scenes: null, sceneRev: null, sceneBank: 0, sceneSel: 0,
                 soundBank: 0, tab: 'device', sig: '', controls: [], connecting: false, locked: false, errors: 0,
                 voiceSeq: 0, voiceState: null, voiceBanks: 0, voiceError: '', autoReread: false };
   const english = text => (globalThis.FM1I18n ? FM1I18n.t(String(text), 'en') : String(text));
@@ -68,13 +68,13 @@
   }
   function field(label, node, cls) { const f = h(node.matches && node.matches('.keyrange, .dual-wrap, .seg') ? 'div' : 'label', 'field' + (cls ? ' ' + cls : '')); f.append(h('span', null, label), node); return f; }
   const PART_COLOR = p => COLORS[p % 8];
-  const notConnected = root => { root.textContent = ''; root.append(h('p', 'hint', 'Not connected. Choose Simulator or Connect FM-1 (USB) at the top.')); app.sig = ''; };
+  const notConnected = root => { root.textContent = ''; root.append(h('p', 'hint', 'Not connected. Choose Simulator or Connect ' + app.device + ' (USB) at the top.')); app.sig = ''; };
 
   // ---- connection ----------------------------------------------------------------------------------------------
   function setStatus() {
     const s = $('#conn'), dx = app.dx;
     if (app.connecting) { s.textContent = 'Connecting…'; s.className = 'pill'; }
-    else if (dx && dx.connected) { s.textContent = (app.mode === 'simulator' ? 'Simulator' : 'FM-1') + ' connected  ·  DX747 ' + dx.hello.release + '  ·  protocol ' + dx.hello.protocol; s.className = 'pill ok'; }
+    else if (dx && dx.connected) { s.textContent = (app.mode === 'simulator' ? 'Simulator' : app.device) + ' connected  ·  DX747 ' + dx.hello.release + '  ·  protocol ' + dx.hello.protocol; s.className = 'pill ok'; }
     else { s.textContent = 'Not connected'; s.className = 'pill'; }
     $('#btn-sim').classList.toggle('active', app.mode === 'simulator' && !!(dx && dx.connected));
     $('#btn-unit').classList.toggle('active', app.mode === 'unit' && !!(dx && dx.connected));
@@ -116,7 +116,7 @@
     app.realAccess = await DxDevice.requestUnitAccess();
     app.realAccess.onstatechange = () => { if (app.kb) { app.kb.refreshOutputs(); app.kb.refreshInputs(); } };
     await connect(app.realAccess, 'unit');
-    toast('Connected to the FM-1');
+    toast('Connected to the ' + app.device);
   });
   /** Read the voice presets (the names of the 128 library voices) from the unit, so the voice lists show what the unit holds.
    *  force: forget what was read before (the library may have changed under us). */
@@ -140,7 +140,7 @@
   function updatePresetBar() {
     const bar = $('#presetbar'); if (!bar) return;
     bar.hidden = !app.dx;
-    const where = app.mode === 'unit' ? 'the FM-1' : 'the simulator', status = $('#preset-status');
+    const where = app.mode === 'unit' ? 'the ' + app.device : 'the simulator', status = $('#preset-status');
     status.className = app.voiceState === 'error' ? 'err' : '';
     status.textContent = !app.dx ? '' : app.voiceState === 'loading' ? 'Reading the voice presets from ' + where + '… ' + app.voiceBanks + ' of 4 banks'
       : app.voiceState === 'error' ? 'Could not read the presets (' + app.voiceError + '). ' + (app.voices ? 'The lists below may be out of date: press Reload presets.' : 'Voices show their program numbers until this works.')
@@ -337,13 +337,13 @@
       card.append(num, nm, dots); card.onclick = () => pickScene(app.sceneBank * 16 + i); scenesUI.cards.push({ card, num, nm, dots }); grid.append(card);
     }
     const name = h('input', 'name'); name.maxLength = 12; name.placeholder = 'Scene name'; name.setAttribute('aria-label', 'Scene name'); scenesUI.name = name; name.value = 'SCENE 01';
-    const refused = 'The unit refused this. If the scene store is not set up yet, press SAVE on the unit (or the simulator panel) once and confirm; names may only use letters, digits and punctuation.';
+    const refused = 'The unit refused this. If the scene store is not set up yet, press ' + app.saveLabel + ' on the unit (or the simulator panel) once and confirm; names may only use letters, digits and punctuation.';
     const done = async () => { await loadScenes(); await refresh(); };
     const mk = (label, cls, fn) => { const b = h('button', cls, label); b.onclick = () => act(() => fn(app.sceneSel, name.value.toUpperCase()), done, refused); return b; };
     scenesUI.title = h('b');
     const bar = h('div', 'row', scenesUI.title, name, mk('Recall', '', i => app.dx.sceneRecall(i)), mk('Save the current sound here', '', (i, n) => app.dx.sceneSave(i, n)),
       mk('Rename', '', (i, n) => app.dx.sceneRename(i, n)), mk('Delete', 'warn', i => app.dx.sceneDelete(i)));
-    root.append(banks, grid, bar, h('p', 'hint', 'A scene holds all eight parts: their channels, layers, voices, ranges, levels, pan, sends, the filter and the effects. If saving is refused the scene store is not set up yet: press SAVE on the unit (or on the simulator panel) once and confirm. Saving writes flash, so give it a moment between scenes.'));
+    root.append(banks, grid, bar, h('p', 'hint', 'A scene holds all eight parts: their channels, layers, voices, ranges, levels, pan, sends, the filter and the effects. If saving is refused the scene store is not set up yet: press ' + app.saveLabel + ' on the unit (or on the simulator panel) once and confirm. Saving writes flash, so give it a moment between scenes.'));
   }
   function updateScenes() {
     if (!scenesUI.built || !app.state) return;
@@ -409,8 +409,8 @@
   // ---- start ------------------------------------------------------------------------------------------------------------------------------------
   function help() {
     $('#tab-help').append(...[
-      ['What this is', 'The workbench for DX747, the firmware that makes the FM-1 an eight-part multitimbral DX7 module. Use it with the simulator in this page or with the unit over USB. Everything you see is the unit\'s own state: changes made here appear on the panel and the other way round.'],
-      ['Connect', 'Simulator: starts with the page; click anywhere to start its sound. FM-1: plug it in by USB, close other MIDI programs, press Connect FM-1 and allow MIDI with SysEx (Chrome or Edge on a computer).'],
+      ['What this is', 'The workbench for DX747, the firmware that makes the ' + app.device + ' an eight-part multitimbral DX7 module. Use it with the simulator in this page or with the unit over USB. Everything you see is the unit\'s own state: changes made here appear on the panel and the other way round.'],
+      ['Connect', 'Simulator: starts with the page; click anywhere to start its sound. ' + app.device + ': plug it in by USB, close other MIDI programs, press Connect ' + app.device + ' and allow MIDI with SysEx (Chrome or Edge on a computer).'],
       ['Configure', 'Eight parts, each on one MIDI channel with one to eight layers. A layer is one DX7 voice with its own key range, velocity range, octave shift, polyphony, level, pan, BRIGHT and sends. The voice lists hold the presets read from the unit (Reload presets reads them again). Pan, BRIGHT and the octave shift snap to the centre (double-click goes there); on the keyboard, click or drag to set the lowest or highest key (Reset selects the whole keyboard); the velocity window has a handle at each end. Choose Play this part to make it the part the keyboard plays and the DX7 editors edit.'],
       ['Sounds, Scenes, Master', 'Sounds: the 128 voices in four banks, and DX7 ROM import. Scenes: 64 stored setups with names; a program change on the scene channel recalls one. Master: the filter, the shared reverb and delay and the unit\'s settings.'],
       ['Keyboard', 'Play any part from the computer keyboard or the on-screen piano, with a channel and output of your choice. Use it to try layers and splits.'],
@@ -422,7 +422,7 @@
       outputs() {
         const out = [];
         if (app.sim) out.push({ name: 'Simulator (in this page)', kind: 'sim', send: b => app.sim.access.output.send(b) });
-        if (app.realAccess) for (const p of app.realAccess.outputs.values()) if (p.state === 'connected') out.push({ name: p.name, kind: /fm.?1/i.test(p.name || '') ? 'unit' : 'port', send: b => { p.open && p.open(); p.send(b); } });
+        if (app.realAccess) for (const p of app.realAccess.outputs.values()) if (p.state === 'connected') out.push({ name: p.name, kind: app.unitName.test(p.name || '') ? 'unit' : 'port', send: b => { p.open && p.open(); p.send(b); } });
         return out;
       },
       inputs() { return app.realAccess ? [...app.realAccess.inputs.values()].filter(p => p.state === 'connected').map(p => ({ name: p.name, port: p })) : []; },
@@ -443,11 +443,24 @@
     const smk37 = DxCore.hasSmk37(wasm);
     app.sim = smk37 ? new Smk37Panel($('#sim-host'), wasm) : new SimPanel($('#sim-host'), wasm);
     if (smk37) {
+      app.device = 'SMK-37'; app.unitName = /smk.?37/i;
+      app.saveLabel = DxCore.SMK37.BUTTONS[DxCore.SMK37.BUTTON_MAP.indexOf(9)];   // the button that saves a scene: SEQ REC
       document.title = 'DX747 workbench (SMK-37)';
-      $('#sim-panel-note').textContent = 'This is the DX747 firmware itself, compiled to run in your browser, with the panel of the SMK-37: 18 buttons, 8 encoders, 4 faders, 2 wheels, a pedal, 16 pads and 37 keys. Under each control is what DX747 does with it.';
+      $('#sim-panel-note').textContent = 'This is the DX747 firmware itself, compiled to run in your browser, with the panel of the SMK-37: 18 buttons, 8 knobs, 4 faders, 2 wheels, a pedal, 16 pads and 37 keys. Under each button, knob and fader is what DX747 does with it; hover any control for the whole story.';
       $('#btn-unit').textContent = 'Connect SMK-37 (USB)';
+      document.querySelector('main').style.maxWidth = '1400px';   // room for the panel at its natural size
+      // the Update tab's fixed texts name the SMK-37 (the intro is replaced by the page's own text when it has no firmware inside)
+      if (typeof FM1_PACKAGE !== 'undefined' && FM1_PACKAGE) $('#up-intro').textContent = $('#up-intro').textContent.replace('on an FM-1', 'on an SMK-37');
+      $('#up-force-note').textContent = $('#up-force-note').textContent.replace('an FM-1 with the M-VAVE Open firmware', 'an SMK-37 with the M-VAVE Open firmware');
     }
     app.sim.on((what, value) => { if (what === 'audio') $('#sound-note').textContent = 'Sound is on.'; if (what === 'audio-error') toast('Sound could not start: ' + value.message, true); });
+    // On GitHub Pages one site has a page for each device; this chooses between them (the pages are built with DX_SWITCH, see tools/dx747/workbench.mjs)
+    if (typeof DX_SWITCH !== 'undefined' && DX_SWITCH) {
+      const pick = $('#device'); pick.hidden = false; pick.parentElement.hidden = false;
+      for (const [key, name] of [['fm1', 'FM-1'], ['smk37', 'SMK-37']]) { const o = h('option', null, name); o.value = key; pick.append(o); }
+      pick.value = DX_SWITCH.self;
+      pick.onchange = () => { location.href = new URL(DX_SWITCH[pick.value], location.href).href + location.hash; };
+    }
     bindKeyboard(); help();
     $('#sound-note').textContent = 'Click the panel or a key to switch the sound on.';
     document.addEventListener('pointerdown', () => app.sim.startAudio(), { once: true });

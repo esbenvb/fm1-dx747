@@ -97,6 +97,14 @@ firmware() {
   fi
 }
 
+# The GitHub Pages site (.github/workflows/pages.yml sets DX_PAGES=1) has the FM-1 page at its root and the SMK-37 page in smk37/; each page gets
+# a device menu at the top that goes to the other one.
+SWITCH=()
+if [ -n "${DX_PAGES:-}" ]; then
+  if [ "$TARGET" = fm1 ]; then SWITCH=(--switch '{"self":"fm1","fm1":"./","smk37":"./smk37/"}')
+  else SWITCH=(--switch '{"self":"smk37","fm1":"../","smk37":"./"}'); fi
+fi
+
 case "$MODE" in
   firmware)
     firmware
@@ -107,7 +115,7 @@ case "$MODE" in
     if [ "$TARGET" = fm1 ]; then
       node "$HERE/tools/portable/page.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview"
     fi                                        # (the stock page is the FM-1's: the SMK-37 target has only the DX747 workbench page)
-    node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview"
+    node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --wasm "$BUILD/web/simulator.wasm" --preview -o "$BUILD/preview" ${SWITCH[@]+"${SWITCH[@]}"}
     if [ "$TARGET" = fm1 ]; then echo "== done: $BUILD/preview/index.html and $BUILD/preview/DX747-Workbench.html"
     else echo "== done: $BUILD/preview/DX747-Workbench.html (the SMK-37 panel)"; fi ;;
   package)
@@ -118,7 +126,7 @@ case "$MODE" in
     node "$HERE/tools/portable/page.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
       --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web"
     node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
-      --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web"
+      --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web" ${SWITCH[@]+"${SWITCH[@]}"}
     cp "$BUILD/official-web/FM1-Official-Open-Source.html" "$BUILD/official-web/FM1-DX747.html"
     ( cd "$BUILD/official-web" && node -e 'const c=require("crypto"),f=require("fs");for(const n of process.argv.slice(1))console.log(c.createHash("sha256").update(f.readFileSync(n)).digest("hex")+"  "+n)' FM1-DX747.html DX747-Workbench.html >> SHA256SUMS.txt )
     echo "== done: $BUILD/official-web/DX747-Workbench.html and FM1-DX747.html" ;;

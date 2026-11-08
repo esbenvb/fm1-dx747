@@ -10,7 +10,7 @@
 // the way tools/portable/page.mjs makes them (which is a port of tools/Build-Web.ps1): keep the two in step.
 //
 //   node tools/dx747/workbench.mjs --root SRC --wasm simulator.wasm --source-url https://.../archive/<commit>.zip -o OUTDIR \
-//        [--fwsc FILE.fwsc --identity build-identity.json]
+//        [--fwsc FILE.fwsc --identity build-identity.json] [--switch JSON]
 //   node tools/dx747/workbench.mjs --root SRC --wasm simulator.wasm --preview -o OUTDIR
 //
 // --preview (instead of --source-url) is the local preview, like tools/Build-Web.ps1 -LocalPreview: no firmware, no source address.
@@ -91,7 +91,7 @@ function packageJson(root, fwscPath, identityPath, release, product) {
 
 function parseArgs(argv) {
   const opts = { preview: false };
-  const flags = new Set(['--root', '--wasm', '--source-url', '-o', '--fwsc', '--identity']);
+  const flags = new Set(['--root', '--wasm', '--source-url', '-o', '--fwsc', '--identity', '--switch']);
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--preview') opts.preview = true;
     else if (flags.has(argv[i])) opts[argv[i]] = argv[++i];
@@ -99,6 +99,15 @@ function parseArgs(argv) {
   }
   if (opts.preview) return ['--root', '--wasm', '-o'].every((k) => opts[k]) && !opts['--fwsc'] && !opts['--source-url'] ? opts : null;
   return ['--root', '--wasm', '--source-url', '-o'].every((k) => opts[k]) && !!opts['--fwsc'] === !!opts['--identity'] ? opts : null;
+}
+
+/** The device switch of the GitHub Pages site: {"self":"fm1"|"smk37","fm1":"./","smk37":"./smk37/"}, the other pages by relative address; none: no switch. */
+function deviceSwitch(json) {
+  if (!json) return 'const DX_SWITCH = null;';
+  const s = JSON.parse(json);
+  const relative = /^(\.\.?\/)+([a-z0-9-]+\/)*$|^\.\/$/;
+  if (!['fm1', 'smk37'].includes(s.self) || !relative.test(s.fm1) || !relative.test(s.smk37) || Object.keys(s).length !== 3) fail('--switch wants {"self":"fm1" or "smk37","fm1":"./","smk37":"./smk37/"}');
+  return `const DX_SWITCH = ${compact(s)};`;
 }
 
 function build(opts) {
@@ -124,7 +133,7 @@ function build(opts) {
     payload = `const FM1_PACKAGE = ${packageJson(root, opts['--fwsc'], opts['--identity'], release, product)};`;
   }
   const replacements = [['/*DX_PAYLOAD*/', payload], ['/*DX_SOURCE_URL*/', htmlEncode(url)], ['/*DX_NOTICES*/', htmlEncode(notices.join('\n'))],
-    ['/*DX_SIMULATOR*/', `const DX_SIMULATOR = ${simulation};`]];
+    ['/*DX_SIMULATOR*/', `const DX_SIMULATOR = ${simulation};`], ['/*DX_SWITCH*/', deviceSwitch(opts['--switch'])]];
   for (const [key, path] of SCRIPTS) {
     const text = readText(join(root, path));
     if (/<\/script/i.test(text)) fail(`${path} contains a closing script tag`);
