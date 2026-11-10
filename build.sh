@@ -13,6 +13,10 @@
 #   --source-url URL    the HTTPS address of the matching source archive (--package; or set FM1_SOURCE_URL),
 #                       for example "https://github.com/<you>/fm1-dx747/archive/$(git rev-parse HEAD).zip"
 #   --from-git REF      build a clean export of a commit instead of the working tree, in build/git-<commit>/
+#   --label TEXT        mark the workbench pages as a preview build: a banner with TEXT, a preview title, noindex (tools/dx747/workbench.mjs)
+#   --switch JSON       the Device menu of the workbench pages, e.g. '{"self":"fm1","fm1":"./","smk37-pro":"./smk37-pro/"}' (DX_PAGES=1 is the two-page default)
+#
+#   ./build.sh --package --target smk37-pro   (or smk37-elite): the firmware and an SMK-37 workbench page that can install it, build/smk37-pro/official-web/
 #
 # DX747 is a fork of FM1_OFFICIAL_OPEN and has its own file names: the SDK steps write the upstream names (FM1_OFFICIAL_OPEN.fwsc,
 # FM1-Official-Open-Source.html) and this script leaves a copy of each as FM1_DX747.fwsc and FM1-DX747.html; the DX747 workbench
@@ -25,6 +29,8 @@ MODE=firmware
 TARGET=fm1
 REF=""
 URL="${FM1_SOURCE_URL:-}"
+LABEL=""
+SWITCH_JSON=""
 
 usage() { sed -n '4,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
@@ -34,6 +40,8 @@ while [ $# -gt 0 ]; do
     --setup) MODE=setup; shift ;;
     --source-url) URL="${2:?--source-url needs a value}"; shift 2 ;;
     --from-git) REF="${2:?--from-git needs a commit}"; shift 2 ;;
+    --label) LABEL="${2:?--label needs a text}"; shift 2 ;;
+    --switch) SWITCH_JSON="${2:?--switch needs JSON}"; shift 2 ;;
     --target) TARGET="${2:?--target needs fm1, smk37-pro or smk37-elite}"; shift 2 ;;
     -h | --help) usage; exit 0 ;;
     *) echo "Use ./build.sh, ./build.sh --web, ./build.sh --package or ./build.sh --setup (./build.sh --help)." >&2; exit 2 ;;
@@ -72,7 +80,7 @@ case "$TARGET" in
   fm1) ;;
   smk37-pro | smk37-elite)
     [ -z "$REF" ] || { echo "error: --from-git is not supported with --target $TARGET" >&2; exit 2; }
-    [ "$MODE" = firmware ] || [ "$MODE" = web ] || { echo "error: for --target $TARGET only the firmware and the browser preview are built so far (./build.sh --target $TARGET [--web])" >&2; exit 2; }
+    [ "$MODE" = firmware ] || [ "$MODE" = web ] || [ "$MODE" = package ] || { echo "error: for --target $TARGET only the firmware, the browser preview and the page with the firmware are built (./build.sh --target $TARGET [--web | --package])" >&2; exit 2; }
     BUILD="$HERE/build/$TARGET"; SRC="$BUILD/src"
     export FM1_TARGET="$TARGET"
     node "$HERE/tools/dx747/target.mjs" --target "$TARGET" --out "$SRC" ;;
@@ -100,10 +108,12 @@ firmware() {
 # The GitHub Pages site (.github/workflows/pages.yml sets DX_PAGES=1) has the FM-1 page at its root and the SMK-37 page in smk37/; each page gets
 # a device menu at the top that goes to the other one.
 SWITCH=()
-if [ -n "${DX_PAGES:-}" ]; then
+if [ -n "$SWITCH_JSON" ]; then SWITCH=(--switch "$SWITCH_JSON")
+elif [ -n "${DX_PAGES:-}" ]; then
   if [ "$TARGET" = fm1 ]; then SWITCH=(--switch '{"self":"fm1","fm1":"./","smk37":"./smk37/"}')
   else SWITCH=(--switch '{"self":"smk37","fm1":"../","smk37":"./"}'); fi
 fi
+[ -z "$LABEL" ] || SWITCH+=(--label "$LABEL")      # (the label rides with the switch: both only go to workbench.mjs)
 
 case "$MODE" in
   firmware)
@@ -123,11 +133,19 @@ case "$MODE" in
     echo "== browser core"
     "$HERE/tools/portable/browser-core.sh" -o "$BUILD/web" "$SRC" >/dev/null
     echo "== workbench page"
-    node "$HERE/tools/portable/page.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
-      --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web"
-    node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
-      --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web" ${SWITCH[@]+"${SWITCH[@]}"}
-    cp "$BUILD/official-web/FM1-Official-Open-Source.html" "$BUILD/official-web/FM1-DX747.html"
-    ( cd "$BUILD/official-web" && node -e 'const c=require("crypto"),f=require("fs");for(const n of process.argv.slice(1))console.log(c.createHash("sha256").update(f.readFileSync(n)).digest("hex")+"  "+n)' FM1-DX747.html DX747-Workbench.html >> SHA256SUMS.txt )
-    echo "== done: $BUILD/official-web/DX747-Workbench.html and FM1-DX747.html" ;;
+    if [ "$TARGET" = fm1 ]; then
+      node "$HERE/tools/portable/page.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
+        --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web"
+      node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/FM1_OFFICIAL_OPEN.fwsc" \
+        --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web" ${SWITCH[@]+"${SWITCH[@]}"}
+      cp "$BUILD/official-web/FM1-Official-Open-Source.html" "$BUILD/official-web/FM1-DX747.html"
+      ( cd "$BUILD/official-web" && node -e 'const c=require("crypto"),f=require("fs");for(const n of process.argv.slice(1))console.log(c.createHash("sha256").update(f.readFileSync(n)).digest("hex")+"  "+n)' FM1-DX747.html DX747-Workbench.html >> SHA256SUMS.txt )
+      echo "== done: $BUILD/official-web/DX747-Workbench.html and FM1-DX747.html"
+    else
+      # The SMK-37 page: DX747's workbench only (the stock page is the FM-1's). One page, one model: the firmware of $TARGET and M-VAVE's original V16 for it.
+      node "$HERE/tools/dx747/workbench.mjs" --root "$SRC" --fwsc "$BUILD/dx7/generated/$PACKAGE" --model "${TARGET#smk37-}" \
+        --identity "$BUILD/dx7/build-identity.json" --wasm "$BUILD/web/simulator.wasm" --source-url "$URL" -o "$BUILD/official-web" ${SWITCH[@]+"${SWITCH[@]}"}
+      ( cd "$BUILD/official-web" && node -e 'const c=require("crypto"),f=require("fs");for(const n of process.argv.slice(1))console.log(c.createHash("sha256").update(f.readFileSync(n)).digest("hex")+"  "+n)' DX747-Workbench.html > SHA256SUMS.txt )
+      echo "== done: $BUILD/official-web/DX747-Workbench.html (the SMK-37 ${TARGET#smk37-} page with its firmware inside)"
+    fi ;;
 esac

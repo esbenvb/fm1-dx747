@@ -10,8 +10,10 @@
 // the way tools/portable/page.mjs makes them (which is a port of tools/Build-Web.ps1): keep the two in step.
 //
 //   node tools/dx747/workbench.mjs --root SRC --wasm simulator.wasm --source-url https://.../archive/<commit>.zip -o OUTDIR \
-//        [--fwsc FILE.fwsc --identity build-identity.json] [--switch JSON]
+//        [--fwsc FILE.fwsc --identity build-identity.json] [--switch JSON] [--label TEXT]
 //   node tools/dx747/workbench.mjs --root SRC --wasm simulator.wasm --preview -o OUTDIR
+//   SMK-37: SRC is the tree tools/dx747/target.mjs assembles; with --fwsc add --model pro|elite. One page carries ONE model's firmware and M-VAVE's original
+//   V16 for that model (the model is fixed by the page, never chosen in it). --label TEXT marks a preview build: a banner with TEXT, the title, and noindex.
 //
 // --preview (instead of --source-url) is the local preview, like tools/Build-Web.ps1 -LocalPreview: no firmware, no source address.
 // With --fwsc and --identity the page also carries the firmware (and the original V15 recovery firmware, from sdk/firmware) for
@@ -19,7 +21,8 @@
 // this after the browser core is built (--web: without firmware, --package: with). Node 18+, no packages.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const fail = (message) => { throw new Error(message); };
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
@@ -73,25 +76,42 @@ const SCRIPTS = [['/*DX_I18N*/', 'sdk/I18n.js'], ['/*DX_WEBUPDATE*/', 'sdk/WebUp
   ['/*DX_SIM*/', 'web/page/dx747-sim.js'], ['/*DX_KEYBOARD*/', 'web/page/dx747-keyboard.js'], ['/*DX_UI*/', 'web/page/dx747-ui.js'],
   ['/*DX_UPDATE*/', 'web/page/dx747-update.js']];
 
-/** The firmware package and the original V15 recovery firmware as JSON, as Build.ps1 -Package embeds them. */
-function packageJson(root, fwscPath, identityPath, release, product) {
+/** The original M-VAVE recovery firmwares, by model, with the hashes sdk/Build.ps1 pins (the SMK-37 ones: targets/smk37/sdk/Build.ps1 -Package). */
+const SMK_STOCK = {
+  pro: { file: 'sdk/firmware/SMK37-Pro-V16.fwsc', hash: '2d98ce72530e71d617384963423820536f094501299e2cfec0a8d3c3fb6bcfb0', name: 'Pro', family: 8 },
+  elite: { file: 'sdk/firmware/SMK37-Elite-V16.fwsc', hash: 'b2ee38abfef3ae922e4eecdb8a551e14345300ae6f270265feacd33b6ef99cb6', name: 'Elite', family: 9 },
+};
+const VENDOR_LOADER = 'ef1f2db89b011fa53e71df363f0122de0ea896618c53fb53e8da676322004541';
+
+/** The firmware package and the original recovery firmware (the FM-1's V15, or the SMK-37's V16 for model pro or elite) as JSON, as Build.ps1 -Package embeds them. */
+function packageJson(root, fwscPath, identityPath, release, product, model) {
   const identity = JSON.parse(readText(identityPath));
   if (!/^[0-9a-f]{64}$/.test(identity.build_id) || identity.release_version !== release) fail('Firmware and web release versions differ, or the source identifier is invalid.');
   const fwsc = readFileSync(fwscPath);
-  const stockPath = join(root, 'sdk/firmware/FM-1_015.fwsc');
-  const stockHash = 'db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a';
-  if (!existsSync(stockPath) || shaFile(stockPath) !== stockHash) fail('Matching SDK original V15 recovery firmware is missing or invalid.');
-  const stockBytes = readFileSync(stockPath);
-  const stock = { schema: 1, kind: 'stock', product: 'FM-1_015', profile: 'M-VAVE Original V15', family: 7, release_version: 'V15',
-    build_id: stockHash, sha256: stockHash, bytes: stockBytes.length,
-    loader_sha256: 'ef1f2db89b011fa53e71df363f0122de0ea896618c53fb53e8da676322004541', data: b64(stockBytes) };
-  return compact({ schema: 1, product, profile: identity.profile ?? 'dx7', family: 7, release_version: release, build_id: identity.build_id,
-    sha256: sha256(fwsc), bytes: fwsc.length, loader_sha256: shaFile(join(root, 'sdk/tools/pack/ota.bin')), hardware_validated: false, data: b64(fwsc), stock });
+  let stock, family = 7, extra = {};
+  if (model) {
+    const m = SMK_STOCK[model] ?? fail('--model must be pro or elite.');
+    const stockPath = join(root, m.file);
+    if (!existsSync(stockPath) || shaFile(stockPath) !== m.hash) fail(`Matching SDK original V16 recovery firmware for the ${m.name} is missing or invalid.`);
+    const stockBytes = readFileSync(stockPath);
+    family = m.family; extra = { model };
+    stock = { schema: 1, kind: 'stock', product: `SMK-37 ${m.name}_016`, model, profile: `SMK37 ${m.name} Original V16`, family, release_version: 'V16',
+      build_id: m.hash, sha256: m.hash, bytes: stockBytes.length, loader_sha256: VENDOR_LOADER, data: b64(stockBytes) };
+  } else {
+    const stockPath = join(root, 'sdk/firmware/FM-1_015.fwsc');
+    const stockHash = 'db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a';
+    if (!existsSync(stockPath) || shaFile(stockPath) !== stockHash) fail('Matching SDK original V15 recovery firmware is missing or invalid.');
+    const stockBytes = readFileSync(stockPath);
+    stock = { schema: 1, kind: 'stock', product: 'FM-1_015', profile: 'M-VAVE Original V15', family: 7, release_version: 'V15',
+      build_id: stockHash, sha256: stockHash, bytes: stockBytes.length, loader_sha256: VENDOR_LOADER, data: b64(stockBytes) };
+  }
+  return compact({ schema: 1, product, profile: identity.profile ?? 'dx7', family, release_version: release, build_id: identity.build_id,
+    sha256: sha256(fwsc), bytes: fwsc.length, loader_sha256: shaFile(join(root, 'sdk/tools/pack/ota.bin')), hardware_validated: false, data: b64(fwsc), ...extra, stock });
 }
 
 function parseArgs(argv) {
   const opts = { preview: false };
-  const flags = new Set(['--root', '--wasm', '--source-url', '-o', '--fwsc', '--identity', '--switch']);
+  const flags = new Set(['--root', '--wasm', '--source-url', '-o', '--fwsc', '--identity', '--switch', '--model', '--label']);
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--preview') opts.preview = true;
     else if (flags.has(argv[i])) opts[argv[i]] = argv[++i];
@@ -101,13 +121,34 @@ function parseArgs(argv) {
   return ['--root', '--wasm', '--source-url', '-o'].every((k) => opts[k]) && !!opts['--fwsc'] === !!opts['--identity'] ? opts : null;
 }
 
-/** The device switch of the GitHub Pages site: {"self":"fm1"|"smk37","fm1":"./","smk37":"./smk37/"}, the other pages by relative address; none: no switch. */
+/** A label that marks a preview build (a banner, the title, noindex): short, and no character that could leave a script or an attribute. */
+function previewLabel(text) {
+  if (text === undefined) return null;
+  if (!/^[A-Za-z0-9 ._:\/@#()+,-]{1,80}$/.test(text)) fail('--label wants 1 to 80 of: letters, digits, space and . _ : / @ # ( ) + , -');
+  return text;
+}
+
+/** The device switch of the GitHub Pages site: {"self":KEY,KEY:ADDRESS,...} with KEY one of fm1, smk37, smk37-pro, smk37-elite and the addresses relative
+ *  (the other pages of the same site); none: no switch. */
 function deviceSwitch(json) {
   if (!json) return 'const DX_SWITCH = null;';
   const s = JSON.parse(json);
   const relative = /^(\.\.?\/)+([a-z0-9-]+\/)*$|^\.\/$/;
-  if (!['fm1', 'smk37'].includes(s.self) || !relative.test(s.fm1) || !relative.test(s.smk37) || Object.keys(s).length !== 3) fail('--switch wants {"self":"fm1" or "smk37","fm1":"./","smk37":"./smk37/"}');
+  const keys = Object.keys(s).filter((k) => k !== 'self');
+  const known = ['fm1', 'smk37', 'smk37-pro', 'smk37-elite'];
+  if (!keys.length || !keys.includes(s.self) || keys.some((k) => !known.includes(k) || !relative.test(s[k]))) fail('--switch wants {"self":KEY,KEY:ADDRESS,...} with KEY one of fm1, smk37, smk37-pro, smk37-elite, self one of them, and relative addresses such as ./ ../ ./smk37-pro/');
   return `const DX_SWITCH = ${compact(s)};`;
+}
+
+/** M-VAVE's terms for the SMK-37 SDK: the page must carry them (targets/smk37/THIRD_PARTY.smk37_open.md: "include this file"). Read from this repository, since
+ *  tools/dx747/target.mjs leaves targets/ out of the SMK-37 build tree. */
+function smk37Notices() {
+  const here = resolve(dirname(fileURLToPath(import.meta.url)), '../../targets/smk37');
+  return ['THIRD_PARTY.smk37_open.md', 'LICENSE.smk37_open.md'].map((name) => {
+    const file = join(here, name);
+    if (!existsSync(file)) fail(`${file} is missing: the SMK-37 page must carry M-VAVE's SDK terms.`);
+    return `\n===== ${name} =====\n${readText(file)}`;
+  });
 }
 
 function build(opts) {
@@ -121,19 +162,29 @@ function build(opts) {
   const wasm = readFileSync(opts['--wasm']);
   const versionH = readText(join(root, 'app/version.h'));
   const release = /^#define FM1_RELEASE_VERSION "(V[0-9]{2,3})"/m.exec(versionH)?.[1] ?? 'V00';
-  const product = /^#define FM1_UPDATE_PRODUCT "(FM-1_8[0-9]{6})"[ \t]*$/m.exec(versionH)?.[1];
+  const smk37 = /^#define FM1_UPDATE_PRODUCT_(PRO|ELITE) "/m.test(versionH);          // the SMK-37 tree (tools/dx747/target.mjs): one identity per model
+  const model = opts['--model'];
+  if (smk37 && opts['--fwsc'] && !['pro', 'elite'].includes(model)) fail('The SMK-37 page carries one model: pass --model pro or --model elite.');
+  if (!smk37 && model) fail('--model is for the SMK-37 tree only.');
+  const product = smk37
+    ? (model ? new RegExp(`^#define FM1_UPDATE_PRODUCT_${model.toUpperCase()} "(SMK-37 ${model === 'pro' ? 'Pro' : 'Elite'}_8[0-9]{6})"[ \\t]*$`, 'm').exec(versionH)?.[1] : undefined)
+    : /^#define FM1_UPDATE_PRODUCT "(FM-1_8[0-9]{6})"[ \t]*$/m.exec(versionH)?.[1];
+  const label = previewLabel(opts['--label']);
   const simulation = compact({ schema: 1, release_version: release, sha256: sha256(wasm), source_sha256: sourceHash(root), data: b64(wasm) });
   const notices = [`APP: GPLv3 with the FM1 SDK linking exception; no warranty. Source: ${url}`];
   for (const name of ['THIRD_PARTY.md', 'LICENSE.md']) notices.push(`\n===== ${name} =====\n${readText(join(root, name))}`);
+  if (smk37) notices.push(...smk37Notices());
   let page = readText(join(root, 'web/page/dx747.html.in'));
+  if (label) page = page.replace('<title>DX747 workbench</title>', '<title>DX747 workbench (preview)</title>\n<meta name="robots" content="noindex">');
   if (opts.preview) page = page.replace(/<a\b[^>]*href="\/\*DX_SOURCE_URL\*\/"[^>]*>(.*?)<\/a>/g, '<span>(local preview, no source address)</span>');
   let payload = 'const FM1_PACKAGE = null;';
   if (opts['--fwsc']) {
-    if (!product) fail('Set FM1_UPDATE_PRODUCT in app/version.h.');
-    payload = `const FM1_PACKAGE = ${packageJson(root, opts['--fwsc'], opts['--identity'], release, product)};`;
+    if (!product) fail(smk37 ? `Set FM1_UPDATE_PRODUCT_${model.toUpperCase()} in app/version.h.` : 'Set FM1_UPDATE_PRODUCT in app/version.h.');
+    payload = `const FM1_PACKAGE = ${packageJson(root, opts['--fwsc'], opts['--identity'], release, product, smk37 ? model : undefined)};`;
   }
   const replacements = [['/*DX_PAYLOAD*/', payload], ['/*DX_SOURCE_URL*/', htmlEncode(url)], ['/*DX_NOTICES*/', htmlEncode(notices.join('\n'))],
-    ['/*DX_SIMULATOR*/', `const DX_SIMULATOR = ${simulation};`], ['/*DX_SWITCH*/', deviceSwitch(opts['--switch'])]];
+    ['/*DX_SIMULATOR*/', `const DX_SIMULATOR = ${simulation};`], ['/*DX_SWITCH*/', deviceSwitch(opts['--switch'])],
+    ['/*DX_LABEL*/', `const DX_LABEL = ${compact(label)};`]];
   for (const [key, path] of SCRIPTS) {
     const text = readText(join(root, path));
     if (/<\/script/i.test(text)) fail(`${path} contains a closing script tag`);
@@ -150,5 +201,5 @@ function build(opts) {
 }
 
 const opts = parseArgs(process.argv.slice(2));
-if (!opts) { console.error('usage: workbench.mjs --root SRC --wasm simulator.wasm --source-url URL -o OUTDIR [--fwsc FILE.fwsc --identity build-identity.json]'); process.exit(2); }
+if (!opts) { console.error('usage: workbench.mjs --root SRC --wasm simulator.wasm --source-url URL -o OUTDIR [--fwsc FILE.fwsc --identity build-identity.json [--model pro|elite]] [--switch JSON] [--label TEXT]'); process.exit(2); }
 try { build(opts); } catch (error) { console.error(`error: ${error.message}`); process.exit(1); }

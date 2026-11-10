@@ -1,12 +1,21 @@
-# The DX747 workbench (the simulator, the configurator, the test keyboard and the updater in one page) on GitHub Pages, so that
-# The Firmware Hub's card can link to it: https://esbenvb.github.io/fm1-dx747/#device (the firmware in the browser) and
-# https://esbenvb.github.io/fm1-dx747/#configure (the web editor). It is the page ./build.sh --package makes, built on GitHub's
-# Ubuntu runner (Docker for the firmware, JieLi's Linux toolchain and the WASI SDK downloaded and hash-checked by ./build.sh --setup).
-# One-time setting: the repository's Settings > Pages > Source must be "GitHub Actions".
+# The DX747 workbench pages on GitHub Pages.
+#
+#   https://esbenvb.github.io/fm1-dx747/                 the live page: the FM-1 firmware of the dx747 branch (what The Firmware Hub's card links to:
+#                                                         #device, #configure, #update). It is always built from the dx747 branch.
+#   https://esbenvb.github.io/fm1-dx747/preview/         a PREVIEW for testers, built from the smk37 branch: the FM-1 page,
+#   .../preview/smk37-pro/ and .../preview/smk37-elite/  and one SMK-37 page per model, each with its firmware inside and the way back to M-VAVE's own
+#                                                         firmware. Marked as a preview in its banner, title and noindex; the SMK-37 firmware has never run on a unit.
+#
+# GitHub Pages has ONE site per repository and every deploy replaces all of it, so this one workflow builds both and deploys both together. It is meant to
+# run on pushes to smk37 (the preview is refreshed by pushing to smk37) and from "Run workflow". Two things only the repository owner can do:
+#   - Settings > Pages > Source must be "GitHub Actions" (the live page already uses it);
+#   - Settings > Environments > github-pages > Deployment branches: add smk37 next to dx747 (GitHub refuses the deploy otherwise).
+# KNOWN LIMIT until this file is also on dx747: a push to dx747 runs dx747's own copy of this workflow, which builds only the live page and would deploy a
+# site without /preview/. Run this workflow on smk37 again (Run workflow, branch smk37) to bring it back. Promoting the preview later = merging smk37.
 name: pages
 on:
   push:
-    branches: [dx747]
+    branches: [dx747, smk37]
     paths: ["app/**", "web/**", "sdk/**", "targets/**", "third_party/**", "tools/**", "build.sh", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions:
@@ -20,24 +29,56 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+      - name: The live page's source (dx747), whatever branch started this run
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
         with:
+          ref: dx747
+          path: live
+          persist-credentials: false
+      - name: The preview's source (smk37)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with:
+          ref: smk37
+          path: preview
           persist-credentials: false
       - name: One-time downloads (toolchain and WASI SDK, hash-checked)
+        working-directory: preview
         run: ./build.sh --setup
-      - name: Build the workbench pages
-        env:
-          DX_PAGES: "1"          # each page gets a Device menu at the top that goes to the other one
-        run: ./build.sh --package --source-url "https://github.com/${GITHUB_REPOSITORY}/archive/${GITHUB_SHA}.zip"
-      - name: Build the SMK-37 page (the simulator and the configurator; it has no firmware to install)
-        env:
-          DX_PAGES: "1"
-        run: ./build.sh --web --target smk37-pro
+      - name: The live page (the dx747 branch, built the way it always was)
+        working-directory: live
+        run: ./build.sh --package --source-url "https://github.com/${GITHUB_REPOSITORY}/archive/$(git rev-parse HEAD).zip"
+      - name: The preview pages (smk37) with their firmware inside
+        working-directory: preview
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          URL="https://github.com/${GITHUB_REPOSITORY}/archive/${SHA}.zip"
+          LABEL="smk37 @ ${SHA:0:7}"
+          ./build.sh --package --source-url "$URL" --label "$LABEL" \
+            --switch '{"self":"fm1","fm1":"./","smk37-pro":"./smk37-pro/","smk37-elite":"./smk37-elite/"}'
+          ./build.sh --target smk37-pro --package --source-url "$URL" --label "$LABEL" \
+            --switch '{"self":"smk37-pro","fm1":"../","smk37-pro":"./","smk37-elite":"../smk37-elite/"}'
+          ./build.sh --target smk37-elite --package --source-url "$URL" --label "$LABEL" \
+            --switch '{"self":"smk37-elite","fm1":"../","smk37-pro":"../smk37-pro/","smk37-elite":"./"}'
+          echo "LABEL=$LABEL" >> "$GITHUB_ENV"
+      - name: Check the firmware inside the preview pages before anything is published
+        working-directory: preview
+        run: |
+          set -euo pipefail
+          node tools/dx747/page/test-update.mjs
+          node tools/dx747/page/test-packages.mjs --label "$LABEL" \
+            --fm1 build/official-web/DX747-Workbench.html \
+            --smk37-pro build/smk37-pro/official-web/DX747-Workbench.html \
+            --smk37-elite build/smk37-elite/official-web/DX747-Workbench.html
       - name: The site
         run: |
-          mkdir -p site/smk37
-          cp build/official-web/DX747-Workbench.html site/index.html
-          cp build/smk37-pro/preview/DX747-Workbench.html site/smk37/index.html
+          set -euo pipefail
+          mkdir -p site/preview/smk37-pro site/preview/smk37-elite
+          cp live/build/official-web/DX747-Workbench.html site/index.html
+          cp preview/build/official-web/DX747-Workbench.html site/preview/index.html
+          cp preview/build/smk37-pro/official-web/DX747-Workbench.html site/preview/smk37-pro/index.html
+          cp preview/build/smk37-elite/official-web/DX747-Workbench.html site/preview/smk37-elite/index.html
+          ls -la site site/preview site/preview/smk37-pro site/preview/smk37-elite
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

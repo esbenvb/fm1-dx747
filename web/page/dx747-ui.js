@@ -457,9 +457,25 @@
     // On GitHub Pages one site has a page for each device; this chooses between them (the pages are built with DX_SWITCH, see tools/dx747/workbench.mjs)
     if (typeof DX_SWITCH !== 'undefined' && DX_SWITCH) {
       const pick = $('#device'); pick.hidden = false; pick.parentElement.hidden = false;
-      for (const [key, name] of [['fm1', 'FM-1'], ['smk37', 'SMK-37']]) { const o = h('option', null, name); o.value = key; pick.append(o); }
+      const NAMES = { fm1: 'FM-1', smk37: 'SMK-37', 'smk37-pro': 'SMK-37 Pro', 'smk37-elite': 'SMK-37 Elite' };
+      for (const key of Object.keys(NAMES)) if (DX_SWITCH[key]) { const o = h('option', null, NAMES[key]); o.value = key; pick.append(o); }
       pick.value = DX_SWITCH.self;
       pick.onchange = () => { location.href = new URL(DX_SWITCH[pick.value], location.href).href + location.hash; };
+    }
+    // A preview build (tools/dx747/workbench.mjs --label): a banner on top, and the title says so. It never says more than the page knows.
+    if (typeof DX_LABEL !== 'undefined' && DX_LABEL) {
+      if (!/preview/i.test(document.title)) document.title = 'PREVIEW · ' + document.title;
+      const link = document.querySelector('details a[href^="https://"]'), m = link && /^(https:\/\/github\.com\/[^/]+\/[^/]+)\/archive\/([0-9a-f]{40})\.zip$/.exec(link.getAttribute('href'));
+      const banner = h('div', 'preview-banner'), model = typeof FM1_PACKAGE !== 'undefined' && FM1_PACKAGE && FM1_PACKAGE.model;
+      banner.append(h('b', null, 'PREVIEW BUILD · ' + DX_LABEL), document.createTextNode(' · not a release, for testing only. '));
+      if (model) banner.append(document.createTextNode('This firmware has never run on an SMK-37 (this page is for the ' + (model === 'pro' ? 'Pro' : 'Elite') + '). Before you flash: read the checklist, have a hardware programmer and a backup of the unit\'s flash, and install M-VAVE\'s own firmware first to check that the way back works. '));
+      else if (typeof FM1_PACKAGE !== 'undefined' && FM1_PACKAGE) banner.append(document.createTextNode('Built from the preview branch: the Build number in the Update tab tells it apart from the released firmware. '));
+      if (m) {
+        for (const [text, path] of model ? [['Checklist', '/blob/' + m[2] + '/docs/ON-DEVICE-CHECKLIST-SMK37.md'], ['Report what you find', '/issues']] : [['Report what you find', '/issues']]) {
+          const a = h('a', null, text); a.href = m[1] + path; a.target = '_blank'; a.rel = 'noopener'; banner.append(a, document.createTextNode(' · '));
+        }
+      }
+      document.body.prepend(banner);
     }
     bindKeyboard(); help();
     $('#sound-note').textContent = 'Click the panel or a key to switch the sound on.';

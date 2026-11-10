@@ -29,6 +29,10 @@ if command -v node >/dev/null 2>&1; then
     node tools/dx747/page/test-client.mjs > /dev/null || status=1
     echo "== tools/dx747/page/test-controls.mjs"
     node tools/dx747/page/test-controls.mjs > /dev/null || status=1
+    # The Update tab's logic (model confirmation in update mode, V15/V16 texts) against a fake updater; the pages' embedded firmware is checked by
+    # tools/dx747/page/test-packages.mjs on built pages (the Pages workflow runs it)
+    echo "== tools/dx747/page/test-update.mjs"
+    node tools/dx747/page/test-update.mjs || status=1
     # The SMK-37 panel's tables, and the firmware behind them: the SMK-37 browser core is built from the tree tools/dx747/target.mjs
     # assembles (the same one ./build.sh --web --target smk37-pro builds), into a folder of its own.
     echo "== tools/dx747/page/test-smk37.mjs"
