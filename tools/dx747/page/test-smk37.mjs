@@ -149,6 +149,16 @@ if (!existsSync(wasmPath) && wasmArg > 0) {
 
   // the SMK-37 SDK's script refuses factory voice A23 (detune 15); the page still has to list the voices
   const names = await dx.voiceNames(0); eq([names.length, names[0], names[22]], [32, 'PIANO 1', 'SYN LEAD 6'], 'the voice names of bank A are read with the SMK-37 script');
+  // a DX7 ROM with a detune of 15 (bank A's voice 23 is one) imports and reads back although the SMK-37 script's own upload refuses it
+  {
+    const rawA = await dx.rawBank(0), rom = new Uint8Array(4104); rom.set([0xf0, 0x43, 0x00, 0x09, 0x20, 0x00]); rom.set(rawA, 6);
+    let sum = 0; for (const v of rawA) sum = (sum + v) & 127; rom[4102] = (128 - sum) & 127; rom[4103] = 0xf7;
+    let refused = false; try { await dx.lib.upload(4, 3, rawA); } catch { refused = true; }
+    check(refused, 'the SMK-37 script itself refuses a bank with a detune of 15 (the reason the page uploads banks itself)');
+    await dx.importRom(3, rom);
+    eq((await dx.voiceNames(3)).join('|'), names.join('|'), 'the ROM with a detune of 15 is in bank D');
+    check((await dx.rawBank(3)).every((v, i) => v === rawA[i]), 'bank D reads back byte for byte');
+  }
   eq(core.screen(), SCREEN.PARTS, 'a fresh unit has left the boot animation and shows Parts');
   // the screens the printed buttons open, and the lamp of the one that is open
   const lit = () => Array.from(core.smkLamps(), (l, i) => (l ? i : -1)).filter((i) => i >= 0);

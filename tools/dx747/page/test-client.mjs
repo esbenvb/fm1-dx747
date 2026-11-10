@@ -113,7 +113,7 @@ core.advance(1600); await dx.sceneSave(2, ''); list = await dx.scenes(); eq(list
 // ---- the voice library and ROM import ----------------------------------------------------------
 const names = await dx.voiceNames(0);
 eq(names.length, 32, 'bank names'); eq(names[0], 'PIANO 1', 'first voice of bank A');
-const raw = await dx.run(() => dx.lib.readBank(0));
+const raw = await dx.run(() => dx.rawBank(0));
 const file = new Uint8Array(4104); file.set([0xf0, 0x43, 0x00, 0x09, 0x20, 0x00]); file.set(raw, 6);
 let sum = 0; for (const v of raw) sum = (sum + v) & 127; file[4102] = (128 - sum) & 127; file[4103] = 0xf7;
 await dx.importRom(3, file);

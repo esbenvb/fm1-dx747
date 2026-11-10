@@ -308,6 +308,15 @@
       const schedule = () => { if (!pending) pending = requestAnimationFrame(refit); };
       refit();
       if (typeof ResizeObserver === 'function') new ResizeObserver(schedule).observe(root); else window.addEventListener('resize', schedule);
+      // The firmware lets go of the mod wheel (CC1 to 0) and centres the pitch bend when the part the keys play changes (DX747's UI,
+      // release_part): show it, or the slider would keep a value the firmware no longer has.
+      const wheelInputs = wheels.querySelectorAll('input'); clearInterval(this.partWatch); this.lastPart = null;
+      this.partWatch = setInterval(() => {
+        const state = globalThis.DxApp && globalThis.DxApp.state, part = state ? state.selected : null;
+        if (part === this.lastPart) return;
+        if (this.lastPart !== null && part !== null) { wheelInputs[0].value = 64; wheelInputs[1].value = 0; }
+        this.lastPart = part;
+      }, 250);
     }
     /** As SimPanel.hold, for the main mouse button only (a right click must not press anything). */
     hold(node, fn) {

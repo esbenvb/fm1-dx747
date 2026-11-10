@@ -141,18 +141,29 @@
     sceneRename(index, name) { return this.run(() => this.q(30, [3, index, ...pad12(name)])); }
     sceneDelete(index) { return this.run(() => this.q(30, [4, index])); }
     // ---- sounds -------------------------------------------------------------------------------
+    /** A library bank as the unit holds it (4,096 bytes). Not Library.readBank: the SMK-37's SDK refuses a bank in which a voice has a value
+     *  outside the DX7's range (a detune of 15, as in DX747's factory voice A23, and in real DX7 ROMs); the names do not depend on those values. */
+    async rawBank(bank) {
+      if (!Number.isInteger(bank) || bank < 0 || bank > 3) throw new Error('Voice bank number out of range');
+      const raw = await this.lib.download(4, bank);
+      if (!(raw instanceof Uint8Array) || raw.length !== 4096) throw new Error('The unit sent a voice bank of the wrong size');
+      return raw;
+    }
+    /** Library.upload without its voice-range check for banks (the SMK-37's SDK refuses real DX7 ROMs that have out-of-range values;
+     *  the FM-1's clamps them): the same transfer commands, begin 3, data 4, end with the CRC 5, close 6. The unit checks the file itself. */
+    async uploadRaw(kind, target, bytes) {
+      const lib = this.lib;
+      try {
+        await lib.query(3, [kind, target, bytes.length & 255, bytes.length >> 8]);
+        for (let at = 0; at < bytes.length; at += 64) await lib.query(4, [at & 255, at >> 8, ...bytes.slice(at, at + 64)]);
+        const c = FM1Web.crc32(bytes);
+        await lib.query(5, [c & 255, (c >>> 8) & 255, (c >>> 16) & 255, c >>> 24]);
+      } finally { if (lib.link && !lib.link.lost) await lib.query(6).catch(() => {}); }
+    }
     /** Names of the 32 voices in library bank 0..3 (A to D). */
     async voiceNames(bank) {
       if (this.bankNames[bank]) return this.bankNames[bank];
-      // readBank checks every voice's parameters, and the SMK-37 SDK's script (the one in that device's page) refuses a bank holding a DX7
-      // voice with an operator detune of 15 (factory voice A23, SYN LEAD 6); only the names are wanted here, so take the file as it is.
-      const gen = this.libGen;
-      let raw;
-      try { raw = await this.run(() => this.lib.readBank(bank)); }
-      catch (error) {
-        if (!/parameter out of range|参数越界/.test(error.message)) throw error;
-        raw = await this.run(() => this.lib.download(4, bank));
-      }
+      const gen = this.libGen, raw = await this.run(() => this.rawBank(bank));
       const names = Array.from({ length: 32 }, (_, v) => text(raw, v * 128 + 118, 10));
       if (gen === this.libGen) this.bankNames[bank] = names;                 // a read that began before the library changed must not be remembered
       return names;
@@ -160,11 +171,16 @@
     /** Forget the names read so far: the next voiceNames reads the unit again. */
     forgetVoiceNames() { this.bankNames = {}; this.libGen++; }
     async allVoiceNames() { const out = []; for (let b = 0; b < 4; b++) out.push(...await this.voiceNames(b)); return out; }
-    /** Import a 32-voice DX7 bank file (4,104 bytes of SysEx) into library bank 0..3; the library reads it back and checks it. */
+    /** Import a 32-voice DX7 bank file (4,104 bytes of SysEx) into library bank 0..3, then read it back and compare it byte for byte. */
     importRom(bank, file) {
       const raw = checkRom(file);
       this.forgetVoiceNames();
-      return this.run(() => this.lib.writeBank(bank, raw)).finally(() => this.forgetVoiceNames());
+      return this.run(async () => {
+        await this.uploadRaw(4, bank, raw);
+        const saved = await this.rawBank(bank);
+        if (!saved.every((v, i) => v === raw[i])) throw new Error('The voice bank read back differently: read it again to check');
+        return saved;
+      }).finally(() => this.forgetVoiceNames());
     }
   }
   globalThis.Dx747 = Dx747;
