@@ -105,3 +105,5 @@ The [per-track tuning API](app/instrument.h) supports custom tuning; a dedicated
 ## License
 
 APP: [GPLv3 with the FM1 SDK linking exception](LICENSE.md). The device engine is supplied as a binary SDK with separate terms. Retain the applicable [SDK terms, third-party licenses and contributor notices](THIRD_PARTY.md) when distributing builds.
+
+You can also try DX747 in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
